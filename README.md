@@ -1,54 +1,310 @@
-# Flower Design Brief
+# Flower
 
-이 폴더는 기존 `flower_*.md`, `AGENTS.md`, `CLAUDE.md`, 그리고 `old/tsb.li.common.eventflow` 코드를 읽고 다시 정리한 Flower 초기 설계 문서입니다.
+Flower is a lightweight Java orchestration toolkit for event-driven,
+tick-driven workflows inside one JVM.
 
-Claude 또는 다른 설계 에이전트가 다음 단계 구현 설계를 시작할 때는 이 폴더의 문서를 우선 기준으로 삼습니다.
+It helps you model a long-running piece of application behavior as a `Flow`
+made of small `Step` objects. A `Worker` ticks active flows, each step decides
+whether to stay, advance, repeat, jump, finish, or fail, and an `Engine` owns
+the shared clock, event bus, workers, and lifecycle listeners.
 
-## 읽는 순서
+Flower is intentionally smaller than a workflow platform. It is not BPMN,
+Temporal, Camunda, a distributed scheduler, or a durable saga engine. It is a
+plain Java toolkit for applications that need controlled internal
+orchestration without surrendering their domain model to a large runtime.
 
-1. [00-review-summary.md](00-review-summary.md)
-2. [01-scope-and-principles.md](01-scope-and-principles.md)
-3. [02-core-architecture.md](02-core-architecture.md)
-4. [03-step-stepno-and-flow-control.md](03-step-stepno-and-flow-control.md)
-5. [04-events-bloom-and-threading.md](04-events-bloom-and-threading.md)
-6. [05-initial-implementation-plan.md](05-initial-implementation-plan.md)
-7. [06-user-programming-model.md](06-user-programming-model.md)
+## Why Flower Is Useful
 
-## 최종 용어
+Use Flower when application work has multiple phases and should progress over
+time or in response to events:
 
-기존 Claude 문서의 `Job` 용어는 Flower에서 사용하지 않습니다.
+- order processing that waits for payment, inventory, or fulfillment signals
+- game turns where a flow waits for player input and animation completion
+- logistics or device workflows where each unit of work advances through zones
+- retryable background coordination that should remain testable
+- demos and simulations that need deterministic manual ticks
 
-Flower의 계층은 아래로 고정합니다.
+Flower makes this kind of logic easier to reason about because every flow has a
+current step, every step returns an explicit result, and time/event waiting is
+represented by `StepContext` instead of ad-hoc threads and sleeps.
+
+## Mental Model
 
 ```text
 Engine
   -> Worker
       -> Flow
           -> Step
-              -> StepNo / StepId
+              -> stepNo
 ```
 
-`Bloom`은 이벤트 시스템입니다. `Flower`는 오케스트레이션 프레임워크입니다. Flower core는 Bloom에 직접 의존하지 않고, Bloom 연동은 adapter로 둡니다.
+- `Engine`: top-level runtime. Owns `Clock`, `EventBus`, `Worker`s, and
+  listeners.
+- `Worker`: single-threaded tick loop. Owns active flows and ticks each
+  non-terminal flow once per worker tick.
+- `Flow`: one ordered sequence of steps for one domain instance, identified by
+  `FlowId(flowType, flowKey)`.
+- `Step`: a small stateful orchestration unit. It receives a `StepContext` and
+  returns `StepResult`.
+- `stepNo`: optional step-local cursor for sub-state inside one step.
 
-## 후속 구현 순서
+## Modules
 
-`flower-core` 이후에는 아래 순서로 선택 모듈을 구현합니다.
+- `flower-core`: core Engine, Worker, Flow, Step, event bus, clock, and listener
+  APIs.
+- `flower-bloom-adapter`: adapts Bloom's event bus to Flower's `EventBus` SPI.
+- `flower-spring-boot-starter`: Spring Boot auto-configuration for an `Engine`.
+- `flower-observability`: listeners and helpers for logging, dumps, metrics,
+  tracing, and awaiting flow completion.
+
+## Build
+
+Until the artifacts are published, install locally:
+
+```bash
+mvn test
+mvn install
+```
+
+Then use the modules you need from your application.
+
+## Quick Start
+
+```java
+import io.github.parkkevinsb.flower.core.engine.Engine;
+import io.github.parkkevinsb.flower.core.event.InMemoryEventBus;
+import io.github.parkkevinsb.flower.core.flow.Flow;
+import io.github.parkkevinsb.flower.core.step.Step;
+import io.github.parkkevinsb.flower.core.step.StepContext;
+import io.github.parkkevinsb.flower.core.step.StepResult;
+import io.github.parkkevinsb.flower.core.time.SystemClock;
+import io.github.parkkevinsb.flower.core.worker.Worker;
+
+public final class FlowerQuickStart {
+
+    static final class PrepareOrderStep extends Step {
+        @Override
+        protected StepResult onTick(StepContext ctx) {
+            System.out.println("prepare " + ctx.flowId());
+            return StepResult.advance();
+        }
+    }
+
+    static final class CompleteOrderStep extends Step {
+        @Override
+        protected StepResult onTick(StepContext ctx) {
+            System.out.println("complete " + ctx.flowId());
+            return StepResult.done();
+        }
+    }
+
+    public static void main(String[] args) throws Exception {
+        Worker worker = Worker.builder("orders")
+                .intervalMillis(100)
+                .build();
+
+        Engine engine = Engine.builder()
+                .clock(SystemClock.INSTANCE)
+                .eventBus(InMemoryEventBus.create())
+                .worker(worker)
+                .build();
+
+        Flow flow = Flow.builder("order", "order-1")
+                .step("prepare", new PrepareOrderStep())
+                .step("complete", new CompleteOrderStep())
+                .build();
+
+        engine.start();
+        worker.submit(flow);
+
+        Thread.sleep(500);
+        engine.stop();
+    }
+}
+```
+
+For deterministic tests, use `engine.attach()` and `worker.tickOnce()` instead
+of starting the scheduler.
+
+```java
+Worker worker = Worker.builder("test").build();
+Engine engine = Engine.builder()
+        .eventBus(InMemoryEventBus.create())
+        .worker(worker)
+        .build();
+
+engine.attach();
+worker.submit(flow);
+
+worker.tickOnce();
+worker.tickOnce();
+```
+
+## Step Lifecycle
 
 ```text
-1. flower-bloom-adapter
-2. flower-spring-boot-starter
-3. flower-observability
+onEnter(ctx)       called once when the step becomes current
+onTick(ctx)        called once per worker tick while the step is current
+onExit(ctx)        called when the step leaves by advance, goTo, done, or fail
+onReset(ctx)       called for StepResult.repeat(), then the step re-enters
 ```
 
-`flower-bloom-adapter`는 core의 `EventBus` SPI를 Bloom으로 연결합니다. `flower-spring-boot-starter`는 Spring Boot 환경에서 Engine/Worker lifecycle과 설정을 자연스럽게 붙이는 모듈입니다. `flower-observability`는 core의 dump/listener 위에 Micrometer/OpenTelemetry 같은 metrics/tracing 연동을 얹는 선택 모듈입니다.
+`onTick` returns one of:
 
-## 가장 중요한 결정
+- `StepResult.stay()`: keep this step and tick again later.
+- `StepResult.advance()`: move to the next declared step.
+- `StepResult.repeat()`: reset this step and run it from the beginning.
+- `StepResult.goTo("stepId")`: jump to another flow-level step id.
+- `StepResult.done()`: finish the flow successfully.
+- `StepResult.fail(Throwable)`: fail the flow.
 
-- Flower는 BPMN, Temporal, Camunda, YAML workflow, Human Task, Saga 엔진이 아닙니다.
-- Flower는 한 프로세스 안에서 여러 도메인 흐름을 tick + event 기반으로 안전하게 진행시키는 경량 오케스트레이션 toolkit입니다.
-- Java 8+를 우선합니다. 따라서 Java 17 `sealed interface` 기반 설계는 v1 기준에서 제외하고, `enum + final class` 형태의 Java 8 호환 `StepResult`로 설계합니다.
-- `StepNo` 또는 내부 `StepId`는 지원해야 합니다. old eventFlow의 `SeqBase.seqNo` 패턴은 Flower의 중요한 사용성 자산입니다.
-- 기존 eventFlow의 state machine 코드는 참고 대상이지만 Flower의 본질은 FSM 라이브러리가 아니라 Worker-Flow-Step 오케스트레이션입니다.
-- v1 공식 사용 방식은 사용자가 `Step`을 상속하고, `FlowFactory`에서 Step 의존성을 명시적으로 조립하는 방식입니다.
-- 의존성이 많은 Step은 `Deps` 객체와 domain service 위임으로 해결합니다. Flower core는 DI container를 제공하지 않습니다.
-- adapter는 core를 순수하게 유지하기 위한 선택 모듈입니다. Bloom/Spring Boot/observability 연동은 core 밖에서 연결합니다.
+## Event-Driven Steps
+
+Steps should be asynchronous in shape. Do not block a worker thread while
+waiting for outside work. Start or subscribe in `onEnter`, return `stay()` while
+waiting, and advance when a signal or timeout says the work is ready.
+
+```java
+final class WaitForPaymentStep extends Step {
+
+    @Override
+    protected void onEnter(StepContext ctx) {
+        ctx.startTimeout(30_000);
+        ctx.subscribe(PaymentApproved.class, event -> {
+            if (event.orderId().equals(ctx.flowId().flowKey())) {
+                ctx.signal("paid");
+            }
+        });
+    }
+
+    @Override
+    protected StepResult onTick(StepContext ctx) {
+        if (ctx.hasSignal("paid")) {
+            return StepResult.advance();
+        }
+        if (ctx.timedOut()) {
+            return StepResult.fail(new IllegalStateException("payment timeout"));
+        }
+        return StepResult.stay();
+    }
+}
+```
+
+Subscriptions made through `StepContext.subscribe(...)` are cleaned up
+automatically when the step exits, resets, or the flow terminates.
+
+## Step Design Rules
+
+- Keep `onTick` short and non-blocking. No `sleep`, long polling, network waits,
+  or database loops inside the worker tick.
+- Start external work in `onEnter`, then observe completion through events,
+  signals, stored domain state, or timeouts.
+- Use `StepContext.subscribe(...)` for step-owned event subscriptions so Flower
+  can release them automatically.
+- Use `StepContext.eventBus().publish(...)` when a step needs to emit an event.
+- Use `stepNo` for small internal cursors, not for large hidden state machines.
+- Put heavy domain logic in services. A step should orchestrate, not become the
+  domain model.
+- Pass dependencies through step constructors. Flower does not instantiate steps
+  by reflection and does not provide a DI container in core.
+- Give every step a stable, meaningful flow-level id. `goTo(...)` targets that
+  id, not the Java class name.
+- Prefer immutable events and exact event classes. The default event buses match
+  by exact runtime type.
+- Treat a `Step` instance as owned by one `Flow`. Create fresh step instances
+  when building a new flow.
+- Use `Guard` for "do not enter this step yet" rules. Use `StepResult.stay()`
+  for "I entered and am waiting" rules.
+- Make terminal outcomes explicit. Return `done()` for success and
+  `fail(cause)` for failure.
+
+## Flow Submission
+
+```java
+Flow flow = Flow.builder("order", orderId)
+        .step("accept", new AcceptOrderStep(orderService))
+        .step("payment", new WaitForPaymentStep())
+        .step("fulfill", new FulfillOrderStep(warehouseService))
+        .build();
+
+worker.submit(flow);
+```
+
+`flowType` and `flowKey` form the `FlowId`. Submitting a duplicate flow defaults
+to `DuplicatePolicy.REJECT`. You can also use `IGNORE` or `REPLACE`.
+
+```java
+worker.submit(flow, DuplicatePolicy.REPLACE);
+```
+
+## Event Bus Choices
+
+`flower-core` includes `InMemoryEventBus` for simple setups and deterministic
+tests. To share events with Bloom:
+
+```java
+io.github.parkkevinsb.bloom.EventBus bloom =
+        io.github.parkkevinsb.bloom.LocalEventBus.create();
+
+Engine engine = Engine.builder()
+        .eventBus(io.github.parkkevinsb.flower.bloom.BloomEventBus.wrap(bloom))
+        .worker(Worker.builder("main").build())
+        .build();
+```
+
+The adapter preserves the dispatch semantics of the wrapped Bloom bus.
+
+## Spring Boot
+
+`flower-spring-boot-starter` auto-configures:
+
+- a `Clock` bean, defaulting to `SystemClock.INSTANCE`
+- an `EventBus` bean, defaulting to `InMemoryEventBus`
+- an `Engine` bean
+- a lifecycle bean that starts and stops the engine with the application context
+
+Example configuration:
+
+```yaml
+flower:
+  enabled: true
+  auto-start: true
+  workers:
+    - name: orders
+      interval-ms: 100
+    - name: alerts
+      interval-ms: 250
+```
+
+Provide your own `Engine`, `EventBus`, `Clock`, or `FlowerListener` beans when
+you need more control. The auto-configuration backs off where appropriate.
+
+## Observability
+
+Attach `FlowerListener` implementations to observe flow submission,
+step entry/exit, flow completion, cancellation, failure, listener errors, and
+worker errors. `Engine.dump()` gives a snapshot of the current engine and worker
+state, including active flows and their current steps.
+
+## Notes For AI Agents
+
+When generating Flower code, prefer this pattern:
+
+- Model business phases as explicit steps with stable ids.
+- Keep each step small: start work, check state, emit result.
+- Use `stay()` for asynchronous waits and `advance()` only when the condition is
+  definitely satisfied.
+- Do not create background threads inside steps unless the application service
+  owns them.
+- Do not block a worker tick. Flower gets its composability from quick,
+  repeatable ticks.
+- Use constructor-injected services and plain Java objects.
+- Use events for cross-step or external completion signals.
+- Write tests with `engine.attach()` and `worker.tickOnce()` so behavior is
+  deterministic.
+- Prefer readable flow builders over hidden reflection or annotation magic in
+  core code.
+
+That shape keeps Flower flows easy for humans and AI tools to inspect: the
+current step is visible, transitions are explicit, and waiting behavior is
+encoded as small repeatable decisions.
