@@ -78,8 +78,15 @@ jobs:
           PACKAGE_READ_USER: ${{ secrets.PACKAGE_READ_USER || github.actor }}
           PACKAGE_READ_TOKEN: ${{ secrets.PACKAGE_READ_TOKEN || secrets.GITHUB_TOKEN }}
 
+      - name: Verify build
+        run: mvn -B -U verify
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PACKAGE_READ_USER: ${{ secrets.PACKAGE_READ_USER || github.actor }}
+          PACKAGE_READ_TOKEN: ${{ secrets.PACKAGE_READ_TOKEN || secrets.GITHUB_TOKEN }}
+
       - name: Publish to GitHub Packages
-        run: mvn -B deploy
+        run: mvn -B -U -DskipTests deploy
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PACKAGE_READ_USER: ${{ secrets.PACKAGE_READ_USER || github.actor }}
