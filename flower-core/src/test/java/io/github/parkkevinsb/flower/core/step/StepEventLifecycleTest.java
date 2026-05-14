@@ -1,0 +1,179 @@
+package io.github.parkkevinsb.flower.core.step;
+
+import io.github.parkkevinsb.flower.core.engine.Engine;
+import io.github.parkkevinsb.flower.core.event.InMemoryEventBus;
+import io.github.parkkevinsb.flower.core.flow.Flow;
+import io.github.parkkevinsb.flower.core.flow.FlowState;
+import io.github.parkkevinsb.flower.core.time.ManualClock;
+import io.github.parkkevinsb.flower.core.worker.Worker;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+
+import java.util.concurrent.atomic.AtomicInteger;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+class StepEventLifecycleTest {
+
+    static final class Ping {
+        final String tag;
+        Ping(String tag) { this.tag = tag; }
+    }
+
+    private ManualClock clock;
+    private InMemoryEventBus bus;
+    private Worker worker;
+    private Engine engine;
+
+    @BeforeEach
+    void setUp() {
+        clock = new ManualClock();
+        bus = InMemoryEventBus.create();
+        worker = Worker.builder("test").build();
+        engine = Engine.builder().clock(clock).eventBus(bus).worker(worker).build();
+        engine.attach();
+    }
+
+    @Test
+    void event_arrives_as_signal_then_advances_on_next_tick() {
+        AtomicInteger ticks = new AtomicInteger();
+        Step waiter = new Step() {
+            @Override
+            protected void onEnter(StepContext ctx) {
+                ctx.subscribe(Ping.class, e -> ctx.signal("ping"));
+            }
+
+            @Override
+            protected StepResult onTick(StepContext ctx) {
+                ticks.incrementAndGet();
+                return ctx.hasSignal("ping") ? StepResult.advance() : StepResult.stay();
+            }
+        };
+        Flow flow = Flow.builder("test", "1").step("only", waiter).build();
+        worker.submit(flow);
+
+        worker.tickOnce(); // enter + tick #1: no signal -> stay
+        bus.publish(new Ping("a")); // sets signal on event-bus thread
+        worker.tickOnce(); // tick #2: signal seen -> advance -> FINISHED
+
+        assertThat(flow.state()).isEqualTo(FlowState.FINISHED);
+        assertThat(ticks.get()).isEqualTo(2);
+    }
+
+    @Test
+    void subscription_disposed_on_step_exit() {
+        AtomicInteger received = new AtomicInteger();
+        StepRuntime[] capturedRuntime = new StepRuntime[1];
+        Step quickAdvance = new Step() {
+            @Override
+            protected void onEnter(StepContext ctx) {
+                capturedRuntime[0] = (StepRuntime) ctx;
+                ctx.subscribe(Ping.class, e -> received.incrementAndGet());
+            }
+
+            @Override
+            protected StepResult onTick(StepContext ctx) {
+                return StepResult.advance();
+            }
+        };
+        Step terminal = new Step() {
+            @Override
+            protected StepResult onTick(StepContext ctx) {
+                return StepResult.done();
+            }
+        };
+        Flow flow = Flow.builder("test", "1")
+                .step("waiter", quickAdvance)
+                .step("end", terminal)
+                .build();
+        worker.submit(flow);
+
+        worker.tickOnce(); // enter waiter (subscribe), tick -> advance -> exit (unsubscribe)
+
+        // After exit, the runtime should have no surviving subscriptions.
+        assertThat(capturedRuntime[0].subscriptionCount()).isZero();
+
+        bus.publish(new Ping("a")); // must not reach the disposed handler
+        assertThat(received.get()).isZero();
+    }
+
+    @Test
+    void subscription_disposed_on_repeat_reset() {
+        AtomicInteger received = new AtomicInteger();
+        int[] entryCount = {0};
+        Step waiter = new Step() {
+            @Override
+            protected void onEnter(StepContext ctx) {
+                entryCount[0]++;
+                ctx.subscribe(Ping.class, e -> received.incrementAndGet());
+            }
+
+            @Override
+            protected StepResult onTick(StepContext ctx) {
+                if (entryCount[0] == 1) return StepResult.repeat();
+                return StepResult.advance();
+            }
+        };
+        Flow flow = Flow.builder("test", "1").step("only", waiter).build();
+        worker.submit(flow);
+
+        worker.tickOnce(); // enter#1 (subscribe), tick -> repeat -> reset (unsubscribe)
+        bus.publish(new Ping("a")); // subscription from entry#1 should be gone
+
+        worker.tickOnce(); // enter#2 (new subscribe), tick -> advance
+
+        assertThat(received.get()).isZero();
+        assertThat(flow.state()).isEqualTo(FlowState.FINISHED);
+    }
+
+    @Test
+    void clearSignal_works() {
+        Step step = new Step() {
+            @Override
+            protected void onEnter(StepContext ctx) {
+                ctx.signal("a");
+            }
+
+            @Override
+            protected StepResult onTick(StepContext ctx) {
+                if (ctx.hasSignal("a")) {
+                    ctx.clearSignal("a");
+                    return StepResult.stay();
+                }
+                return StepResult.advance();
+            }
+        };
+        Flow flow = Flow.builder("test", "1").step("only", step).build();
+        worker.submit(flow);
+
+        worker.tickOnce(); // sees signal, clears, stays
+        worker.tickOnce(); // no signal, advances -> finished
+
+        assertThat(flow.state()).isEqualTo(FlowState.FINISHED);
+    }
+
+    @Test
+    void engine_stop_cancels_flow_and_disposes_subscription() {
+        AtomicInteger received = new AtomicInteger();
+        Step waiter = new Step() {
+            @Override
+            protected void onEnter(StepContext ctx) {
+                ctx.subscribe(Ping.class, e -> received.incrementAndGet());
+            }
+
+            @Override
+            protected StepResult onTick(StepContext ctx) {
+                return StepResult.stay();
+            }
+        };
+        Flow flow = Flow.builder("test", "1").step("only", waiter).build();
+        worker.submit(flow);
+
+        worker.tickOnce();
+        engine.stop();
+        bus.publish(new Ping("after-stop"));
+
+        assertThat(flow.state()).isEqualTo(FlowState.CANCELLED);
+        assertThat(received.get()).isZero();
+    }
+}
