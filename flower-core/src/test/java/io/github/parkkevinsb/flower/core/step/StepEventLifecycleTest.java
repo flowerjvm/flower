@@ -2,6 +2,7 @@ package io.github.parkkevinsb.flower.core.step;
 
 import io.github.parkkevinsb.flower.core.engine.Engine;
 import io.github.parkkevinsb.flower.core.event.InMemoryEventBus;
+import io.github.parkkevinsb.flower.core.event.Subscription;
 import io.github.parkkevinsb.flower.core.flow.Flow;
 import io.github.parkkevinsb.flower.core.flow.FlowState;
 import io.github.parkkevinsb.flower.core.time.ManualClock;
@@ -18,6 +19,12 @@ class StepEventLifecycleTest {
     static final class Ping {
         final String tag;
         Ping(String tag) { this.tag = tag; }
+    }
+
+    static final class Ack {
+    }
+
+    static final class Arrival {
     }
 
     private ManualClock clock;
@@ -95,6 +102,80 @@ class StepEventLifecycleTest {
 
         bus.publish(new Ping("a")); // must not reach the disposed handler
         assertThat(received.get()).isZero();
+    }
+
+    @Test
+    void manual_unsubscribe_removes_only_that_subscription_during_step_execution() {
+        AtomicInteger ackReceived = new AtomicInteger();
+        AtomicInteger arrivalReceived = new AtomicInteger();
+        StepRuntime[] capturedRuntime = new StepRuntime[1];
+
+        Step step = new Step() {
+            private Subscription arrivalSub;
+
+            @Override
+            protected void onEnter(StepContext ctx) {
+                capturedRuntime[0] = (StepRuntime) ctx;
+                ctx.subscribe(Ack.class, this::onAck);
+                subscribeArrival(ctx);
+            }
+
+            @Override
+            protected StepResult onTick(StepContext ctx) {
+                if (ctx.stepNo() == 0) {
+                    unsubscribeArrival();
+                    ctx.setStepNo(10);
+                    return StepResult.stay();
+                }
+                if (ctx.stepNo() == 10) {
+                    subscribeArrival(ctx);
+                    ctx.setStepNo(20);
+                    return StepResult.stay();
+                }
+                return StepResult.advance();
+            }
+
+            private void onAck(Ack event) {
+                ackReceived.incrementAndGet();
+            }
+
+            private void onArrival(Arrival event) {
+                arrivalReceived.incrementAndGet();
+            }
+
+            private void subscribeArrival(StepContext ctx) {
+                if (arrivalSub == null) {
+                    arrivalSub = ctx.subscribe(Arrival.class, this::onArrival);
+                }
+            }
+
+            private void unsubscribeArrival() {
+                if (arrivalSub != null) {
+                    arrivalSub.unsubscribe();
+                    arrivalSub = null;
+                }
+            }
+        };
+        Flow flow = Flow.builder("test", "1").step("only", step).build();
+        worker.submit(flow);
+
+        worker.tickOnce(); // enter: ack+arrival, tick: unsubscribe arrival
+        assertThat(capturedRuntime[0].subscriptionCount()).isEqualTo(1);
+
+        bus.publish(new Arrival());
+        bus.publish(new Ack());
+        assertThat(arrivalReceived.get()).isZero();
+        assertThat(ackReceived.get()).isEqualTo(1);
+
+        worker.tickOnce(); // resubscribe arrival
+        assertThat(capturedRuntime[0].subscriptionCount()).isEqualTo(2);
+
+        bus.publish(new Arrival());
+        assertThat(arrivalReceived.get()).isEqualTo(1);
+
+        worker.tickOnce(); // advance -> exit -> dispose remaining subscriptions
+        assertThat(flow.state()).isEqualTo(FlowState.FINISHED);
+        assertThat(capturedRuntime[0].subscriptionCount()).isZero();
     }
 
     @Test

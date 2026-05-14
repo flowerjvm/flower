@@ -193,6 +193,65 @@ final class WaitForPaymentStep extends Step {
 Subscriptions made through `StepContext.subscribe(...)` are cleaned up
 automatically when the step exits, resets, or the flow terminates.
 
+You may also unsubscribe a specific event while the step is still running.
+Keep each returned `Subscription` separately when the step listens to multiple
+event types:
+
+```java
+final class WaitDockStep extends Step {
+    private volatile StepContext current;
+    private Subscription ackSub;
+    private Subscription arrivalSub;
+
+    @Override
+    protected void onEnter(StepContext ctx) {
+        current = ctx;
+        ackSub = ctx.subscribe(AckEvent.class, this::onAck);
+        arrivalSub = ctx.subscribe(ArrivalEvent.class, this::onArrival);
+    }
+
+    @Override
+    protected StepResult onTick(StepContext ctx) {
+        if (ctx.stepNo() == 0 && shouldStopArrival(ctx)) {
+            arrivalSub.unsubscribe(); // ack subscription remains active
+            arrivalSub = null;
+            ctx.setStepNo(10);
+            return StepResult.stay();
+        }
+
+        if (ctx.stepNo() == 10 && shouldListenArrivalAgain(ctx)) {
+            arrivalSub = ctx.subscribe(ArrivalEvent.class, this::onArrival);
+            ctx.setStepNo(20);
+            return StepResult.stay();
+        }
+
+        return ctx.hasSignal("arrived") ? StepResult.advance() : StepResult.stay();
+    }
+
+    private void onAck(AckEvent event) {
+        current.signal("ack");
+    }
+
+    private void onArrival(ArrivalEvent event) {
+        current.signal("arrived");
+    }
+
+    @Override
+    protected void onExit(StepContext ctx) {
+        ackSub = null;
+        arrivalSub = null;
+        current = null;
+    }
+
+    @Override
+    protected void onReset(StepContext ctx) {
+        ackSub = null;
+        arrivalSub = null;
+        current = null;
+    }
+}
+```
+
 ## Step Design Rules
 
 - Keep `onTick` short and non-blocking. No `sleep`, long polling, network waits,

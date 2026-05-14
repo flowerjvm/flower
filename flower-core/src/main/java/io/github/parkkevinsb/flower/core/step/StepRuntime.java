@@ -11,6 +11,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * Framework-internal {@link StepContext} implementation.
@@ -92,7 +93,8 @@ public final class StepRuntime implements StepContext {
             throw new IllegalStateException(
                     "Cannot subscribe: this Flow was built without an EventBus");
         }
-        Subscription sub = eventBus.subscribe(eventType, handler);
+        Subscription delegate = eventBus.subscribe(eventType, handler);
+        Subscription sub = new ManagedSubscription(delegate);
         subscriptions.add(sub);
         return sub;
     }
@@ -233,6 +235,29 @@ public final class StepRuntime implements StepContext {
                 s.unsubscribe();
             } catch (Throwable ignored) {
                 // best-effort cleanup
+            }
+        }
+    }
+
+    private final class ManagedSubscription implements Subscription {
+        private final Subscription delegate;
+        private final AtomicBoolean active = new AtomicBoolean(true);
+
+        private ManagedSubscription(Subscription delegate) {
+            if (delegate == null) {
+                throw new IllegalArgumentException("delegate must not be null");
+            }
+            this.delegate = delegate;
+        }
+
+        @Override
+        public void unsubscribe() {
+            if (active.compareAndSet(true, false)) {
+                try {
+                    delegate.unsubscribe();
+                } finally {
+                    subscriptions.remove(this);
+                }
             }
         }
     }
