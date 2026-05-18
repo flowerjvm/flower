@@ -5,7 +5,7 @@ tick-driven workflows inside one JVM.
 
 It helps you model a long-running piece of application behavior as a `Flow`
 made of small `Step` objects. A `Worker` ticks active flows, each step decides
-whether to stay, advance, repeat, jump, finish, or fail, and an `Engine` owns
+whether to stay, move to the next step, repeat, jump, finish, or fail, and an `Engine` owns
 the shared clock, event bus, workers, and lifecycle listeners.
 
 Flower is intentionally smaller than a workflow platform. It is not BPMN,
@@ -20,7 +20,7 @@ time or in response to events:
 
 - order processing that waits for payment, inventory, or fulfillment signals
 - game turns where a flow waits for player input and animation completion
-- logistics or device workflows where each unit of work advances through zones
+- logistics or device workflows where each unit of work moves through zones
 - retryable background coordination that should remain testable
 - demos and simulations that need deterministic manual ticks
 
@@ -86,7 +86,7 @@ public final class FlowerQuickStart {
         @Override
         protected StepResult onTick(StepContext ctx) {
             System.out.println("prepare " + ctx.flowId());
-            return StepResult.advance();
+            return StepResult.done();
         }
     }
 
@@ -145,24 +145,24 @@ worker.tickOnce();
 ```text
 onEnter(ctx)       called once when the step becomes current
 onTick(ctx)        called once per worker tick while the step is current
-onExit(ctx)        called when the step leaves by advance, goTo, done, or fail
+onExit(ctx)        called when the step leaves by done, goTo, finish, or fail
 onReset(ctx)       called for StepResult.repeat(), then the step re-enters
 ```
 
 `onTick` returns one of:
 
 - `StepResult.stay()`: keep this step and tick again later.
-- `StepResult.advance()`: move to the next declared step.
+- `StepResult.done()`: finish this step; the flow moves to the next declared step, or finishes if this was the last step.
 - `StepResult.repeat()`: reset this step and run it from the beginning.
 - `StepResult.goTo("stepId")`: jump to another flow-level step id.
-- `StepResult.done()`: finish the flow successfully.
+- `StepResult.finish()`: finish the flow successfully without running later steps.
 - `StepResult.fail(Throwable)`: fail the flow.
 
 ## Event-Driven Steps
 
 Steps should be asynchronous in shape. Do not block a worker thread while
 waiting for outside work. Start or subscribe in `onEnter`, return `stay()` while
-waiting, and advance when a signal or timeout says the work is ready.
+waiting, and return `done()` when a signal or timeout says the work is ready.
 
 ```java
 final class WaitForPaymentStep extends Step {
@@ -180,7 +180,7 @@ final class WaitForPaymentStep extends Step {
     @Override
     protected StepResult onTick(StepContext ctx) {
         if (ctx.hasSignal("paid")) {
-            return StepResult.advance();
+            return StepResult.done();
         }
         if (ctx.timedOut()) {
             return StepResult.fail(new IllegalStateException("payment timeout"));
@@ -225,7 +225,7 @@ final class WaitDockStep extends Step {
             return StepResult.stay();
         }
 
-        return ctx.hasSignal("arrived") ? StepResult.advance() : StepResult.stay();
+        return ctx.hasSignal("arrived") ? StepResult.done() : StepResult.stay();
     }
 
     private void onAck(AckEvent event) {
@@ -351,7 +351,7 @@ When generating Flower code, prefer this pattern:
 
 - Model business phases as explicit steps with stable ids.
 - Keep each step small: start work, check state, emit result.
-- Use `stay()` for asynchronous waits and `advance()` only when the condition is
+- Use `stay()` for asynchronous waits and `done()` only when the condition is
   definitely satisfied.
 - Do not create background threads inside steps unless the application service
   owns them.

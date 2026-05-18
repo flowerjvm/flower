@@ -40,7 +40,7 @@ class FlowerListenerTest {
         engine.attach();
 
         Step a = new Step() {
-            @Override protected StepResult onTick(StepContext ctx) { return StepResult.advance(); }
+            @Override protected StepResult onTick(StepContext ctx) { return StepResult.done(); }
         };
         Step b = new Step() {
             @Override protected StepResult onTick(StepContext ctx) { return StepResult.done(); }
@@ -48,7 +48,7 @@ class FlowerListenerTest {
         Flow flow = Flow.builder("t", "1").step("a", a).step("b", b).build();
         worker.submit(flow);
 
-        worker.tickOnce(); // entered a, exited a (advance)
+        worker.tickOnce(); // entered a, exited a (done)
         worker.tickOnce(); // entered b, exited b (done) -> finished
 
         assertThat(events).containsExactly(

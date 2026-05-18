@@ -28,7 +28,7 @@ public interface FlowerListener {
     }
 
     /**
-     * Fires when a Step is leaving (advance, goto, done, fail, cancel).
+     * Fires when a Step is leaving (done, goto, finish, fail, cancel).
      */
     default void onStepExited(FlowSnapshot flow, String stepId) {
     }

@@ -48,13 +48,13 @@ public final class TestSteps {
         }
     }
 
-    /** Returns ADVANCE on the Nth tick, STAY before that. */
-    public static final class CountThenAdvanceStep extends Step {
+    /** Returns DONE on the Nth tick, STAY before that. */
+    public static final class CountThenDoneStep extends Step {
         private final int targetTicks;
         private int ticks;
         public final List<Integer> stepNoSeen = new ArrayList<>();
 
-        public CountThenAdvanceStep(int targetTicks) {
+        public CountThenDoneStep(int targetTicks) {
             this.targetTicks = targetTicks;
         }
 
@@ -62,11 +62,11 @@ public final class TestSteps {
         protected StepResult onTick(StepContext ctx) {
             stepNoSeen.add(ctx.stepNo());
             ticks++;
-            return ticks >= targetTicks ? StepResult.advance() : StepResult.stay();
+            return ticks >= targetTicks ? StepResult.done() : StepResult.stay();
         }
     }
 
-    /** Drives an internal stepNo cursor across three sub-steps then advances. */
+    /** Drives an internal stepNo cursor across three sub-steps then completes the step. */
     public static final class StepNoCursorStep extends Step {
         public final List<Integer> trace = new ArrayList<>();
 
@@ -81,7 +81,7 @@ public final class TestSteps {
                     ctx.setStepNo(20);
                     return StepResult.stay();
                 case 20:
-                    return StepResult.advance();
+                    return StepResult.done();
                 default:
                     return StepResult.fail(new IllegalStateException("bad stepNo: " + ctx.stepNo()));
             }

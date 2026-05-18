@@ -9,10 +9,10 @@ package io.github.parkkevinsb.flower.core.step;
  *
  * <pre>
  * STAY     stay on current Step, run onTick again next tick
- * ADVANCE  finish current Step, move to next Step in flow order
+ * DONE     finish current Step, move to next Step in flow order
  * REPEAT   reset current Step and run it again from the start
  * GOTO     finish current Step, jump to a Step by string id
- * DONE     finish the entire Flow successfully
+ * FINISH   finish the entire Flow successfully
  * FAIL     terminate the Flow with a Throwable
  * </pre>
  */
@@ -20,17 +20,17 @@ public final class StepResult {
 
     public enum Type {
         STAY,
-        ADVANCE,
+        DONE,
         REPEAT,
         GOTO,
-        DONE,
+        FINISH,
         FAIL
     }
 
     private static final StepResult STAY = new StepResult(Type.STAY, null, null, null);
-    private static final StepResult ADVANCE = new StepResult(Type.ADVANCE, null, null, null);
-    private static final StepResult REPEAT = new StepResult(Type.REPEAT, null, null, null);
     private static final StepResult DONE = new StepResult(Type.DONE, null, null, null);
+    private static final StepResult REPEAT = new StepResult(Type.REPEAT, null, null, null);
+    private static final StepResult FINISH = new StepResult(Type.FINISH, null, null, null);
 
     private final Type type;
     private final String targetStepId;
@@ -48,8 +48,12 @@ public final class StepResult {
         return STAY;
     }
 
-    public static StepResult advance() {
-        return ADVANCE;
+    /**
+     * Complete the current Step. The Flow moves to the next declared Step, or
+     * finishes successfully when the current Step is the last one.
+     */
+    public static StepResult done() {
+        return DONE;
     }
 
     public static StepResult repeat() {
@@ -63,8 +67,11 @@ public final class StepResult {
         return new StepResult(Type.GOTO, stepId, GoToMode.COMPLETE_CURRENT, null);
     }
 
-    public static StepResult done() {
-        return DONE;
+    /**
+     * Finish the entire Flow successfully without running later Steps.
+     */
+    public static StepResult finish() {
+        return FINISH;
     }
 
     public static StepResult fail(Throwable cause) {

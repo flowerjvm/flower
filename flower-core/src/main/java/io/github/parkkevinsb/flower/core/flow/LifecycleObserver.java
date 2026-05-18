@@ -5,7 +5,7 @@ package io.github.parkkevinsb.flower.core.flow;
  * happen inside a single {@link Flow#tick()} call.
  *
  * <p>This is needed because a tick can both enter and exit a step (for
- * example when the step returns {@code ADVANCE} on its first tick), and the
+ * example when the step returns {@code DONE} on its first tick), and the
  * Worker cannot otherwise observe the intermediate state.
  *
  * <p>Not part of the public user-facing API. Users observe lifecycle through

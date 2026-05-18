@@ -293,7 +293,7 @@ public final class Flow {
             case STAY:
                 return;
 
-            case ADVANCE:
+            case DONE:
                 exitCurrent(def);
                 if (state.isTerminal()) return;
                 if (currentIndex + 1 >= steps.size()) {
@@ -331,7 +331,7 @@ public final class Flow {
                 return;
             }
 
-            case DONE:
+            case FINISH:
                 exitCurrent(def);
                 if (state.isTerminal()) return;
                 state = FlowState.FINISHED;

@@ -10,9 +10,9 @@ class StepResultTest {
     @Test
     void factory_methods_set_correct_type() {
         assertThat(StepResult.stay().type()).isEqualTo(StepResult.Type.STAY);
-        assertThat(StepResult.advance().type()).isEqualTo(StepResult.Type.ADVANCE);
-        assertThat(StepResult.repeat().type()).isEqualTo(StepResult.Type.REPEAT);
         assertThat(StepResult.done().type()).isEqualTo(StepResult.Type.DONE);
+        assertThat(StepResult.repeat().type()).isEqualTo(StepResult.Type.REPEAT);
+        assertThat(StepResult.finish().type()).isEqualTo(StepResult.Type.FINISH);
     }
 
     @Test

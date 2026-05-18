@@ -32,7 +32,7 @@ class BloomEventBusEngineIntegrationTest {
     }
 
     @Test
-    void external_publish_through_bloom_signals_step_and_advances_on_next_tick() {
+    void external_publish_through_bloom_signals_step_and_completes_on_following_tick() {
         ManualClock clock = new ManualClock();
         LocalEventBus bloom = LocalEventBus.create();
 
@@ -54,7 +54,7 @@ class BloomEventBusEngineIntegrationTest {
             @Override
             protected StepResult onTick(StepContext ctx) {
                 ticks.incrementAndGet();
-                return ctx.hasSignal("ping") ? StepResult.advance() : StepResult.stay();
+                return ctx.hasSignal("ping") ? StepResult.done() : StepResult.stay();
             }
         };
         Flow flow = Flow.builder("test", "1").step("only", waiter).build();
@@ -62,7 +62,7 @@ class BloomEventBusEngineIntegrationTest {
 
         worker.tickOnce(); // enter + tick #1: no signal -> stay
         bloom.publish(new Ping("a")); // raw bloom publish
-        worker.tickOnce(); // tick #2: signal seen -> advance -> FINISHED
+        worker.tickOnce(); // tick #2: signal seen -> done -> FINISHED
 
         assertThat(flow.state()).isEqualTo(FlowState.FINISHED);
         assertThat(ticks.get()).isEqualTo(2);
@@ -82,7 +82,7 @@ class BloomEventBusEngineIntegrationTest {
         engine.attach();
 
         AtomicInteger received = new AtomicInteger();
-        Step quickAdvance = new Step() {
+        Step quickDone = new Step() {
             @Override
             protected void onEnter(StepContext ctx) {
                 ctx.subscribe(Ping.class, e -> received.incrementAndGet());
@@ -90,7 +90,7 @@ class BloomEventBusEngineIntegrationTest {
 
             @Override
             protected StepResult onTick(StepContext ctx) {
-                return StepResult.advance();
+                return StepResult.done();
             }
         };
         Step terminal = new Step() {
@@ -100,12 +100,12 @@ class BloomEventBusEngineIntegrationTest {
             }
         };
         Flow flow = Flow.builder("test", "1")
-                .step("waiter", quickAdvance)
+                .step("waiter", quickDone)
                 .step("end", terminal)
                 .build();
         worker.submit(flow);
 
-        worker.tickOnce(); // waiter enters (subscribe), advances, exits (unsubscribe)
+        worker.tickOnce(); // waiter enters (subscribe), done, exits (unsubscribe)
         bloom.publish(new Ping("after-exit"));
         worker.tickOnce(); // end enters, ticks, done
 

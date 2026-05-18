@@ -42,7 +42,7 @@ class StepEventLifecycleTest {
     }
 
     @Test
-    void event_arrives_as_signal_then_advances_on_next_tick() {
+    void event_arrives_as_signal_then_completes_on_following_tick() {
         AtomicInteger ticks = new AtomicInteger();
         Step waiter = new Step() {
             @Override
@@ -53,7 +53,7 @@ class StepEventLifecycleTest {
             @Override
             protected StepResult onTick(StepContext ctx) {
                 ticks.incrementAndGet();
-                return ctx.hasSignal("ping") ? StepResult.advance() : StepResult.stay();
+                return ctx.hasSignal("ping") ? StepResult.done() : StepResult.stay();
             }
         };
         Flow flow = Flow.builder("test", "1").step("only", waiter).build();
@@ -61,7 +61,7 @@ class StepEventLifecycleTest {
 
         worker.tickOnce(); // enter + tick #1: no signal -> stay
         bus.publish(new Ping("a")); // sets signal on event-bus thread
-        worker.tickOnce(); // tick #2: signal seen -> advance -> FINISHED
+        worker.tickOnce(); // tick #2: signal seen -> done -> FINISHED
 
         assertThat(flow.state()).isEqualTo(FlowState.FINISHED);
         assertThat(ticks.get()).isEqualTo(2);
@@ -71,7 +71,7 @@ class StepEventLifecycleTest {
     void subscription_disposed_on_step_exit() {
         AtomicInteger received = new AtomicInteger();
         StepRuntime[] capturedRuntime = new StepRuntime[1];
-        Step quickAdvance = new Step() {
+        Step quickDone = new Step() {
             @Override
             protected void onEnter(StepContext ctx) {
                 capturedRuntime[0] = (StepRuntime) ctx;
@@ -80,7 +80,7 @@ class StepEventLifecycleTest {
 
             @Override
             protected StepResult onTick(StepContext ctx) {
-                return StepResult.advance();
+                return StepResult.done();
             }
         };
         Step terminal = new Step() {
@@ -90,12 +90,12 @@ class StepEventLifecycleTest {
             }
         };
         Flow flow = Flow.builder("test", "1")
-                .step("waiter", quickAdvance)
+                .step("waiter", quickDone)
                 .step("end", terminal)
                 .build();
         worker.submit(flow);
 
-        worker.tickOnce(); // enter waiter (subscribe), tick -> advance -> exit (unsubscribe)
+        worker.tickOnce(); // enter waiter (subscribe), tick -> done -> exit (unsubscribe)
 
         // After exit, the runtime should have no surviving subscriptions.
         assertThat(capturedRuntime[0].subscriptionCount()).isZero();
@@ -132,7 +132,7 @@ class StepEventLifecycleTest {
                     ctx.setStepNo(20);
                     return StepResult.stay();
                 }
-                return StepResult.advance();
+                return StepResult.done();
             }
 
             private void onAck(Ack event) {
@@ -173,7 +173,7 @@ class StepEventLifecycleTest {
         bus.publish(new Arrival());
         assertThat(arrivalReceived.get()).isEqualTo(1);
 
-        worker.tickOnce(); // advance -> exit -> dispose remaining subscriptions
+        worker.tickOnce(); // done -> exit -> dispose remaining subscriptions
         assertThat(flow.state()).isEqualTo(FlowState.FINISHED);
         assertThat(capturedRuntime[0].subscriptionCount()).isZero();
     }
@@ -192,7 +192,7 @@ class StepEventLifecycleTest {
             @Override
             protected StepResult onTick(StepContext ctx) {
                 if (entryCount[0] == 1) return StepResult.repeat();
-                return StepResult.advance();
+                return StepResult.done();
             }
         };
         Flow flow = Flow.builder("test", "1").step("only", waiter).build();
@@ -201,7 +201,7 @@ class StepEventLifecycleTest {
         worker.tickOnce(); // enter#1 (subscribe), tick -> repeat -> reset (unsubscribe)
         bus.publish(new Ping("a")); // subscription from entry#1 should be gone
 
-        worker.tickOnce(); // enter#2 (new subscribe), tick -> advance
+        worker.tickOnce(); // enter#2 (new subscribe), tick -> done
 
         assertThat(received.get()).isZero();
         assertThat(flow.state()).isEqualTo(FlowState.FINISHED);
@@ -221,14 +221,14 @@ class StepEventLifecycleTest {
                     ctx.clearSignal("a");
                     return StepResult.stay();
                 }
-                return StepResult.advance();
+                return StepResult.done();
             }
         };
         Flow flow = Flow.builder("test", "1").step("only", step).build();
         worker.submit(flow);
 
         worker.tickOnce(); // sees signal, clears, stays
-        worker.tickOnce(); // no signal, advances -> finished
+        worker.tickOnce(); // no signal, done -> finished
 
         assertThat(flow.state()).isEqualTo(FlowState.FINISHED);
     }

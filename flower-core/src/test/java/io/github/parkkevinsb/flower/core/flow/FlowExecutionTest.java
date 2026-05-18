@@ -37,19 +37,19 @@ class FlowExecutionTest {
     }
 
     @Test
-    void flow_advances_through_steps_in_order() {
+    void flow_moves_through_steps_in_order() {
         List<String> trace = new ArrayList<>();
         Flow flow = Flow.builder("test", "1")
-                .step("a", new TestSteps.RecordingStep("a", trace, StepResult.advance()))
-                .step("b", new TestSteps.RecordingStep("b", trace, StepResult.advance()))
-                .step("c", new TestSteps.RecordingStep("c", trace, StepResult.advance()))
+                .step("a", new TestSteps.RecordingStep("a", trace, StepResult.done()))
+                .step("b", new TestSteps.RecordingStep("b", trace, StepResult.done()))
+                .step("c", new TestSteps.RecordingStep("c", trace, StepResult.done()))
                 .build();
         worker.submit(flow);
 
-        // each tick: enter+tick on current. advance -> exit. next tick enters next.
-        worker.tickOnce(); // enter a, tick a -> advance -> exit a, currentIndex=1
-        worker.tickOnce(); // enter b, tick b -> advance -> exit b, currentIndex=2
-        worker.tickOnce(); // enter c, tick c -> advance -> exit c, FINISHED
+        // each tick: enter+tick on current. done -> exit. next tick enters next.
+        worker.tickOnce(); // enter a, tick a -> done -> exit a, currentIndex=1
+        worker.tickOnce(); // enter b, tick b -> done -> exit b, currentIndex=2
+        worker.tickOnce(); // enter c, tick c -> done -> exit c, FINISHED
 
         assertThat(flow.state()).isEqualTo(FlowState.FINISHED);
         assertThat(trace).containsExactly(
@@ -59,8 +59,23 @@ class FlowExecutionTest {
     }
 
     @Test
-    void stay_keeps_step_until_advance() {
-        TestSteps.CountThenAdvanceStep step = new TestSteps.CountThenAdvanceStep(3);
+    void finish_ends_flow_without_visiting_later_steps() {
+        List<String> trace = new ArrayList<>();
+        Flow flow = Flow.builder("test", "1")
+                .step("a", new TestSteps.RecordingStep("a", trace, StepResult.finish()))
+                .step("b", new TestSteps.RecordingStep("b", trace, StepResult.done()))
+                .build();
+        worker.submit(flow);
+
+        worker.tickOnce();
+
+        assertThat(flow.state()).isEqualTo(FlowState.FINISHED);
+        assertThat(trace).containsExactly("enter:a", "tick:a", "exit:a");
+    }
+
+    @Test
+    void stay_keeps_step_until_done() {
+        TestSteps.CountThenDoneStep step = new TestSteps.CountThenDoneStep(3);
         Flow flow = Flow.builder("test", "1")
                 .step("only", step)
                 .build();
@@ -69,7 +84,7 @@ class FlowExecutionTest {
         worker.tickOnce();
         worker.tickOnce();
         assertThat(flow.state()).isEqualTo(FlowState.RUNNING);
-        worker.tickOnce(); // 3rd tick -> advance -> FINISHED
+        worker.tickOnce(); // 3rd tick -> done -> FINISHED
         assertThat(flow.state()).isEqualTo(FlowState.FINISHED);
     }
 
@@ -79,7 +94,7 @@ class FlowExecutionTest {
         Flow flow = Flow.builder("test", "1").step("only", step).build();
         worker.submit(flow);
 
-        // Three onTick calls walk stepNo 0 -> 10 -> 20 -> advance
+        // Three onTick calls walk stepNo 0 -> 10 -> 20 -> done
         worker.tickOnce();
         worker.tickOnce();
         worker.tickOnce();
@@ -91,7 +106,7 @@ class FlowExecutionTest {
     @Test
     void repeat_resets_step_state_and_re_enters() {
         List<String> trace = new ArrayList<>();
-        // Step that emits ADVANCE on the second entry.
+        // Step that emits DONE on the second entry.
         Step step = new Step() {
             int entries;
 
@@ -107,7 +122,7 @@ class FlowExecutionTest {
                 if (entries == 1) {
                     return StepResult.repeat();
                 }
-                return StepResult.advance();
+                return StepResult.done();
             }
 
             @Override
@@ -119,7 +134,7 @@ class FlowExecutionTest {
         worker.submit(flow);
 
         worker.tickOnce(); // enter#1, tick -> repeat -> reset
-        worker.tickOnce(); // enter#2, tick -> advance -> FINISHED
+        worker.tickOnce(); // enter#2, tick -> done -> FINISHED
 
         assertThat(flow.state()).isEqualTo(FlowState.FINISHED);
         assertThat(trace).containsExactly(
@@ -141,7 +156,7 @@ class FlowExecutionTest {
             @Override
             protected StepResult onTick(StepContext ctx) {
                 trace.add("b");
-                return StepResult.advance();
+                return StepResult.done();
             }
         };
         Step c = new Step() {

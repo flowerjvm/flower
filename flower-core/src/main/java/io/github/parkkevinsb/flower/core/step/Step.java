@@ -10,8 +10,8 @@ package io.github.parkkevinsb.flower.core.step;
  * <pre>
  *   onEnter(ctx)            // called once when the Step becomes current
  *   onTick(ctx) repeatedly  // called every Worker tick until it returns
- *                           // ADVANCE / GOTO / DONE / FAIL / REPEAT
- *   onExit(ctx)             // called once when the Step is leaving (advance/goto/done/fail)
+ *                           // DONE / GOTO / FINISH / FAIL / REPEAT
+ *   onExit(ctx)             // called once when the Step is leaving (done/goto/finish/fail)
  *   onReset(ctx)            // called when the Step is being reset (repeat)
  *                           // followed by onEnter on the next tick
  * </pre>
@@ -41,7 +41,7 @@ public abstract class Step {
     protected abstract StepResult onTick(StepContext ctx);
 
     /**
-     * Called once when the Step is leaving (advance, goto, done, fail).
+     * Called once when the Step is leaving (done, goto, finish, fail).
      * Not called when the Step is being reset for {@link StepResult#repeat()}.
      */
     protected void onExit(StepContext ctx) {
