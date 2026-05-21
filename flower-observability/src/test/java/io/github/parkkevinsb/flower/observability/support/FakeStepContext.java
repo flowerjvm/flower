@@ -33,7 +33,10 @@ public final class FakeStepContext implements StepContext {
     @Override public <E> Subscription subscribe(Class<E> eventType, EventHandler<E> handler) { throw unsupported(); }
     @Override public EventBus eventBus() { throw unsupported(); }
     @Override public void signal(String name) { throw unsupported(); }
+    @Override public <E> void signal(String name, E payload) { throw unsupported(); }
     @Override public boolean hasSignal(String name) { throw unsupported(); }
+    @Override public <E> E signalPayload(String name, Class<E> type) { throw unsupported(); }
+    @Override public <E> E consumeSignal(String name, Class<E> type) { throw unsupported(); }
     @Override public void clearSignal(String name) { throw unsupported(); }
     @Override public void startTimeout(long millis) { throw unsupported(); }
     @Override public boolean timedOut() { throw unsupported(); }

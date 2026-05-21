@@ -1,6 +1,7 @@
 package io.github.parkkevinsb.flower.core.flow;
 
 import io.github.parkkevinsb.flower.core.step.Guard;
+import io.github.parkkevinsb.flower.core.step.RecoveryPolicy;
 import io.github.parkkevinsb.flower.core.step.Step;
 import io.github.parkkevinsb.flower.core.step.StepDefinition;
 
@@ -23,6 +24,8 @@ public final class FlowBuilder {
     private final String flowKey;
     private final List<StepDefinition> steps = new ArrayList<>();
     private final Set<String> stepIds = new HashSet<>();
+    private FlowPersistence persistence = FlowPersistence.TRANSIENT;
+    private String definitionVersion;
 
     FlowBuilder(String flowType, String flowKey) {
         this.flowType = flowType;
@@ -30,11 +33,23 @@ public final class FlowBuilder {
     }
 
     public FlowBuilder step(String stepId, Step step) {
-        return step(stepId, step, null);
+        return step(stepId, step, (Guard) null);
     }
 
     public FlowBuilder step(String stepId, Step step, Guard guard) {
-        StepDefinition def = new StepDefinition(stepId, step, guard);
+        return step(stepId, step, guard, null);
+    }
+
+    public FlowBuilder durableStep(String stepId, Step step, RecoveryPolicy recoveryPolicy) {
+        return step(stepId, step, null, recoveryPolicy);
+    }
+
+    public FlowBuilder durableStep(String stepId, Step step, Guard guard, RecoveryPolicy recoveryPolicy) {
+        return step(stepId, step, guard, recoveryPolicy);
+    }
+
+    private FlowBuilder step(String stepId, Step step, Guard guard, RecoveryPolicy recoveryPolicy) {
+        StepDefinition def = new StepDefinition(stepId, step, guard, recoveryPolicy);
         if (!stepIds.add(def.stepId())) {
             throw new IllegalArgumentException("duplicate stepId in flow: " + stepId);
         }
@@ -42,10 +57,43 @@ public final class FlowBuilder {
         return this;
     }
 
+    public FlowBuilder durable() {
+        return persistence(FlowPersistence.DURABLE);
+    }
+
+    public FlowBuilder persistence(FlowPersistence persistence) {
+        if (persistence == null) {
+            throw new IllegalArgumentException("persistence must not be null");
+        }
+        this.persistence = persistence;
+        return this;
+    }
+
+    public FlowBuilder definitionVersion(String definitionVersion) {
+        if (definitionVersion != null && definitionVersion.isEmpty()) {
+            throw new IllegalArgumentException("definitionVersion must not be empty");
+        }
+        this.definitionVersion = definitionVersion;
+        return this;
+    }
+
     public Flow build() {
         if (steps.isEmpty()) {
             throw new IllegalStateException("Flow must declare at least one step");
         }
-        return new Flow(new FlowId(flowType, flowKey), steps);
+        validateDurableSteps();
+        return new Flow(new FlowId(flowType, flowKey), steps, persistence, definitionVersion);
+    }
+
+    private void validateDurableSteps() {
+        if (persistence != FlowPersistence.DURABLE) {
+            return;
+        }
+        for (StepDefinition def : steps) {
+            if (!def.recoverable()) {
+                throw new IllegalStateException(
+                        "Durable flow requires a recovery policy for step: " + def.stepId());
+            }
+        }
     }
 }

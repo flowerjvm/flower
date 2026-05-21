@@ -52,8 +52,11 @@ Engine
 
 - `flower-core`: core Engine, Worker, Flow, Step, event bus, clock, and listener
   APIs.
+- `flower-persistence-jdbc`: JDBC `FlowCheckpointStore` implementation plus
+  schema SQL for PostgreSQL, MySQL, Oracle, and H2.
 - `flower-bloom-adapter`: adapts Bloom's event bus to Flower's `EventBus` SPI.
-- `flower-spring-boot-starter`: Spring Boot auto-configuration for an `Engine`.
+- `flower-spring-boot-starter`: Spring Boot auto-configuration for an `Engine`
+  and optional checkpoint store wiring.
 - `flower-observability`: listeners and helpers for logging, dumps, metrics,
   tracing, and awaiting flow completion.
 
@@ -190,6 +193,19 @@ final class WaitForPaymentStep extends Step {
 }
 ```
 
+If `onTick` needs the event data, attach it to the signal. Flower keeps only
+the latest payload for each signal name, which is usually what a waiting step
+needs:
+
+```java
+ctx.subscribe(PaymentApproved.class, event -> ctx.signal("paid", event));
+
+PaymentApproved approved = ctx.consumeSignal("paid", PaymentApproved.class);
+if (approved != null) {
+    return StepResult.done();
+}
+```
+
 Subscriptions made through `StepContext.subscribe(...)` are cleaned up
 automatically when the step exits, resets, or the flow terminates.
 
@@ -319,6 +335,7 @@ The adapter preserves the dispatch semantics of the wrapped Bloom bus.
 
 - a `Clock` bean, defaulting to `SystemClock.INSTANCE`
 - an `EventBus` bean, defaulting to `InMemoryEventBus`
+- a `FlowCheckpointStore`, when JDBC persistence is explicitly enabled
 - an `Engine` bean
 - a lifecycle bean that starts and stops the engine with the application context
 
@@ -328,6 +345,8 @@ Example configuration:
 flower:
   enabled: true
   auto-start: true
+  persistence:
+    type: none
   workers:
     - name: orders
       interval-ms: 100
@@ -338,12 +357,114 @@ flower:
 Provide your own `Engine`, `EventBus`, `Clock`, or `FlowerListener` beans when
 you need more control. The auto-configuration backs off where appropriate.
 
+For durable flows with JDBC checkpoints, add `flower-persistence-jdbc`, create
+the table using the packaged schema SQL, and enable the store explicitly:
+
+```yaml
+flower:
+  persistence:
+    type: jdbc
+    jdbc:
+      dialect: postgresql
+      initialize-schema: never
+```
+
+Supported dialects are `postgresql`, `mysql`, `oracle`, and `h2`. The starter
+does not create tables automatically; `initialize-schema` is reserved and
+currently only supports `never`. If you need a custom backend, provide a
+`FlowCheckpointStore` bean and the auto-configured `Engine` will use it.
+
 ## Observability
 
 Attach `FlowerListener` implementations to observe flow submission,
 step entry/exit, flow completion, cancellation, failure, listener errors, and
 worker errors. `Engine.dump()` gives a snapshot of the current engine and worker
 state, including active flows and their current steps.
+
+## Checkpoint / Resume
+
+Flower's durable mode is checkpoint/resume, not durable execution replay.
+It stores only the current Flow position so an application can rebuild a fresh
+Flow and resume ticking from that position.
+
+```java
+Flow flow = Flow.builder("order", orderId)
+        .durable()
+        .durableStep("payment", new WaitPaymentStep(orderService),
+                RecoveryPolicy.REENTER_IDEMPOTENT)
+        .durableStep("fulfill", new FulfillOrderStep(warehouseService),
+                RecoveryPolicy.REENTER_IDEMPOTENT)
+        .build();
+```
+
+Durable flows require every step to declare a recovery policy. A regular
+`Step` may opt in through `durableStep(...)` with
+`RecoveryPolicy.REENTER_IDEMPOTENT` when re-running `onEnter` is safe. If
+initial entry and recovery setup must be different, extend `DurableStep` with
+`RecoveryPolicy.RESUME_ONLY` and implement `onResume(ctx)`.
+
+```java
+Flow recovered = Flow.builder("order", orderId)
+        .durable()
+        .durableStep("payment", new WaitPaymentStep(orderService),
+                RecoveryPolicy.REENTER_IDEMPOTENT)
+        .durableStep("fulfill", new FulfillOrderStep(warehouseService),
+                RecoveryPolicy.REENTER_IDEMPOTENT)
+        .build()
+        .recoverFrom(checkpoint);
+```
+
+Applications that want a small startup helper can register factories by
+`flowType` and recover the checkpoints they choose:
+
+```java
+FlowFactoryRegistry registry = FlowFactoryRegistry.builder()
+        .register("order", id -> buildOrderFlow(id.flowKey()))
+        .build();
+
+FlowRecoveryService recovery = FlowRecoveryService.create(store, registry);
+recovery.recoverActiveForWorker(engine.worker("orders"));
+```
+
+The helper only rebuilds fresh Flows and submits them to the chosen Worker. It
+does not start Workers, create schema, lock rows, delete failed checkpoints, or
+turn Flower into an event replay engine.
+
+Core exposes `FlowCheckpointStore` as the storage boundary. The default store
+is no-op, so existing transient flows are unaffected. Core does not create DB
+tables. JDBC, Redis, JPA, or file-backed checkpoint stores should live in
+optional modules or in the host application, and schema initialization should
+be explicit and opt-in.
+
+`flower-persistence-jdbc` provides a JDBC implementation:
+
+```java
+FlowCheckpointStore store = JdbcFlowCheckpointStore.create(
+        dataSource,
+        JdbcCheckpointDialects.postgresql());
+
+Engine engine = Engine.builder()
+        .eventBus(InMemoryEventBus.create())
+        .worker(Worker.builder("orders").build())
+        .checkpointStore(store)
+        .build();
+```
+
+Schema SQL is packaged under:
+
+```text
+flower/persistence/jdbc/postgresql/schema.sql
+flower/persistence/jdbc/mysql/schema.sql
+flower/persistence/jdbc/oracle/schema.sql
+flower/persistence/jdbc/h2/schema.sql
+```
+
+Apply that SQL yourself, or copy it into Flyway/Liquibase. The JDBC store does
+not create tables automatically.
+
+Signals are still in-memory wake-up hints. Durable step decisions should be
+based on domain state that can be checked again after restart, not on signal
+payloads alone.
 
 ## Notes For AI Agents
 

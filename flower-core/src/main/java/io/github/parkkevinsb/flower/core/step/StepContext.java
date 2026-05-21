@@ -25,6 +25,8 @@ import io.github.parkkevinsb.flower.core.time.Clock;
  *
  * <p>Signals can be set from any thread (typically an event handler thread).
  * The Worker tick reads them when it calls {@link Step#onTick(StepContext)}.
+ * A signal can be a simple flag or carry the latest payload for that signal
+ * name.
  */
 public interface StepContext {
 
@@ -54,9 +56,32 @@ public interface StepContext {
      */
     EventBus eventBus();
 
+    /**
+     * Mark a step-local signal as present without attaching a payload.
+     */
     void signal(String name);
 
+    /**
+     * Mark a step-local signal as present and keep the latest payload for that
+     * signal name. Use {@link #signalPayload(String, Class)} to read it without
+     * clearing, or {@link #consumeSignal(String, Class)} to read and clear it.
+     */
+    <E> void signal(String name, E payload);
+
     boolean hasSignal(String name);
+
+    /**
+     * Return the latest payload for the signal, or {@code null} when the signal
+     * is absent or was set without a payload. The signal remains present.
+     */
+    <E> E signalPayload(String name, Class<E> type);
+
+    /**
+     * Return the latest payload for the signal and clear the signal. If the
+     * signal was set without a payload this returns {@code null} and still
+     * clears the signal.
+     */
+    <E> E consumeSignal(String name, Class<E> type);
 
     void clearSignal(String name);
 

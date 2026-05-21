@@ -10,6 +10,8 @@ import io.github.parkkevinsb.flower.core.worker.Worker;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -231,6 +233,77 @@ class StepEventLifecycleTest {
         worker.tickOnce(); // no signal, done -> finished
 
         assertThat(flow.state()).isEqualTo(FlowState.FINISHED);
+    }
+
+    @Test
+    void payload_signal_keeps_latest_value_and_can_be_consumed() {
+        List<String> seen = new ArrayList<>();
+        List<Boolean> presentAfterConsume = new ArrayList<>();
+        Step step = new Step() {
+            @Override
+            protected void onEnter(StepContext ctx) {
+                ctx.subscribe(Ping.class, event -> ctx.signal("ping", event));
+            }
+
+            @Override
+            protected StepResult onTick(StepContext ctx) {
+                Ping peek = ctx.signalPayload("ping", Ping.class);
+                if (peek == null) {
+                    return StepResult.stay();
+                }
+
+                seen.add("peek:" + peek.tag);
+                seen.add("present-before-consume:" + ctx.hasSignal("ping"));
+                Ping consumed = ctx.consumeSignal("ping", Ping.class);
+                seen.add("consume:" + consumed.tag);
+                presentAfterConsume.add(ctx.hasSignal("ping"));
+                return StepResult.done();
+            }
+        };
+        Flow flow = Flow.builder("test", "1").step("only", step).build();
+        worker.submit(flow);
+
+        worker.tickOnce(); // enter + tick #1: no payload yet -> stay
+        bus.publish(new Ping("old"));
+        bus.publish(new Ping("latest"));
+        worker.tickOnce(); // tick #2: latest payload is consumed -> finished
+
+        assertThat(flow.state()).isEqualTo(FlowState.FINISHED);
+        assertThat(seen).containsExactly(
+                "peek:latest",
+                "present-before-consume:true",
+                "consume:latest");
+        assertThat(presentAfterConsume).containsExactly(false);
+    }
+
+    @Test
+    void consumeSignal_clears_payloadless_signal() {
+        List<String> seen = new ArrayList<>();
+        Step step = new Step() {
+            @Override
+            protected void onEnter(StepContext ctx) {
+                ctx.signal("ready");
+            }
+
+            @Override
+            protected StepResult onTick(StepContext ctx) {
+                if (!ctx.hasSignal("ready")) {
+                    return StepResult.done();
+                }
+                Ping payload = ctx.consumeSignal("ready", Ping.class);
+                seen.add(String.valueOf(payload));
+                seen.add("present:" + ctx.hasSignal("ready"));
+                return StepResult.stay();
+            }
+        };
+        Flow flow = Flow.builder("test", "1").step("only", step).build();
+        worker.submit(flow);
+
+        worker.tickOnce(); // consumes payloadless signal and stays
+        worker.tickOnce(); // no signal remains, done -> finished
+
+        assertThat(flow.state()).isEqualTo(FlowState.FINISHED);
+        assertThat(seen).containsExactly("null", "present:false");
     }
 
     @Test

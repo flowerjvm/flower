@@ -49,6 +49,7 @@
 
     <modules>
         <module>flower-core</module>
+        <module>flower-persistence-jdbc</module>
         <module>flower-bloom-adapter</module>
         <module>flower-spring-boot-starter</module>
         <module>flower-observability</module>
@@ -106,6 +107,11 @@
             <dependency>
                 <groupId>io.github.parkkevinsb.flower</groupId>
                 <artifactId>flower-core</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.github.parkkevinsb.flower</groupId>
+                <artifactId>flower-persistence-jdbc</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>

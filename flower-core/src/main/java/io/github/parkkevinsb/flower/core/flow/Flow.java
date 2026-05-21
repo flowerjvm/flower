@@ -1,7 +1,9 @@
 package io.github.parkkevinsb.flower.core.flow;
 
 import io.github.parkkevinsb.flower.core.event.EventBus;
+import io.github.parkkevinsb.flower.core.persistence.FlowCheckpoint;
 import io.github.parkkevinsb.flower.core.step.GuardResult;
+import io.github.parkkevinsb.flower.core.step.RecoveryPolicy;
 import io.github.parkkevinsb.flower.core.step.Step;
 import io.github.parkkevinsb.flower.core.step.StepDefinition;
 import io.github.parkkevinsb.flower.core.step.StepResult;
@@ -38,20 +40,27 @@ public final class Flow {
     private final FlowId flowId;
     private final List<StepDefinition> steps;
     private final Map<String, Integer> stepIndexById;
+    private final FlowPersistence persistence;
+    private final String definitionVersion;
 
     private FlowState state = FlowState.CREATED;
     private int currentIndex = -1;
     private StepRuntime currentRuntime;
     private boolean currentEntered;
+    private boolean recoveringCurrentStep;
+    private int retainedStepNo;
     private Throwable failureCause;
+    private FlowCheckpoint recoveryCheckpoint;
 
     private Clock clock;
     private EventBus eventBus;
     private LifecycleObserver observer = LifecycleObserver.NOOP;
 
-    Flow(FlowId flowId, List<StepDefinition> steps) {
+    Flow(FlowId flowId, List<StepDefinition> steps, FlowPersistence persistence, String definitionVersion) {
         this.flowId = flowId;
         this.steps = Collections.unmodifiableList(steps);
+        this.persistence = persistence == null ? FlowPersistence.TRANSIENT : persistence;
+        this.definitionVersion = definitionVersion;
         Map<String, Integer> idx = new HashMap<>();
         for (int i = 0; i < steps.size(); i++) {
             idx.put(steps.get(i).stepId(), i);
@@ -79,6 +88,14 @@ public final class Flow {
         return steps;
     }
 
+    public FlowPersistence persistence() {
+        return persistence;
+    }
+
+    public String definitionVersion() {
+        return definitionVersion;
+    }
+
     public String currentStepId() {
         if (state.isTerminal()) {
             return null;
@@ -90,11 +107,71 @@ public final class Flow {
     }
 
     public int currentStepNo() {
-        return currentRuntime == null ? 0 : currentRuntime.stepNo();
+        if (currentRuntime != null) {
+            return currentRuntime.stepNo();
+        }
+        return recoveringCurrentStep ? retainedStepNo : 0;
     }
 
     public FlowSnapshot snapshot() {
         return new FlowSnapshot(flowId, state, currentStepId(), currentStepNo(), failureCause);
+    }
+
+    public FlowCheckpoint checkpoint(String workerName, long updatedAtMillis) {
+        return new FlowCheckpoint(
+                flowId,
+                state,
+                currentStepId(),
+                currentStepNo(),
+                currentEntered || recoveringCurrentStep,
+                persistence,
+                workerName,
+                updatedAtMillis,
+                definitionVersion);
+    }
+
+    /**
+     * Prepare this freshly-built durable Flow to resume from a saved checkpoint.
+     *
+     * <p>The Flow must still be in {@link FlowState#CREATED}; runtime services
+     * are bound later by {@link #attach(Clock, EventBus, LifecycleObserver)}.
+     */
+    public Flow recoverFrom(FlowCheckpoint checkpoint) {
+        if (checkpoint == null) {
+            throw new IllegalArgumentException("checkpoint must not be null");
+        }
+        if (state != FlowState.CREATED) {
+            throw new IllegalStateException("Flow can only recover before attach, state=" + state);
+        }
+        if (persistence != FlowPersistence.DURABLE) {
+            throw new IllegalStateException("Only durable flows can recover from checkpoints: " + flowId);
+        }
+        if (checkpoint.persistence() != FlowPersistence.DURABLE) {
+            throw new IllegalArgumentException("checkpoint is not durable: " + checkpoint);
+        }
+        if (!flowId.equals(checkpoint.flowId())) {
+            throw new IllegalArgumentException(
+                    "checkpoint flowId mismatch. expected=" + flowId + ", actual=" + checkpoint.flowId());
+        }
+        if (checkpoint.state().isTerminal()) {
+            throw new IllegalArgumentException("terminal checkpoints cannot be recovered: " + checkpoint);
+        }
+        if (checkpoint.state() != FlowState.READY && checkpoint.state() != FlowState.RUNNING) {
+            throw new IllegalArgumentException("checkpoint must be READY or RUNNING: " + checkpoint);
+        }
+        if (definitionVersion != null
+                && checkpoint.definitionVersion() != null
+                && !definitionVersion.equals(checkpoint.definitionVersion())) {
+            throw new IllegalArgumentException(
+                    "checkpoint definitionVersion mismatch. expected=" + definitionVersion
+                            + ", actual=" + checkpoint.definitionVersion());
+        }
+        if (checkpoint.state() == FlowState.RUNNING && !stepIndexById.containsKey(checkpoint.currentStepId())) {
+            throw new IllegalArgumentException(
+                    "checkpoint stepId not found in flow: " + checkpoint.currentStepId());
+        }
+        this.recoveryCheckpoint = checkpoint;
+        return this;
     }
 
     // ------------------------------------------------------------------
@@ -126,6 +203,9 @@ public final class Flow {
         this.eventBus = eventBus;
         this.observer = observer;
         this.state = FlowState.READY;
+        if (recoveryCheckpoint != null) {
+            applyRecoveryCheckpoint(recoveryCheckpoint);
+        }
     }
 
     /**
@@ -152,9 +232,13 @@ public final class Flow {
             return;
         }
 
-        // Fresh entry or post-repeat re-entry: enter the current step first.
+        // Fresh entry, post-repeat re-entry, or checkpoint recovery activation.
         if (!currentEntered) {
-            enterCurrent();
+            if (recoveringCurrentStep) {
+                resumeCurrent();
+            } else {
+                enterCurrent();
+            }
             if (state.isTerminal() || currentRuntime == null) {
                 return;
             }
@@ -195,12 +279,39 @@ public final class Flow {
             } finally {
                 currentRuntime = null;
                 currentEntered = false;
+                recoveringCurrentStep = false;
+                retainedStepNo = 0;
             }
             if (notifyExit) {
                 notifyExited(def.stepId());
             }
         }
         state = FlowState.CANCELLED;
+    }
+
+    /**
+     * Release runtime resources without marking the Flow terminal. Used when a
+     * Worker stops while preserving durable checkpoints for later recovery.
+     */
+    public void suspend() {
+        if (state.isTerminal()) {
+            return;
+        }
+        if (currentRuntime != null) {
+            int stepNo = currentRuntime.stepNo();
+            try {
+                currentRuntime.dispose();
+            } catch (Throwable ignored) {
+                // best-effort cleanup
+            } finally {
+                currentRuntime = null;
+                if (currentEntered) {
+                    retainedStepNo = stepNo;
+                    recoveringCurrentStep = true;
+                }
+                currentEntered = false;
+            }
+        }
     }
 
     // ------------------------------------------------------------------
@@ -212,6 +323,31 @@ public final class Flow {
             currentRuntime = new StepRuntime(flowId, def.stepId(), clock, eventBus);
             currentEntered = false;
         }
+    }
+
+    private void applyRecoveryCheckpoint(FlowCheckpoint checkpoint) {
+        if (checkpoint.state() == FlowState.READY) {
+            state = FlowState.READY;
+            currentIndex = -1;
+            currentRuntime = null;
+            currentEntered = false;
+            recoveringCurrentStep = false;
+            retainedStepNo = 0;
+            return;
+        }
+
+        Integer index = stepIndexById.get(checkpoint.currentStepId());
+        if (index == null) {
+            throw new IllegalStateException(
+                    "checkpoint stepId not found in flow: " + checkpoint.currentStepId());
+        }
+        state = FlowState.RUNNING;
+        currentIndex = index;
+        currentEntered = false;
+        recoveringCurrentStep = checkpoint.currentStepEntered();
+        currentRuntime = new StepRuntime(flowId, checkpoint.currentStepId(), clock, eventBus);
+        currentRuntime.setStepNo(checkpoint.currentStepNo());
+        retainedStepNo = 0;
     }
 
     private boolean checkGuard(StepDefinition def) {
@@ -279,11 +415,41 @@ public final class Flow {
             }
             currentRuntime = null;
             currentEntered = false;
+            recoveringCurrentStep = false;
+            retainedStepNo = 0;
             state = FlowState.FAILED;
             failureCause = t;
             return;
         }
         currentEntered = true;
+        recoveringCurrentStep = false;
+        retainedStepNo = 0;
+        notifyEntered(def.stepId());
+    }
+
+    private void resumeCurrent() {
+        StepDefinition def = steps.get(currentIndex);
+        ensureCurrentRuntime(def);
+        RecoveryPolicy recoveryPolicy = def.recoveryPolicy();
+        try {
+            currentRuntime.resume(def.step(), recoveryPolicy);
+        } catch (Throwable t) {
+            try {
+                currentRuntime.dispose();
+            } catch (Throwable ignored) {
+                // ignore
+            }
+            currentRuntime = null;
+            currentEntered = false;
+            recoveringCurrentStep = false;
+            retainedStepNo = 0;
+            state = FlowState.FAILED;
+            failureCause = t;
+            return;
+        }
+        currentEntered = true;
+        recoveringCurrentStep = false;
+        retainedStepNo = 0;
         notifyEntered(def.stepId());
     }
 
@@ -313,6 +479,8 @@ public final class Flow {
                 // Discard the runtime; next tick re-creates it and calls onEnter again.
                 currentRuntime = null;
                 currentEntered = false;
+                recoveringCurrentStep = false;
+                retainedStepNo = 0;
                 return;
 
             case GOTO: {
@@ -369,6 +537,8 @@ public final class Flow {
             currentRuntime = null;
             boolean notifyExit = currentEntered;
             currentEntered = false;
+            recoveringCurrentStep = false;
+            retainedStepNo = 0;
             if (notifyExit) {
                 notifyExited(def.stepId());
             }

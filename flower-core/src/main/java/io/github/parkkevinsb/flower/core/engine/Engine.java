@@ -3,6 +3,7 @@ package io.github.parkkevinsb.flower.core.engine;
 import io.github.parkkevinsb.flower.core.event.EventBus;
 import io.github.parkkevinsb.flower.core.flow.FlowSnapshot;
 import io.github.parkkevinsb.flower.core.listener.FlowerListener;
+import io.github.parkkevinsb.flower.core.persistence.FlowCheckpointStore;
 import io.github.parkkevinsb.flower.core.time.Clock;
 import io.github.parkkevinsb.flower.core.worker.Worker;
 
@@ -35,16 +36,23 @@ public final class Engine {
     private final EventBus eventBus;
     private final Map<String, Worker> workers;
     private final List<FlowerListener> listeners;
+    private final FlowCheckpointStore checkpointStore;
 
     private final Object lock = new Object();
     private volatile EngineState state = EngineState.CREATED;
     private boolean attached = false;
 
-    Engine(Clock clock, EventBus eventBus, Map<String, Worker> workers, List<FlowerListener> listeners) {
+    Engine(
+            Clock clock,
+            EventBus eventBus,
+            Map<String, Worker> workers,
+            List<FlowerListener> listeners,
+            FlowCheckpointStore checkpointStore) {
         this.clock = clock;
         this.eventBus = eventBus;
         this.workers = Collections.unmodifiableMap(new LinkedHashMap<>(workers));
         this.listeners = Collections.unmodifiableList(new ArrayList<>(listeners));
+        this.checkpointStore = checkpointStore == null ? FlowCheckpointStore.NOOP : checkpointStore;
     }
 
     public static EngineBuilder builder() {
@@ -79,6 +87,10 @@ public final class Engine {
         return listeners;
     }
 
+    public FlowCheckpointStore checkpointStore() {
+        return checkpointStore;
+    }
+
     /**
      * Attach all Workers to the shared {@link Clock}, {@link EventBus}, and
      * listeners. Idempotent. Used directly by tests that want to drive
@@ -88,7 +100,7 @@ public final class Engine {
         synchronized (lock) {
             if (attached) return;
             for (Worker w : workers.values()) {
-                w.attach(clock, eventBus, listeners);
+                w.attach(clock, eventBus, listeners, checkpointStore);
             }
             attached = true;
         }

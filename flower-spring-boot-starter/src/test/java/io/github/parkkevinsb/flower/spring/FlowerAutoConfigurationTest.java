@@ -5,19 +5,31 @@ import io.github.parkkevinsb.flower.core.engine.EngineState;
 import io.github.parkkevinsb.flower.core.event.EventBus;
 import io.github.parkkevinsb.flower.core.event.InMemoryEventBus;
 import io.github.parkkevinsb.flower.core.listener.FlowerListener;
+import io.github.parkkevinsb.flower.core.persistence.FlowCheckpoint;
+import io.github.parkkevinsb.flower.core.persistence.FlowCheckpointStore;
 import io.github.parkkevinsb.flower.core.time.Clock;
 import io.github.parkkevinsb.flower.core.time.ManualClock;
 import io.github.parkkevinsb.flower.core.worker.Worker;
+import io.github.parkkevinsb.flower.persistence.jdbc.JdbcFlowCheckpointStore;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
+
+import javax.sql.DataSource;
+import java.io.PrintWriter;
+import java.sql.Connection;
+import java.sql.SQLException;
+import java.sql.SQLFeatureNotSupportedException;
+import java.util.logging.Logger;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 class FlowerAutoConfigurationTest {
 
     private final ApplicationContextRunner runner = new ApplicationContextRunner()
-            .withConfiguration(AutoConfigurations.of(FlowerAutoConfiguration.class));
+            .withConfiguration(AutoConfigurations.of(
+                    FlowerJdbcPersistenceAutoConfiguration.class,
+                    FlowerAutoConfiguration.class));
 
     @Test
     void registersEngineWithDefaultWorkerWhenNoPropertiesGiven() {
@@ -80,6 +92,78 @@ class FlowerAutoConfigurationTest {
     }
 
     @Test
+    void usesNoopCheckpointStoreByDefault() {
+        runner.run(ctx -> assertThat(ctx.getBean(Engine.class).checkpointStore())
+                .isSameAs(FlowCheckpointStore.NOOP));
+    }
+
+    @Test
+    void usesUserProvidedCheckpointStore() {
+        FlowCheckpointStore store = new FlowCheckpointStore() {
+            @Override
+            public void save(FlowCheckpoint checkpoint) {
+            }
+
+            @Override
+            public void delete(io.github.parkkevinsb.flower.core.flow.FlowId flowId) {
+            }
+        };
+
+        runner.withBean("customCheckpointStore", FlowCheckpointStore.class, () -> store)
+                .run(ctx -> assertThat(ctx.getBean(Engine.class).checkpointStore()).isSameAs(store));
+    }
+
+    @Test
+    void jdbcPersistenceCreatesCheckpointStore() {
+        runner.withPropertyValues(
+                "flower.persistence.type=jdbc",
+                "flower.persistence.jdbc.dialect=h2"
+        ).withBean(DataSource.class, StubDataSource::new)
+                .run(ctx -> {
+                    assertThat(ctx).hasSingleBean(FlowCheckpointStore.class);
+                    assertThat(ctx.getBean(FlowCheckpointStore.class))
+                            .isInstanceOf(JdbcFlowCheckpointStore.class);
+                    assertThat(ctx.getBean(Engine.class).checkpointStore())
+                            .isSameAs(ctx.getBean(FlowCheckpointStore.class));
+                });
+    }
+
+    @Test
+    void jdbcPersistenceRequiresDataSource() {
+        runner.withPropertyValues(
+                "flower.persistence.type=jdbc",
+                "flower.persistence.jdbc.dialect=h2"
+        ).run(ctx -> assertThat(ctx).hasFailed());
+    }
+
+    @Test
+    void jdbcPersistenceRequiresDialect() {
+        runner.withPropertyValues("flower.persistence.type=jdbc")
+                .withBean(DataSource.class, StubDataSource::new)
+                .run(ctx -> assertThat(ctx).hasFailed());
+    }
+
+    @Test
+    void customCheckpointStoreOverridesJdbcAutoConfiguration() {
+        FlowCheckpointStore store = new FlowCheckpointStore() {
+            @Override
+            public void save(FlowCheckpoint checkpoint) {
+            }
+
+            @Override
+            public void delete(io.github.parkkevinsb.flower.core.flow.FlowId flowId) {
+            }
+        };
+
+        runner.withPropertyValues("flower.persistence.type=jdbc")
+                .withBean("customCheckpointStore", FlowCheckpointStore.class, () -> store)
+                .run(ctx -> {
+                    assertThat(ctx).hasSingleBean(FlowCheckpointStore.class);
+                    assertThat(ctx.getBean(Engine.class).checkpointStore()).isSameAs(store);
+                });
+    }
+
+    @Test
     void collectsListenerBeans() {
         FlowerListener a = new FlowerListener() { };
         FlowerListener b = new FlowerListener() { };
@@ -109,5 +193,50 @@ class FlowerAutoConfigurationTest {
             Engine engine = ctx.getBean(Engine.class);
             assertThat(engine.state()).isEqualTo(EngineState.CREATED);
         });
+    }
+
+    private static final class StubDataSource implements DataSource {
+        @Override
+        public Connection getConnection() {
+            throw new UnsupportedOperationException("test DataSource does not open connections");
+        }
+
+        @Override
+        public Connection getConnection(String username, String password) {
+            throw new UnsupportedOperationException("test DataSource does not open connections");
+        }
+
+        @Override
+        public PrintWriter getLogWriter() {
+            return null;
+        }
+
+        @Override
+        public void setLogWriter(PrintWriter out) {
+        }
+
+        @Override
+        public void setLoginTimeout(int seconds) {
+        }
+
+        @Override
+        public int getLoginTimeout() {
+            return 0;
+        }
+
+        @Override
+        public Logger getParentLogger() throws SQLFeatureNotSupportedException {
+            throw new SQLFeatureNotSupportedException();
+        }
+
+        @Override
+        public <T> T unwrap(Class<T> iface) throws SQLException {
+            throw new SQLException("not a wrapper");
+        }
+
+        @Override
+        public boolean isWrapperFor(Class<?> iface) {
+            return false;
+        }
     }
 }

@@ -3,10 +3,12 @@ package io.github.parkkevinsb.flower.core.worker;
 import io.github.parkkevinsb.flower.core.event.EventBus;
 import io.github.parkkevinsb.flower.core.flow.Flow;
 import io.github.parkkevinsb.flower.core.flow.FlowId;
+import io.github.parkkevinsb.flower.core.flow.FlowPersistence;
 import io.github.parkkevinsb.flower.core.flow.FlowSnapshot;
 import io.github.parkkevinsb.flower.core.flow.FlowState;
 import io.github.parkkevinsb.flower.core.flow.LifecycleObserver;
 import io.github.parkkevinsb.flower.core.listener.FlowerListener;
+import io.github.parkkevinsb.flower.core.persistence.FlowCheckpointStore;
 import io.github.parkkevinsb.flower.core.time.Clock;
 
 import java.util.ArrayList;
@@ -56,6 +58,7 @@ public final class Worker {
     private Clock clock;
     private EventBus eventBus;
     private List<FlowerListener> listeners = Collections.emptyList();
+    private FlowCheckpointStore checkpointStore = FlowCheckpointStore.NOOP;
 
     private ScheduledExecutorService scheduler;
     private ScheduledFuture<?> tickFuture;
@@ -103,6 +106,18 @@ public final class Worker {
      * Bind shared runtime services. Called by {@code Engine} before {@link #start()}.
      */
     public void attach(Clock clock, EventBus eventBus, List<FlowerListener> listeners) {
+        attach(clock, eventBus, listeners, FlowCheckpointStore.NOOP);
+    }
+
+    /**
+     * Bind shared runtime services and checkpoint storage. Called by
+     * {@code Engine} before {@link #start()}.
+     */
+    public void attach(
+            Clock clock,
+            EventBus eventBus,
+            List<FlowerListener> listeners,
+            FlowCheckpointStore checkpointStore) {
         if (clock == null) {
             throw new IllegalArgumentException("clock must not be null");
         }
@@ -116,6 +131,7 @@ public final class Worker {
             this.listeners = listeners == null
                     ? Collections.emptyList()
                     : Collections.unmodifiableList(new ArrayList<>(listeners));
+            this.checkpointStore = checkpointStore == null ? FlowCheckpointStore.NOOP : checkpointStore;
         }
     }
 
@@ -138,9 +154,9 @@ public final class Worker {
     }
 
     /**
-     * Stop the internal scheduler and cancel all accepted flows. Pending
-     * submissions are also cancelled so Step subscriptions cannot outlive
-     * the Worker.
+     * Stop the internal scheduler. Transient flows are cancelled. Durable
+     * flows are checkpointed and suspended so they can be rebuilt and resumed
+     * by the host application.
      */
     public void stop() {
         ScheduledExecutorService toShutdown;
@@ -158,7 +174,7 @@ public final class Worker {
         }
         if (toCancel != null) toCancel.cancel(false);
         if (toShutdown != null) toShutdown.shutdownNow();
-        cancelAndNotify(flowsToCancel);
+        stopFlows(flowsToCancel);
     }
 
     public void pause() {
@@ -303,6 +319,7 @@ public final class Worker {
                 if (active != null) {
                     active.cancel();
                     fireFlowTerminated(active);
+                    deleteCheckpoint(active);
                 }
             }
             Flow ps;
@@ -315,6 +332,7 @@ public final class Worker {
                 }
                 activeFlows.put(id, ps);
                 fireFlowSubmitted(ps);
+                saveCheckpoint(ps);
             }
         }
     }
@@ -341,6 +359,7 @@ public final class Worker {
             if (!before.isTerminal() && after.isTerminal()) {
                 fireFlowTerminated(flow);
             }
+            saveOrDeleteCheckpoint(flow);
         }
     }
 
@@ -395,6 +414,57 @@ public final class Worker {
             }
             flow.cancel();
             fireFlowTerminated(flow);
+            deleteCheckpoint(flow);
+        }
+    }
+
+    private void stopFlows(List<Flow> flows) {
+        for (Flow flow : flows) {
+            if (flow.state().isTerminal()) {
+                continue;
+            }
+            if (flow.persistence() == FlowPersistence.DURABLE) {
+                saveCheckpoint(flow);
+                flow.suspend();
+            } else {
+                flow.cancel();
+                fireFlowTerminated(flow);
+                deleteCheckpoint(flow);
+            }
+        }
+    }
+
+    private void saveOrDeleteCheckpoint(Flow flow) {
+        if (flow.state().isTerminal()) {
+            deleteCheckpoint(flow);
+        } else {
+            saveCheckpoint(flow);
+        }
+    }
+
+    private void saveCheckpoint(Flow flow) {
+        if (flow.persistence() != FlowPersistence.DURABLE) {
+            return;
+        }
+        try {
+            checkpointStore.save(flow.checkpoint(name, clock.currentTimeMillis()));
+        } catch (Throwable t) {
+            notifyWorkerError(t);
+            System.err.println("[flower] worker " + name + " checkpoint save failed for "
+                    + flow.flowId() + ": " + t);
+        }
+    }
+
+    private void deleteCheckpoint(Flow flow) {
+        if (flow.persistence() != FlowPersistence.DURABLE) {
+            return;
+        }
+        try {
+            checkpointStore.delete(flow.flowId());
+        } catch (Throwable t) {
+            notifyWorkerError(t);
+            System.err.println("[flower] worker " + name + " checkpoint delete failed for "
+                    + flow.flowId() + ": " + t);
         }
     }
 

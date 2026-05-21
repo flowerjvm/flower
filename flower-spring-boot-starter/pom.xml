@@ -35,6 +35,11 @@
             <groupId>io.github.parkkevinsb.flower</groupId>
             <artifactId>flower-core</artifactId>
         </dependency>
+        <dependency>
+            <groupId>io.github.parkkevinsb.flower</groupId>
+            <artifactId>flower-persistence-jdbc</artifactId>
+            <optional>true</optional>
+        </dependency>
 
         <dependency>
             <groupId>org.springframework.boot</groupId>

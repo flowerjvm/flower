@@ -5,6 +5,7 @@ import io.github.parkkevinsb.flower.core.engine.EngineBuilder;
 import io.github.parkkevinsb.flower.core.event.EventBus;
 import io.github.parkkevinsb.flower.core.event.InMemoryEventBus;
 import io.github.parkkevinsb.flower.core.listener.FlowerListener;
+import io.github.parkkevinsb.flower.core.persistence.FlowCheckpointStore;
 import io.github.parkkevinsb.flower.core.time.Clock;
 import io.github.parkkevinsb.flower.core.time.SystemClock;
 import io.github.parkkevinsb.flower.core.worker.Worker;
@@ -33,6 +34,8 @@ import java.util.Set;
  *   <li>Provide an {@link EventBus} (e.g. a Bloom-backed one) and the auto
  *       Engine will pick it up.</li>
  *   <li>Provide a {@link Clock} (such as a manual clock for tests).</li>
+ *   <li>Provide a {@link FlowCheckpointStore} for durable Flow checkpoints, or
+ *       set {@code flower.persistence.type=jdbc} with the JDBC module present.</li>
  *   <li>{@link FlowerListener} beans declared in the context are collected
  *       and attached to the Engine.</li>
  * </ul>
@@ -61,11 +64,20 @@ public class FlowerAutoConfiguration {
             FlowerProperties properties,
             Clock clock,
             EventBus eventBus,
+            ObjectProvider<FlowCheckpointStore> checkpointStore,
             ObjectProvider<FlowerListener> listeners
     ) {
+        FlowCheckpointStore store = checkpointStore.getIfAvailable();
+        if (store == null && properties.getPersistence().getType() == FlowerProperties.PersistenceType.JDBC) {
+            throw new IllegalStateException(
+                    "flower.persistence.type=jdbc requires a FlowCheckpointStore bean. "
+                            + "Add flower-persistence-jdbc with a DataSource, or provide your own FlowCheckpointStore.");
+        }
+
         EngineBuilder builder = Engine.builder()
                 .clock(clock)
-                .eventBus(eventBus);
+                .eventBus(eventBus)
+                .checkpointStore(store != null ? store : FlowCheckpointStore.NOOP);
 
         listeners.orderedStream().forEach(builder::listener);
 

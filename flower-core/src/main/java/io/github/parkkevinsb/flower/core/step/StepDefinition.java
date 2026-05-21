@@ -13,12 +13,17 @@ public final class StepDefinition {
     private final String stepId;
     private final Step step;
     private final Guard guard;
+    private final RecoveryPolicy recoveryPolicy;
 
     public StepDefinition(String stepId, Step step) {
         this(stepId, step, null);
     }
 
     public StepDefinition(String stepId, Step step, Guard guard) {
+        this(stepId, step, guard, null);
+    }
+
+    public StepDefinition(String stepId, Step step, Guard guard, RecoveryPolicy recoveryPolicy) {
         if (stepId == null || stepId.isEmpty()) {
             throw new IllegalArgumentException("stepId must not be null or empty");
         }
@@ -28,6 +33,7 @@ public final class StepDefinition {
         this.stepId = stepId;
         this.step = step;
         this.guard = guard;
+        this.recoveryPolicy = resolveRecoveryPolicy(step, recoveryPolicy);
     }
 
     public String stepId() {
@@ -42,8 +48,29 @@ public final class StepDefinition {
         return guard;
     }
 
+    public RecoveryPolicy recoveryPolicy() {
+        return recoveryPolicy;
+    }
+
+    public boolean recoverable() {
+        return recoveryPolicy != null;
+    }
+
     @Override
     public String toString() {
         return "StepDefinition{" + stepId + " -> " + step.getClass().getSimpleName() + "}";
+    }
+
+    private static RecoveryPolicy resolveRecoveryPolicy(Step step, RecoveryPolicy explicitPolicy) {
+        RecoveryPolicy resolved = explicitPolicy;
+        if (resolved == null && step instanceof DurableStep) {
+            resolved = ((DurableStep) step).recoveryPolicy();
+        }
+        if (resolved == RecoveryPolicy.RESUME_ONLY && !(step instanceof DurableStep)) {
+            throw new IllegalArgumentException(
+                    "RESUME_ONLY requires a DurableStep so onResume can be called: "
+                            + step.getClass().getName());
+        }
+        return resolved;
     }
 }

@@ -17,6 +17,8 @@ import java.util.List;
  *   enabled: true
  *   auto-start: true
  *   phase: 0
+ *   persistence:
+ *     type: none
  *   workers:
  *     - name: main
  *       interval-ms: 100
@@ -43,6 +45,12 @@ public class FlowerProperties {
      * the Engine should outlive other lifecycle-managed components on shutdown.
      */
     private int phase = 0;
+
+    /**
+     * Checkpoint persistence settings. Defaults to no durable store unless a
+     * {@code FlowCheckpointStore} bean is provided by the application.
+     */
+    private Persistence persistence = new Persistence();
 
     /**
      * Workers to register. If empty, a single Worker named {@code "main"} with
@@ -74,12 +82,103 @@ public class FlowerProperties {
         this.phase = phase;
     }
 
+    public Persistence getPersistence() {
+        return persistence;
+    }
+
+    public void setPersistence(Persistence persistence) {
+        this.persistence = persistence != null ? persistence : new Persistence();
+    }
+
     public List<Worker> getWorkers() {
         return workers;
     }
 
     public void setWorkers(List<Worker> workers) {
         this.workers = workers != null ? workers : new ArrayList<>();
+    }
+
+    public enum PersistenceType {
+        NONE,
+        JDBC
+    }
+
+    public enum JdbcDialect {
+        POSTGRESQL,
+        MYSQL,
+        ORACLE,
+        H2
+    }
+
+    public enum SchemaInitialization {
+        NEVER
+    }
+
+    /**
+     * Persistence configuration block.
+     */
+    public static class Persistence {
+
+        /**
+         * Persistence backend. {@code NONE} keeps Flower's default in-memory
+         * behavior unless a custom {@code FlowCheckpointStore} bean exists.
+         */
+        private PersistenceType type = PersistenceType.NONE;
+
+        /** JDBC-specific settings used when {@code type=jdbc}. */
+        private Jdbc jdbc = new Jdbc();
+
+        public PersistenceType getType() {
+            return type;
+        }
+
+        public void setType(PersistenceType type) {
+            this.type = type != null ? type : PersistenceType.NONE;
+        }
+
+        public Jdbc getJdbc() {
+            return jdbc;
+        }
+
+        public void setJdbc(Jdbc jdbc) {
+            this.jdbc = jdbc != null ? jdbc : new Jdbc();
+        }
+    }
+
+    /**
+     * JDBC checkpoint store configuration.
+     */
+    public static class Jdbc {
+
+        /**
+         * SQL dialect for the standard Flower checkpoint table. Required when
+         * {@code flower.persistence.type=jdbc}.
+         */
+        private JdbcDialect dialect;
+
+        /**
+         * Reserved for future schema initialization support. For now Flower
+         * never creates tables automatically.
+         */
+        private SchemaInitialization initializeSchema = SchemaInitialization.NEVER;
+
+        public JdbcDialect getDialect() {
+            return dialect;
+        }
+
+        public void setDialect(JdbcDialect dialect) {
+            this.dialect = dialect;
+        }
+
+        public SchemaInitialization getInitializeSchema() {
+            return initializeSchema;
+        }
+
+        public void setInitializeSchema(SchemaInitialization initializeSchema) {
+            this.initializeSchema = initializeSchema != null
+                    ? initializeSchema
+                    : SchemaInitialization.NEVER;
+        }
     }
 
     /**

@@ -9,8 +9,8 @@ import io.github.parkkevinsb.flower.core.time.Clock;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
@@ -26,20 +26,21 @@ import java.util.concurrent.atomic.AtomicBoolean;
  *   <li>{@code stepNo}, {@code timeoutStart}, {@code timeoutMillis} - written and
  *       read only on the Worker thread</li>
  *   <li>{@code signals}, {@code subscriptions} - safe to mutate from event
- *       handler threads ({@link java.util.concurrent.ConcurrentHashMap} backed
- *       set, copy-on-iterate list)</li>
+ *       handler threads ({@link ConcurrentHashMap} backed map, copy-on-iterate
+ *       list)</li>
  * </ul>
  */
 public final class StepRuntime implements StepContext {
 
     private static final long NO_TIMEOUT = -1L;
+    private static final Object NO_PAYLOAD = new Object();
 
     private final FlowId flowId;
     private final String stepId;
     private final Clock clock;
     private final EventBus eventBus;
 
-    private final Set<String> signals = ConcurrentHashMap.newKeySet();
+    private final ConcurrentMap<String, SignalValue> signals = new ConcurrentHashMap<>();
     private final List<Subscription> subscriptions = Collections.synchronizedList(new ArrayList<>());
 
     private int stepNo;
@@ -110,15 +111,45 @@ public final class StepRuntime implements StepContext {
 
     @Override
     public void signal(String name) {
-        if (name == null || name.isEmpty()) {
-            throw new IllegalArgumentException("signal name must not be null or empty");
+        validateSignalName(name);
+        signals.put(name, SignalValue.noPayload());
+    }
+
+    @Override
+    public <E> void signal(String name, E payload) {
+        validateSignalName(name);
+        if (payload == null) {
+            throw new IllegalArgumentException("signal payload must not be null");
         }
-        signals.add(name);
+        signals.put(name, SignalValue.withPayload(payload));
     }
 
     @Override
     public boolean hasSignal(String name) {
-        return name != null && signals.contains(name);
+        return name != null && signals.containsKey(name);
+    }
+
+    @Override
+    public <E> E signalPayload(String name, Class<E> type) {
+        validateSignalPayloadType(type);
+        if (name == null) {
+            return null;
+        }
+        return castPayload(signals.get(name), type);
+    }
+
+    @Override
+    public <E> E consumeSignal(String name, Class<E> type) {
+        validateSignalPayloadType(type);
+        if (name == null) {
+            return null;
+        }
+        SignalValue value = signals.get(name);
+        E payload = castPayload(value, type);
+        if (value != null) {
+            signals.remove(name, value);
+        }
+        return payload;
     }
 
     @Override
@@ -168,6 +199,29 @@ public final class StepRuntime implements StepContext {
      */
     public void enter(Step step) {
         step.onEnter(this);
+    }
+
+    /**
+     * Activate a recovered Step according to its declared recovery policy.
+     */
+    public void resume(Step step, RecoveryPolicy recoveryPolicy) {
+        if (recoveryPolicy == null) {
+            throw new IllegalArgumentException("recoveryPolicy must not be null");
+        }
+        switch (recoveryPolicy) {
+            case REENTER_IDEMPOTENT:
+                step.onEnter(this);
+                return;
+            case RESUME_ONLY:
+                if (!(step instanceof DurableStep)) {
+                    throw new IllegalStateException(
+                            "RESUME_ONLY requires DurableStep: " + step.getClass().getName());
+                }
+                ((DurableStep) step).onResume(this);
+                return;
+            default:
+                throw new IllegalStateException("Unknown RecoveryPolicy: " + recoveryPolicy);
+        }
     }
 
     /**
@@ -236,6 +290,41 @@ public final class StepRuntime implements StepContext {
             } catch (Throwable ignored) {
                 // best-effort cleanup
             }
+        }
+    }
+
+    private static void validateSignalName(String name) {
+        if (name == null || name.isEmpty()) {
+            throw new IllegalArgumentException("signal name must not be null or empty");
+        }
+    }
+
+    private static void validateSignalPayloadType(Class<?> type) {
+        if (type == null) {
+            throw new IllegalArgumentException("signal payload type must not be null");
+        }
+    }
+
+    private static <E> E castPayload(SignalValue value, Class<E> type) {
+        if (value == null || value.payload == NO_PAYLOAD) {
+            return null;
+        }
+        return type.cast(value.payload);
+    }
+
+    private static final class SignalValue {
+        private final Object payload;
+
+        private SignalValue(Object payload) {
+            this.payload = payload;
+        }
+
+        static SignalValue noPayload() {
+            return new SignalValue(NO_PAYLOAD);
+        }
+
+        static SignalValue withPayload(Object payload) {
+            return new SignalValue(payload);
         }
     }
 
