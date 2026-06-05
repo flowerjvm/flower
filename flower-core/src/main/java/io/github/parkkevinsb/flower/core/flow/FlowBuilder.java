@@ -1,5 +1,6 @@
 package io.github.parkkevinsb.flower.core.flow;
 
+import io.github.parkkevinsb.flower.core.context.ExecutionContext;
 import io.github.parkkevinsb.flower.core.step.Guard;
 import io.github.parkkevinsb.flower.core.step.RecoveryPolicy;
 import io.github.parkkevinsb.flower.core.step.Step;
@@ -25,6 +26,7 @@ public final class FlowBuilder {
     private final List<StepDefinition> steps = new ArrayList<>();
     private final Set<String> stepIds = new HashSet<>();
     private FlowPersistence persistence = FlowPersistence.TRANSIENT;
+    private ExecutionContext executionContext = ExecutionContext.empty();
     private String definitionVersion;
 
     FlowBuilder(String flowType, String flowKey) {
@@ -69,6 +71,14 @@ public final class FlowBuilder {
         return this;
     }
 
+    public FlowBuilder executionContext(ExecutionContext executionContext) {
+        if (executionContext == null) {
+            throw new IllegalArgumentException("executionContext must not be null");
+        }
+        this.executionContext = executionContext;
+        return this;
+    }
+
     public FlowBuilder definitionVersion(String definitionVersion) {
         if (definitionVersion != null && definitionVersion.isEmpty()) {
             throw new IllegalArgumentException("definitionVersion must not be empty");
@@ -82,7 +92,7 @@ public final class FlowBuilder {
             throw new IllegalStateException("Flow must declare at least one step");
         }
         validateDurableSteps();
-        return new Flow(new FlowId(flowType, flowKey), steps, persistence, definitionVersion);
+        return new Flow(new FlowId(flowType, flowKey), steps, persistence, definitionVersion, executionContext);
     }
 
     private void validateDurableSteps() {

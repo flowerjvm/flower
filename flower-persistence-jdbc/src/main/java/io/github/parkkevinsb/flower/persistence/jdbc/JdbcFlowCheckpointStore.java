@@ -1,5 +1,6 @@
 package io.github.parkkevinsb.flower.persistence.jdbc;
 
+import io.github.parkkevinsb.flower.core.context.ExecutionContext;
 import io.github.parkkevinsb.flower.core.flow.FlowId;
 import io.github.parkkevinsb.flower.core.flow.FlowPersistence;
 import io.github.parkkevinsb.flower.core.flow.FlowState;
@@ -154,7 +155,14 @@ public final class JdbcFlowCheckpointStore implements FlowCheckpointStore {
         ps.setString(i++, checkpoint.persistence().name());
         setNullableString(ps, i++, checkpoint.workerName());
         ps.setLong(i++, checkpoint.updatedAtMillis());
-        setNullableString(ps, i, checkpoint.definitionVersion());
+        setNullableString(ps, i++, checkpoint.definitionVersion());
+        ExecutionContext ctx = checkpoint.executionContext();
+        setNullableString(ps, i++, ctx.tenantIdOrNull());
+        setNullableString(ps, i++, ctx.userIdOrNull());
+        setNullableString(ps, i++, ctx.sessionIdOrNull());
+        setNullableString(ps, i++, ctx.runIdOrNull());
+        setNullableString(ps, i++, ctx.traceIdOrNull());
+        setNullableString(ps, i, ctx.correlationIdOrNull());
     }
 
     private static void bindFlowId(PreparedStatement ps, FlowId flowId) throws SQLException {
@@ -172,7 +180,15 @@ public final class JdbcFlowCheckpointStore implements FlowCheckpointStore {
                 FlowPersistence.valueOf(rs.getString("persistence")),
                 rs.getString("worker_name"),
                 rs.getLong("updated_at_millis"),
-                rs.getString("definition_version"));
+                rs.getString("definition_version"),
+                ExecutionContext.builder()
+                        .tenantId(rs.getString("tenant_id"))
+                        .userId(rs.getString("user_id"))
+                        .sessionId(rs.getString("session_id"))
+                        .runId(rs.getString("run_id"))
+                        .traceId(rs.getString("trace_id"))
+                        .correlationId(rs.getString("correlation_id"))
+                        .build());
     }
 
     private static void setNullableString(PreparedStatement ps, int index, String value) throws SQLException {

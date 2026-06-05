@@ -312,6 +312,58 @@ to `DuplicatePolicy.REJECT`. You can also use `IGNORE` or `REPLACE`.
 worker.submit(flow, DuplicatePolicy.REPLACE);
 ```
 
+## Execution Context
+
+A `FlowId(flowType, flowKey)` answers "which domain instance is this flow for?"
+`ExecutionContext` answers "whose execution is this?"
+
+Use it when logs, dumps, checkpoints, admin views, or future audit/eval tooling
+need to connect one flow run to a tenant, user, session, run id, trace id, or
+correlation id.
+
+Existing code does not need to change. Flows default to
+`ExecutionContext.empty()`.
+
+```java
+import io.github.parkkevinsb.flower.core.context.ExecutionContext;
+
+ExecutionContext execution = ExecutionContext.builder()
+        .tenantId("office-a")
+        .userId("user-1")
+        .sessionId("session-1")
+        .runId("run-123")
+        .traceId("trace-abc")
+        .correlationId("request-789")
+        .build();
+
+Flow flow = Flow.builder("order", "ORD-1")
+        .executionContext(execution)
+        .step("accept", new AcceptOrderStep(orderService))
+        .step("payment", new WaitForPaymentStep())
+        .build();
+```
+
+Steps can read it when they need execution identity:
+
+```java
+String tenantId = ctx.executionContext().tenantId().orElse("default");
+String runId = ctx.executionContext().runId().orElse("unknown");
+```
+
+Keep this context small. It is an execution id card, not a business context.
+Do not put roles, permissions, approval state, domain objects, agent ids,
+action ids, or policy decisions in Flower core context. Agent/action state
+belongs in higher-level modules such as a future `flower-agent-runtime`.
+
+`ExecutionContext` is attached to the `Flow`, not to a `ThreadLocal`. That keeps
+the same identity visible from steps, listeners, dumps, checkpoints, and
+recovery even when events or callbacks happen on other threads.
+
+Important: `tenantId` does not change Flower's duplicate-flow identity.
+`Worker` still uses only `FlowId(flowType, flowKey)` to detect duplicates. If
+two tenants can have the same domain key, make the `flowKey` globally unique in
+the host application, for example `office-a:DOC-1`.
+
 ## Event Bus Choices
 
 `flower-core` includes `InMemoryEventBus` for simple setups and deterministic
@@ -436,6 +488,10 @@ tables. JDBC, Redis, JPA, or file-backed checkpoint stores should live in
 optional modules or in the host application, and schema initialization should
 be explicit and opt-in.
 
+Durable checkpoints keep the `ExecutionContext` with the saved flow position.
+After recovery, the same logical run keeps the same `runId`, `traceId`, tenant,
+and user identifiers. Flower does not regenerate a new run id during recovery.
+
 `flower-persistence-jdbc` provides a JDBC implementation:
 
 ```java
@@ -460,7 +516,28 @@ flower/persistence/jdbc/h2/schema.sql
 ```
 
 Apply that SQL yourself, or copy it into Flyway/Liquibase. The JDBC store does
-not create tables automatically.
+not create tables automatically. The standard checkpoint table includes
+nullable execution-context columns:
+
+```text
+tenant_id
+user_id
+session_id
+run_id
+trace_id
+correlation_id
+```
+
+If you already created the checkpoint table from an older schema, add those
+nullable columns before upgrading the JDBC store. Migration SQL is packaged
+next to each dialect schema:
+
+```text
+flower/persistence/jdbc/postgresql/execution-context-migration.sql
+flower/persistence/jdbc/mysql/execution-context-migration.sql
+flower/persistence/jdbc/oracle/execution-context-migration.sql
+flower/persistence/jdbc/h2/execution-context-migration.sql
+```
 
 Signals are still in-memory wake-up hints. Durable step decisions should be
 based on domain state that can be checked again after restart, not on signal

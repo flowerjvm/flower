@@ -1,5 +1,6 @@
 package io.github.parkkevinsb.flower.observability.dump;
 
+import io.github.parkkevinsb.flower.core.context.ExecutionContext;
 import io.github.parkkevinsb.flower.core.engine.EngineDump;
 import io.github.parkkevinsb.flower.core.flow.FlowSnapshot;
 
@@ -24,6 +25,14 @@ import io.github.parkkevinsb.flower.core.flow.FlowSnapshot;
  *           "state": "RUNNING",
  *           "currentStepId": "execute-sts",
  *           "currentStepNo": 10,
+ *           "executionContext": {
+ *             "tenantId": null,
+ *             "userId": null,
+ *             "sessionId": null,
+ *             "runId": null,
+ *             "traceId": null,
+ *             "correlationId": null
+ *           },
  *           "failureCause": null
  *         }
  *       ]
@@ -103,7 +112,29 @@ public final class EngineDumpJson {
         w.comma();
         w.numberField("currentStepNo", flow.currentStepNo());
         w.comma();
+        w.key("executionContext");
+        writeExecutionContext(w, flow.executionContext());
+        w.comma();
         w.field("failureCause", flow.failureCause() == null ? null : flow.failureCause().toString());
+        w.endObject();
+    }
+
+    private static void writeExecutionContext(Writer w, ExecutionContext ctx) {
+        if (ctx == null) {
+            ctx = ExecutionContext.empty();
+        }
+        w.beginObject();
+        w.field("tenantId", ctx.tenantIdOrNull());
+        w.comma();
+        w.field("userId", ctx.userIdOrNull());
+        w.comma();
+        w.field("sessionId", ctx.sessionIdOrNull());
+        w.comma();
+        w.field("runId", ctx.runIdOrNull());
+        w.comma();
+        w.field("traceId", ctx.traceIdOrNull());
+        w.comma();
+        w.field("correlationId", ctx.correlationIdOrNull());
         w.endObject();
     }
 

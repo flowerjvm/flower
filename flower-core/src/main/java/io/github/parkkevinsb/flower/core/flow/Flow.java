@@ -1,5 +1,6 @@
 package io.github.parkkevinsb.flower.core.flow;
 
+import io.github.parkkevinsb.flower.core.context.ExecutionContext;
 import io.github.parkkevinsb.flower.core.event.EventBus;
 import io.github.parkkevinsb.flower.core.persistence.FlowCheckpoint;
 import io.github.parkkevinsb.flower.core.step.GuardResult;
@@ -42,6 +43,7 @@ public final class Flow {
     private final Map<String, Integer> stepIndexById;
     private final FlowPersistence persistence;
     private final String definitionVersion;
+    private ExecutionContext executionContext;
 
     private FlowState state = FlowState.CREATED;
     private int currentIndex = -1;
@@ -56,11 +58,17 @@ public final class Flow {
     private EventBus eventBus;
     private LifecycleObserver observer = LifecycleObserver.NOOP;
 
-    Flow(FlowId flowId, List<StepDefinition> steps, FlowPersistence persistence, String definitionVersion) {
+    Flow(
+            FlowId flowId,
+            List<StepDefinition> steps,
+            FlowPersistence persistence,
+            String definitionVersion,
+            ExecutionContext executionContext) {
         this.flowId = flowId;
         this.steps = Collections.unmodifiableList(steps);
         this.persistence = persistence == null ? FlowPersistence.TRANSIENT : persistence;
         this.definitionVersion = definitionVersion;
+        this.executionContext = executionContext == null ? ExecutionContext.empty() : executionContext;
         Map<String, Integer> idx = new HashMap<>();
         for (int i = 0; i < steps.size(); i++) {
             idx.put(steps.get(i).stepId(), i);
@@ -96,6 +104,10 @@ public final class Flow {
         return definitionVersion;
     }
 
+    public ExecutionContext executionContext() {
+        return executionContext;
+    }
+
     public String currentStepId() {
         if (state.isTerminal()) {
             return null;
@@ -114,7 +126,7 @@ public final class Flow {
     }
 
     public FlowSnapshot snapshot() {
-        return new FlowSnapshot(flowId, state, currentStepId(), currentStepNo(), failureCause);
+        return new FlowSnapshot(flowId, state, currentStepId(), currentStepNo(), failureCause, executionContext);
     }
 
     public FlowCheckpoint checkpoint(String workerName, long updatedAtMillis) {
@@ -127,7 +139,8 @@ public final class Flow {
                 persistence,
                 workerName,
                 updatedAtMillis,
-                definitionVersion);
+                definitionVersion,
+                executionContext);
     }
 
     /**
@@ -169,6 +182,9 @@ public final class Flow {
         if (checkpoint.state() == FlowState.RUNNING && !stepIndexById.containsKey(checkpoint.currentStepId())) {
             throw new IllegalArgumentException(
                     "checkpoint stepId not found in flow: " + checkpoint.currentStepId());
+        }
+        if (!checkpoint.executionContext().isEmpty()) {
+            this.executionContext = checkpoint.executionContext();
         }
         this.recoveryCheckpoint = checkpoint;
         return this;
@@ -320,7 +336,7 @@ public final class Flow {
 
     private void ensureCurrentRuntime(StepDefinition def) {
         if (currentRuntime == null) {
-            currentRuntime = new StepRuntime(flowId, def.stepId(), clock, eventBus);
+            currentRuntime = new StepRuntime(flowId, executionContext, def.stepId(), clock, eventBus);
             currentEntered = false;
         }
     }
@@ -345,7 +361,7 @@ public final class Flow {
         currentIndex = index;
         currentEntered = false;
         recoveringCurrentStep = checkpoint.currentStepEntered();
-        currentRuntime = new StepRuntime(flowId, checkpoint.currentStepId(), clock, eventBus);
+        currentRuntime = new StepRuntime(flowId, executionContext, checkpoint.currentStepId(), clock, eventBus);
         currentRuntime.setStepNo(checkpoint.currentStepNo());
         retainedStepNo = 0;
     }

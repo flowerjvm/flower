@@ -1,5 +1,6 @@
 package io.github.parkkevinsb.flower.observability.dump;
 
+import io.github.parkkevinsb.flower.core.context.ExecutionContext;
 import io.github.parkkevinsb.flower.core.engine.EngineDump;
 import io.github.parkkevinsb.flower.core.engine.EngineState;
 import io.github.parkkevinsb.flower.core.flow.FlowId;
@@ -45,7 +46,34 @@ class EngineDumpJsonTest {
         assertThat(json).contains("\"flowKey\":\"WO-1\"");
         assertThat(json).contains("\"currentStepId\":\"execute-sts\"");
         assertThat(json).contains("\"currentStepNo\":10");
+        assertThat(json).contains("\"executionContext\"");
         assertThat(json).contains("\"failureCause\":null");
+    }
+
+    @Test
+    void rendersExecutionContext() {
+        FlowSnapshot snap = new FlowSnapshot(
+                FlowId.of("order", "O-1"),
+                FlowState.RUNNING,
+                "payment",
+                1,
+                null,
+                ExecutionContext.builder()
+                        .tenantId("tenant-a")
+                        .userId("user-1")
+                        .runId("run-1")
+                        .traceId("trace-1")
+                        .build());
+        EngineDump.WorkerDump worker = new EngineDump.WorkerDump(
+                "main", WorkerState.RUNNING, 100L, Collections.singletonList(snap));
+        EngineDump dump = new EngineDump(EngineState.RUNNING, Collections.singletonList(worker));
+
+        String json = EngineDumpJson.toJson(dump);
+
+        assertThat(json).contains("\"tenantId\":\"tenant-a\"");
+        assertThat(json).contains("\"userId\":\"user-1\"");
+        assertThat(json).contains("\"runId\":\"run-1\"");
+        assertThat(json).contains("\"traceId\":\"trace-1\"");
     }
 
     @Test

@@ -1,5 +1,7 @@
 package io.github.parkkevinsb.flower.core.flow;
 
+import io.github.parkkevinsb.flower.core.context.ExecutionContext;
+
 /**
  * Read-only view of a {@link Flow} captured at a point in time.
  *
@@ -14,6 +16,7 @@ public final class FlowSnapshot {
     private final String currentStepId;
     private final int currentStepNo;
     private final Throwable failureCause;
+    private final ExecutionContext executionContext;
 
     public FlowSnapshot(
             FlowId flowId,
@@ -21,6 +24,16 @@ public final class FlowSnapshot {
             String currentStepId,
             int currentStepNo,
             Throwable failureCause) {
+        this(flowId, state, currentStepId, currentStepNo, failureCause, ExecutionContext.empty());
+    }
+
+    public FlowSnapshot(
+            FlowId flowId,
+            FlowState state,
+            String currentStepId,
+            int currentStepNo,
+            Throwable failureCause,
+            ExecutionContext executionContext) {
         if (flowId == null) {
             throw new IllegalArgumentException("flowId must not be null");
         }
@@ -32,6 +45,7 @@ public final class FlowSnapshot {
         this.currentStepId = currentStepId;
         this.currentStepNo = currentStepNo;
         this.failureCause = failureCause;
+        this.executionContext = executionContext == null ? ExecutionContext.empty() : executionContext;
     }
 
     public FlowId flowId() {
@@ -61,10 +75,15 @@ public final class FlowSnapshot {
         return failureCause;
     }
 
+    public ExecutionContext executionContext() {
+        return executionContext;
+    }
+
     @Override
     public String toString() {
         return "FlowSnapshot{" + flowId + " " + state
                 + (currentStepId != null ? " @" + currentStepId + "/no=" + currentStepNo : "")
+                + (!executionContext.isEmpty() ? " " + executionContext : "")
                 + (failureCause != null ? " cause=" + failureCause : "")
                 + "}";
     }

@@ -1,5 +1,6 @@
 package io.github.parkkevinsb.flower.persistence.jdbc;
 
+import io.github.parkkevinsb.flower.core.context.ExecutionContext;
 import io.github.parkkevinsb.flower.core.flow.FlowId;
 import io.github.parkkevinsb.flower.core.flow.FlowPersistence;
 import io.github.parkkevinsb.flower.core.flow.FlowState;
@@ -42,7 +43,15 @@ class JdbcFlowCheckpointStoreTest {
                 FlowPersistence.DURABLE,
                 "worker-a",
                 1234L,
-                "v1"));
+                "v1",
+                ExecutionContext.builder()
+                        .tenantId("tenant-a")
+                        .userId("user-1")
+                        .sessionId("session-1")
+                        .runId("run-1")
+                        .traceId("trace-1")
+                        .correlationId("corr-1")
+                        .build()));
 
         assertThat(ds.sql).contains("ON CONFLICT");
         assertThat(ds.params).containsEntry(1, "order");
@@ -55,6 +64,12 @@ class JdbcFlowCheckpointStoreTest {
         assertThat(ds.params).containsEntry(8, "worker-a");
         assertThat(ds.params).containsEntry(9, 1234L);
         assertThat(ds.params).containsEntry(10, "v1");
+        assertThat(ds.params).containsEntry(11, "tenant-a");
+        assertThat(ds.params).containsEntry(12, "user-1");
+        assertThat(ds.params).containsEntry(13, "session-1");
+        assertThat(ds.params).containsEntry(14, "run-1");
+        assertThat(ds.params).containsEntry(15, "trace-1");
+        assertThat(ds.params).containsEntry(16, "corr-1");
         assertThat(ds.updateCount).isEqualTo(1);
     }
 
@@ -62,7 +77,8 @@ class JdbcFlowCheckpointStoreTest {
     void find_reads_checkpoint_row() {
         RecordingDataSource ds = new RecordingDataSource();
         ds.rows.add(row("order", "O-1", "RUNNING", "payment", 20,
-                true, "DURABLE", "worker-a", 4321L, "v2"));
+                true, "DURABLE", "worker-a", 4321L, "v2",
+                "tenant-a", "user-1", "session-1", "run-1", "trace-1", "corr-1"));
         JdbcFlowCheckpointStore store = JdbcFlowCheckpointStore.create(
                 ds, JdbcCheckpointDialects.postgresql());
 
@@ -81,13 +97,20 @@ class JdbcFlowCheckpointStoreTest {
         assertThat(found.get().workerName()).isEqualTo("worker-a");
         assertThat(found.get().updatedAtMillis()).isEqualTo(4321L);
         assertThat(found.get().definitionVersion()).isEqualTo("v2");
+        assertThat(found.get().executionContext().tenantId()).contains("tenant-a");
+        assertThat(found.get().executionContext().userId()).contains("user-1");
+        assertThat(found.get().executionContext().sessionId()).contains("session-1");
+        assertThat(found.get().executionContext().runId()).contains("run-1");
+        assertThat(found.get().executionContext().traceId()).contains("trace-1");
+        assertThat(found.get().executionContext().correlationId()).contains("corr-1");
     }
 
     @Test
     void findActiveByWorker_binds_worker_name() {
         RecordingDataSource ds = new RecordingDataSource();
         ds.rows.add(row("order", "O-1", "READY", null, 0,
-                false, "DURABLE", "worker-a", 1L, null));
+                false, "DURABLE", "worker-a", 1L, null,
+                null, null, null, null, null, null));
         JdbcFlowCheckpointStore store = JdbcFlowCheckpointStore.create(
                 ds, JdbcCheckpointDialects.postgresql());
 
@@ -129,7 +152,13 @@ class JdbcFlowCheckpointStoreTest {
             String persistence,
             String workerName,
             long updatedAtMillis,
-            String definitionVersion) {
+            String definitionVersion,
+            String tenantId,
+            String userId,
+            String sessionId,
+            String runId,
+            String traceId,
+            String correlationId) {
         Map<String, Object> row = new LinkedHashMap<>();
         row.put("flow_type", flowType);
         row.put("flow_key", flowKey);
@@ -141,6 +170,12 @@ class JdbcFlowCheckpointStoreTest {
         row.put("worker_name", workerName);
         row.put("updated_at_millis", updatedAtMillis);
         row.put("definition_version", definitionVersion);
+        row.put("tenant_id", tenantId);
+        row.put("user_id", userId);
+        row.put("session_id", sessionId);
+        row.put("run_id", runId);
+        row.put("trace_id", traceId);
+        row.put("correlation_id", correlationId);
         return row;
     }
 

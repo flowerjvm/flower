@@ -1,5 +1,6 @@
 package io.github.parkkevinsb.flower.core.persistence;
 
+import io.github.parkkevinsb.flower.core.context.ExecutionContext;
 import io.github.parkkevinsb.flower.core.flow.FlowId;
 import io.github.parkkevinsb.flower.core.flow.FlowPersistence;
 import io.github.parkkevinsb.flower.core.flow.FlowState;
@@ -22,6 +23,7 @@ public final class FlowCheckpoint {
     private final String workerName;
     private final long updatedAtMillis;
     private final String definitionVersion;
+    private final ExecutionContext executionContext;
 
     public FlowCheckpoint(
             FlowId flowId,
@@ -46,6 +48,21 @@ public final class FlowCheckpoint {
             String workerName,
             long updatedAtMillis,
             String definitionVersion) {
+        this(flowId, state, currentStepId, currentStepNo, currentStepEntered,
+                persistence, workerName, updatedAtMillis, definitionVersion, ExecutionContext.empty());
+    }
+
+    public FlowCheckpoint(
+            FlowId flowId,
+            FlowState state,
+            String currentStepId,
+            int currentStepNo,
+            boolean currentStepEntered,
+            FlowPersistence persistence,
+            String workerName,
+            long updatedAtMillis,
+            String definitionVersion,
+            ExecutionContext executionContext) {
         if (flowId == null) {
             throw new IllegalArgumentException("flowId must not be null");
         }
@@ -73,6 +90,7 @@ public final class FlowCheckpoint {
         this.workerName = workerName;
         this.updatedAtMillis = updatedAtMillis;
         this.definitionVersion = definitionVersion;
+        this.executionContext = executionContext == null ? ExecutionContext.empty() : executionContext;
     }
 
     public FlowId flowId() {
@@ -111,6 +129,10 @@ public final class FlowCheckpoint {
         return definitionVersion;
     }
 
+    public ExecutionContext executionContext() {
+        return executionContext;
+    }
+
     @Override
     public String toString() {
         return "FlowCheckpoint{" + flowId + " " + state
@@ -119,6 +141,7 @@ public final class FlowCheckpoint {
                 + ", persistence=" + persistence
                 + (workerName != null ? ", worker=" + workerName : "")
                 + (definitionVersion != null ? ", definitionVersion=" + definitionVersion : "")
+                + (!executionContext.isEmpty() ? ", " + executionContext : "")
                 + ", updatedAtMillis=" + updatedAtMillis
                 + "}";
     }

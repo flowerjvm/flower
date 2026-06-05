@@ -9,6 +9,12 @@ CREATE TABLE flower_flow_checkpoint (
     worker_name VARCHAR(100),
     updated_at_millis BIGINT NOT NULL,
     definition_version VARCHAR(100),
+    tenant_id VARCHAR(100),
+    user_id VARCHAR(100),
+    session_id VARCHAR(100),
+    run_id VARCHAR(100),
+    trace_id VARCHAR(100),
+    correlation_id VARCHAR(100),
     PRIMARY KEY (flow_type, flow_key)
 );
 
@@ -17,3 +23,9 @@ CREATE INDEX idx_flower_checkpoint_active
 
 CREATE INDEX idx_flower_checkpoint_worker_active
     ON flower_flow_checkpoint (worker_name, state, updated_at_millis);
+
+CREATE INDEX idx_flower_checkpoint_tenant_active
+    ON flower_flow_checkpoint (tenant_id, state, updated_at_millis);
+
+CREATE INDEX idx_flower_checkpoint_run
+    ON flower_flow_checkpoint (run_id);

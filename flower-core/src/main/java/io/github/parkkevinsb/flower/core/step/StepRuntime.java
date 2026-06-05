@@ -1,5 +1,6 @@
 package io.github.parkkevinsb.flower.core.step;
 
+import io.github.parkkevinsb.flower.core.context.ExecutionContext;
 import io.github.parkkevinsb.flower.core.event.EventBus;
 import io.github.parkkevinsb.flower.core.event.EventHandler;
 import io.github.parkkevinsb.flower.core.event.Subscription;
@@ -36,6 +37,7 @@ public final class StepRuntime implements StepContext {
     private static final Object NO_PAYLOAD = new Object();
 
     private final FlowId flowId;
+    private final ExecutionContext executionContext;
     private final String stepId;
     private final Clock clock;
     private final EventBus eventBus;
@@ -48,8 +50,20 @@ public final class StepRuntime implements StepContext {
     private long timeoutMillis = 0L;
 
     public StepRuntime(FlowId flowId, String stepId, Clock clock, EventBus eventBus) {
+        this(flowId, ExecutionContext.empty(), stepId, clock, eventBus);
+    }
+
+    public StepRuntime(
+            FlowId flowId,
+            ExecutionContext executionContext,
+            String stepId,
+            Clock clock,
+            EventBus eventBus) {
         if (flowId == null) {
             throw new IllegalArgumentException("flowId must not be null");
+        }
+        if (executionContext == null) {
+            throw new IllegalArgumentException("executionContext must not be null");
         }
         if (stepId == null || stepId.isEmpty()) {
             throw new IllegalArgumentException("stepId must not be null or empty");
@@ -59,6 +73,7 @@ public final class StepRuntime implements StepContext {
         }
         // eventBus may be null when a Flow is built without one - subscribe will fail loudly.
         this.flowId = flowId;
+        this.executionContext = executionContext;
         this.stepId = stepId;
         this.clock = clock;
         this.eventBus = eventBus;
@@ -71,6 +86,11 @@ public final class StepRuntime implements StepContext {
     @Override
     public FlowId flowId() {
         return flowId;
+    }
+
+    @Override
+    public ExecutionContext executionContext() {
+        return executionContext;
     }
 
     @Override

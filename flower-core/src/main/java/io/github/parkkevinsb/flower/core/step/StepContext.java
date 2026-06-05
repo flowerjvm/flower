@@ -1,5 +1,6 @@
 package io.github.parkkevinsb.flower.core.step;
 
+import io.github.parkkevinsb.flower.core.context.ExecutionContext;
 import io.github.parkkevinsb.flower.core.event.EventBus;
 import io.github.parkkevinsb.flower.core.event.EventHandler;
 import io.github.parkkevinsb.flower.core.event.Subscription;
@@ -31,6 +32,18 @@ import io.github.parkkevinsb.flower.core.time.Clock;
 public interface StepContext {
 
     FlowId flowId();
+
+    /**
+     * Stable identity attached to the whole Flow execution.
+     *
+     * <p>This is separate from the Step runtime controls in this interface.
+     * It answers "whose run is this?" for logging, tracing, checkpoints, and
+     * future admin/audit tooling. Existing custom test contexts do not need to
+     * implement it because the default is an empty null-object context.
+     */
+    default ExecutionContext executionContext() {
+        return ExecutionContext.empty();
+    }
 
     /**
      * Flow-level Step id this context belongs to.
