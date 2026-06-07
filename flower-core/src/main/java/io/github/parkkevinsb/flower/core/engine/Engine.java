@@ -147,7 +147,7 @@ public final class Engine {
     public EngineDump dump() {
         List<EngineDump.WorkerDump> wd = new ArrayList<>(workers.size());
         for (Worker w : workers.values()) {
-            List<FlowSnapshot> flows = w.snapshot();
+            List<FlowSnapshot> flows = w.snapshotWithStepDefinitions();
             wd.add(new EngineDump.WorkerDump(w.name(), w.state(), w.intervalMillis(), flows));
         }
         return new EngineDump(state, wd);

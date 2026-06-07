@@ -3,6 +3,7 @@ package io.github.parkkevinsb.flower.observability.dump;
 import io.github.parkkevinsb.flower.core.context.ExecutionContext;
 import io.github.parkkevinsb.flower.core.engine.EngineDump;
 import io.github.parkkevinsb.flower.core.flow.FlowSnapshot;
+import io.github.parkkevinsb.flower.core.flow.FlowStepSnapshot;
 
 /**
  * Renders an {@link EngineDump} as a single-line or pretty-printed JSON string.
@@ -24,7 +25,18 @@ import io.github.parkkevinsb.flower.core.flow.FlowSnapshot;
  *           "flowKey": "WO-1",
  *           "state": "RUNNING",
  *           "currentStepId": "execute-sts",
+ *           "currentStepIndex": 1,
  *           "currentStepNo": 10,
+ *           "steps": [
+ *             {
+ *               "index": 0,
+ *               "stepId": "prepare",
+ *               "stepType": "com.example.PrepareStep",
+ *               "guarded": false,
+ *               "recoverable": true,
+ *               "recoveryPolicy": "REENTER_IDEMPOTENT"
+ *             }
+ *           ],
  *           "executionContext": {
  *             "tenantId": null,
  *             "userId": null,
@@ -110,12 +122,44 @@ public final class EngineDumpJson {
         w.comma();
         w.field("currentStepId", flow.currentStepId());
         w.comma();
+        w.numberField("currentStepIndex", flow.currentStepIndex());
+        w.comma();
         w.numberField("currentStepNo", flow.currentStepNo());
+        w.comma();
+        w.key("steps");
+        writeSteps(w, flow);
         w.comma();
         w.key("executionContext");
         writeExecutionContext(w, flow.executionContext());
         w.comma();
         w.field("failureCause", flow.failureCause() == null ? null : flow.failureCause().toString());
+        w.endObject();
+    }
+
+    private static void writeSteps(Writer w, FlowSnapshot flow) {
+        w.beginArray();
+        boolean firstStep = true;
+        for (FlowStepSnapshot step : flow.steps()) {
+            if (!firstStep) w.comma();
+            firstStep = false;
+            writeStep(w, step);
+        }
+        w.endArray();
+    }
+
+    private static void writeStep(Writer w, FlowStepSnapshot step) {
+        w.beginObject();
+        w.numberField("index", step.index());
+        w.comma();
+        w.field("stepId", step.stepId());
+        w.comma();
+        w.field("stepType", step.stepType());
+        w.comma();
+        w.booleanField("guarded", step.guarded());
+        w.comma();
+        w.booleanField("recoverable", step.recoverable());
+        w.comma();
+        w.field("recoveryPolicy", step.recoveryPolicy());
         w.endObject();
     }
 
@@ -198,6 +242,11 @@ public final class EngineDumpJson {
         void numberField(String name, long value) {
             key(name);
             out.append(value);
+        }
+
+        void booleanField(String name, boolean value) {
+            key(name);
+            out.append(value ? "true" : "false");
         }
 
         private void newline() {

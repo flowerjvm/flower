@@ -11,6 +11,7 @@ import io.github.parkkevinsb.flower.core.step.StepResult;
 import io.github.parkkevinsb.flower.core.step.StepRuntime;
 import io.github.parkkevinsb.flower.core.time.Clock;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -118,6 +119,16 @@ public final class Flow {
         return steps.get(currentIndex).stepId();
     }
 
+    public int currentStepIndex() {
+        if (state.isTerminal()) {
+            return -1;
+        }
+        if (currentIndex < 0 || currentIndex >= steps.size()) {
+            return -1;
+        }
+        return currentIndex;
+    }
+
     public int currentStepNo() {
         if (currentRuntime != null) {
             return currentRuntime.stepNo();
@@ -126,7 +137,25 @@ public final class Flow {
     }
 
     public FlowSnapshot snapshot() {
-        return new FlowSnapshot(flowId, state, currentStepId(), currentStepNo(), failureCause, executionContext);
+        return snapshot(false);
+    }
+
+    public FlowSnapshot snapshotWithStepDefinitions() {
+        return snapshot(true);
+    }
+
+    private FlowSnapshot snapshot(boolean includeStepDefinitions) {
+        return new FlowSnapshot(
+                flowId,
+                state,
+                currentStepId(),
+                currentStepIndex(),
+                currentStepNo(),
+                includeStepDefinitions
+                        ? stepSnapshots()
+                        : Collections.<FlowStepSnapshot>emptyList(),
+                failureCause,
+                executionContext);
     }
 
     public FlowCheckpoint checkpoint(String workerName, long updatedAtMillis) {
@@ -141,6 +170,14 @@ public final class Flow {
                 updatedAtMillis,
                 definitionVersion,
                 executionContext);
+    }
+
+    private List<FlowStepSnapshot> stepSnapshots() {
+        List<FlowStepSnapshot> out = new ArrayList<>(steps.size());
+        for (int i = 0; i < steps.size(); i++) {
+            out.add(FlowStepSnapshot.from(i, steps.get(i)));
+        }
+        return out;
     }
 
     /**

@@ -98,6 +98,21 @@ public final class Worker {
         }
     }
 
+    /**
+     * Snapshot of currently-active flows including static Step definition
+     * metadata for admin/dump views. Listener callbacks use the lightweight
+     * variant so Worker tick events do not repeatedly materialize Step lists.
+     */
+    public List<FlowSnapshot> snapshotWithStepDefinitions() {
+        synchronized (stateLock) {
+            List<FlowSnapshot> out = new ArrayList<>(activeFlows.size());
+            for (Flow f : activeFlows.values()) {
+                out.add(f.snapshotWithStepDefinitions());
+            }
+            return out;
+        }
+    }
+
     // ------------------------------------------------------------------
     // Engine-facing setup
     // ------------------------------------------------------------------

@@ -6,6 +6,7 @@ import io.github.parkkevinsb.flower.core.engine.EngineState;
 import io.github.parkkevinsb.flower.core.flow.FlowId;
 import io.github.parkkevinsb.flower.core.flow.FlowSnapshot;
 import io.github.parkkevinsb.flower.core.flow.FlowState;
+import io.github.parkkevinsb.flower.core.flow.FlowStepSnapshot;
 import io.github.parkkevinsb.flower.core.worker.WorkerState;
 import org.junit.jupiter.api.Test;
 
@@ -48,6 +49,37 @@ class EngineDumpJsonTest {
         assertThat(json).contains("\"currentStepNo\":10");
         assertThat(json).contains("\"executionContext\"");
         assertThat(json).contains("\"failureCause\":null");
+    }
+
+    @Test
+    void rendersFlowStepDefinitionsForAdminViews() {
+        FlowSnapshot snap = new FlowSnapshot(
+                FlowId.of("document-review", "DOC-1"),
+                FlowState.RUNNING,
+                "await-response",
+                1,
+                7,
+                Arrays.asList(
+                        new FlowStepSnapshot(0, "prepare", "com.example.PrepareStep", false, true,
+                                "REENTER_IDEMPOTENT"),
+                        new FlowStepSnapshot(1, "await-response", "com.example.AwaitResponseStep", true, true,
+                                "RESUME_ONLY")),
+                null,
+                ExecutionContext.empty());
+        EngineDump.WorkerDump worker = new EngineDump.WorkerDump(
+                "main", WorkerState.RUNNING, 100L, Collections.singletonList(snap));
+        EngineDump dump = new EngineDump(EngineState.RUNNING, Collections.singletonList(worker));
+
+        String json = EngineDumpJson.toJson(dump);
+
+        assertThat(json).contains("\"currentStepIndex\":1");
+        assertThat(json).contains("\"steps\":[");
+        assertThat(json).contains("\"index\":0");
+        assertThat(json).contains("\"stepId\":\"prepare\"");
+        assertThat(json).contains("\"stepType\":\"com.example.PrepareStep\"");
+        assertThat(json).contains("\"guarded\":true");
+        assertThat(json).contains("\"recoverable\":true");
+        assertThat(json).contains("\"recoveryPolicy\":\"RESUME_ONLY\"");
     }
 
     @Test

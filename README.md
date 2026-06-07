@@ -431,7 +431,12 @@ currently only supports `never`. If you need a custom backend, provide a
 Attach `FlowerListener` implementations to observe flow submission,
 step entry/exit, flow completion, cancellation, failure, listener errors, and
 worker errors. `Engine.dump()` gives a snapshot of the current engine and worker
-state, including active flows and their current steps.
+state, including active flows, current step id, current step index, current
+stepNo, and the declared step list for admin/console views.
+
+Lifecycle listener snapshots stay lightweight. The declared step list is only
+materialized for dump/admin views so observability does not add work to every
+listener callback.
 
 ## Checkpoint / Resume
 
