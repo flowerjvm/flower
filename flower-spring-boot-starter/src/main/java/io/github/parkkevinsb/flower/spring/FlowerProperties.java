@@ -53,6 +53,12 @@ public class FlowerProperties {
     private Persistence persistence = new Persistence();
 
     /**
+     * Optional admin endpoints. Disabled by default because dump output can
+     * expose flow keys, execution context, and operational state.
+     */
+    private Admin admin = new Admin();
+
+    /**
      * Workers to register. If empty, a single Worker named {@code "main"} with
      * a 100 ms tick interval is created.
      */
@@ -88,6 +94,14 @@ public class FlowerProperties {
 
     public void setPersistence(Persistence persistence) {
         this.persistence = persistence != null ? persistence : new Persistence();
+    }
+
+    public Admin getAdmin() {
+        return admin;
+    }
+
+    public void setAdmin(Admin admin) {
+        this.admin = admin != null ? admin : new Admin();
     }
 
     public List<Worker> getWorkers() {
@@ -178,6 +192,146 @@ public class FlowerProperties {
             this.initializeSchema = initializeSchema != null
                     ? initializeSchema
                     : SchemaInitialization.NEVER;
+        }
+    }
+
+    /**
+     * Admin/ops endpoint configuration.
+     */
+    public static class Admin {
+
+        /** Engine dump endpoint configuration. */
+        private Dump dump = new Dump();
+
+        /** Built-in read-only console page configuration. */
+        private Console console = new Console();
+
+        public Dump getDump() {
+            return dump;
+        }
+
+        public void setDump(Dump dump) {
+            this.dump = dump != null ? dump : new Dump();
+        }
+
+        public Console getConsole() {
+            return console;
+        }
+
+        public void setConsole(Console console) {
+            this.console = console != null ? console : new Console();
+        }
+    }
+
+    /**
+     * Read-only Engine dump endpoint configuration.
+     */
+    public static class Dump {
+
+        /**
+         * Enables the dump endpoint when this application is a Spring MVC web
+         * application. Default false.
+         */
+        private boolean enabled = false;
+
+        /**
+         * Request path for the dump endpoint.
+         */
+        private String path = "/internal/flower/dump";
+
+        /**
+         * Pretty-print JSON by default. A request may override this with the
+         * {@code pretty} query parameter.
+         */
+        private boolean pretty = false;
+
+        public boolean isEnabled() {
+            return enabled;
+        }
+
+        public void setEnabled(boolean enabled) {
+            this.enabled = enabled;
+        }
+
+        public String getPath() {
+            return path;
+        }
+
+        public void setPath(String path) {
+            this.path = path != null && !path.isEmpty()
+                    ? path
+                    : "/internal/flower/dump";
+        }
+
+        public boolean isPretty() {
+            return pretty;
+        }
+
+        public void setPretty(boolean pretty) {
+            this.pretty = pretty;
+        }
+    }
+
+    /**
+     * Built-in read-only Flower console page configuration.
+     */
+    public static class Console {
+
+        /**
+         * Enables the console page when this application is a Spring MVC web
+         * application. Default false.
+         */
+        private boolean enabled = false;
+
+        /**
+         * Request path for the HTML console page.
+         */
+        private String path = "/internal/flower/console";
+
+        /**
+         * Same-origin JSON endpoint used by the console page.
+         */
+        private String apiPath = "/internal/flower/console/dump";
+
+        /**
+         * Initial polling interval shown in the console UI.
+         */
+        private long pollIntervalMs = 3000L;
+
+        public boolean isEnabled() {
+            return enabled;
+        }
+
+        public void setEnabled(boolean enabled) {
+            this.enabled = enabled;
+        }
+
+        public String getPath() {
+            return path;
+        }
+
+        public void setPath(String path) {
+            this.path = path != null && !path.isEmpty()
+                    ? path
+                    : "/internal/flower/console";
+        }
+
+        public String getApiPath() {
+            return apiPath;
+        }
+
+        public void setApiPath(String apiPath) {
+            this.apiPath = apiPath != null && !apiPath.isEmpty()
+                    ? apiPath
+                    : "/internal/flower/console/dump";
+        }
+
+        public long getPollIntervalMs() {
+            return pollIntervalMs;
+        }
+
+        public void setPollIntervalMs(long pollIntervalMs) {
+            this.pollIntervalMs = pollIntervalMs > 0L ? pollIntervalMs : 3000L;
         }
     }
 

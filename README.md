@@ -59,6 +59,7 @@ Engine
   and optional checkpoint store wiring.
 - `flower-observability`: listeners and helpers for logging, dumps, metrics,
   tracing, and awaiting flow completion.
+- `flower-testkit`: optional test helpers for deterministic Flow tests.
 
 ## Build
 
@@ -142,6 +143,70 @@ worker.submit(flow);
 worker.tickOnce();
 worker.tickOnce();
 ```
+
+## Testing With Flower Testkit
+
+`flower-testkit` keeps testing helpers outside `flower-core`. It does not
+change the runtime model; it only bundles the setup most tests repeat:
+
+```text
+Engine + Worker + ManualClock + InMemoryEventBus
++ RecordingFlowerListener + FakeCheckpointStore
+```
+
+Add it as a test dependency:
+
+```xml
+<dependency>
+    <groupId>io.github.parkkevinsb.flower</groupId>
+    <artifactId>flower-testkit</artifactId>
+    <version>0.1.0-SNAPSHOT</version>
+    <scope>test</scope>
+</dependency>
+```
+
+Example:
+
+```java
+FlowTestHarness harness = FlowTestHarness.create();
+
+Flow flow = Flow.builder("order", "ORD-1")
+        .executionContext(TestExecutionContexts.tenantRun("office-a", "run-1"))
+        .step("accept", new AcceptOrderStep(orderService))
+        .step("payment", new WaitForPaymentStep())
+        .build();
+
+harness.submit(flow)
+        .tick()
+        .assertFlow("order", "ORD-1")
+        .isRunning()
+        .currentStepIs("payment")
+        .tenantIdIs("office-a")
+        .runIdIs("run-1");
+
+harness.publish(new PaymentApproved("ORD-1"))
+        .tick()
+        .assertFlow("order", "ORD-1")
+        .isFinished();
+```
+
+For durable Flow recovery tests, reuse the same fake checkpoint store through
+`restart()` and recover with a `FlowFactoryRegistry`:
+
+```java
+FlowTestHarness restarted = harness.restart();
+
+int recovered = restarted.recoverActiveCount(registry);
+
+restarted.tick()
+        .assertFlow("order", "ORD-1")
+        .currentStepIs("payment")
+        .runIdIs("run-1");
+```
+
+The first version intentionally avoids a large assertion DSL or a JUnit-only
+API. Failed `FlowAssertions` checks throw `AssertionError`, so the helpers work
+with JUnit, AssertJ, or plain test code.
 
 ## Step Lifecycle
 
@@ -425,6 +490,61 @@ Supported dialects are `postgresql`, `mysql`, `oracle`, and `h2`. The starter
 does not create tables automatically; `initialize-schema` is reserved and
 currently only supports `never`. If you need a custom backend, provide a
 `FlowCheckpointStore` bean and the auto-configured `Engine` will use it.
+
+### Spring Boot Dump Endpoint
+
+`flower-spring-boot-starter` can expose a read-only Engine dump endpoint when
+the application is already a Spring MVC web application. It is disabled by
+default because dump output can include flow keys, execution context, and
+operational state.
+
+```yaml
+flower:
+  admin:
+    dump:
+      enabled: true
+      path: /internal/flower/dump
+      pretty: false
+```
+
+With the default path, the endpoint is:
+
+```text
+GET /internal/flower/dump
+GET /internal/flower/dump?pretty=true
+```
+
+The endpoint uses the host application's web server. Flower does not start a
+separate console server. In production, keep this endpoint behind application
+authentication, a private network, VPN, or an admin gateway.
+
+### Spring Boot Console
+
+For a small built-in web view, enable the console endpoint:
+
+```yaml
+flower:
+  admin:
+    console:
+      enabled: true
+      path: /internal/flower/console
+      api-path: /internal/flower/console/dump
+      poll-interval-ms: 3000
+```
+
+Then open:
+
+```text
+GET /internal/flower/console
+```
+
+The console is served by the same Spring Boot application and polls the
+same-origin `api-path`. It shows Engine, Worker, Flow, current Step, stepNo,
+declared Step order, and execution context. The UI has Start, Stop, Refresh,
+and polling interval controls.
+
+This is an internal/admin surface, not a public endpoint. Do not expose it
+directly to the internet.
 
 ## Observability
 

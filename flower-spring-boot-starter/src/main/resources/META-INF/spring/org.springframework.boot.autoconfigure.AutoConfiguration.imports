@@ -1,2 +1,4 @@
 io.github.parkkevinsb.flower.spring.FlowerJdbcPersistenceAutoConfiguration
 io.github.parkkevinsb.flower.spring.FlowerAutoConfiguration
+io.github.parkkevinsb.flower.spring.FlowerDumpEndpointAutoConfiguration
+io.github.parkkevinsb.flower.spring.FlowerConsoleEndpointAutoConfiguration

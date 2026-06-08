@@ -53,6 +53,7 @@
         <module>flower-bloom-adapter</module>
         <module>flower-spring-boot-starter</module>
         <module>flower-observability</module>
+        <module>flower-testkit</module>
     </modules>
 
     <distributionManagement>
@@ -112,6 +113,11 @@
             <dependency>
                 <groupId>io.github.parkkevinsb.flower</groupId>
                 <artifactId>flower-persistence-jdbc</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.github.parkkevinsb.flower</groupId>
+                <artifactId>flower-testkit</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
