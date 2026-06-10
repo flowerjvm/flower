@@ -11,6 +11,7 @@ import java.util.Objects;
  */
 public final class AnalysisFact {
 
+    public static final String BLOCKING_CALL = "blocking-call";
     public static final String PROVIDER_CALL = "provider-call";
     public static final String FLOW_DRIVE_CALL = "flow-drive-call";
     public static final String MISSING_TIMEOUT = "missing-timeout";

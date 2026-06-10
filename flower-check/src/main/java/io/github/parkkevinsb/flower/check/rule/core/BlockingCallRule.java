@@ -1,6 +1,7 @@
 package io.github.parkkevinsb.flower.check.rule.core;
 
 import io.github.parkkevinsb.flower.check.finding.Finding;
+import io.github.parkkevinsb.flower.check.model.AnalysisFact;
 import io.github.parkkevinsb.flower.check.parse.SourceUnit;
 import io.github.parkkevinsb.flower.check.rule.AbstractRule;
 import io.github.parkkevinsb.flower.check.rule.RuleContext;
@@ -14,21 +15,9 @@ import java.util.regex.Pattern;
 /**
  * FLOWER-CHECK-001 - No blocking on the Worker thread.
  *
- * <p>This is the reference rule. It shows the expected shape: extend
- * {@link AbstractRule}, scan the unit, and return findings carrying what/why/fix.
- *
- * <p><strong>Text fallback detection is intentionally conservative:</strong> it
- * only flags {@code Thread.sleep(} inside lifecycle methods of classes that
- * visibly extend {@code Step}, {@code DurableStep}, or a configured Step base
- * class. The production version must (per {@code docs/02-rule-catalog.md}):
- * <ul>
- *   <li>use the AST, not text;</li>
- *   <li>also cover {@code wait/join}, {@code Future.get()} without a timeout, and
- *       busy-wait poll loops;</li>
- *   <li>include private helpers reached only from lifecycle methods.</li>
- * </ul>
- * Until then this rule stays conservative to honor "prefer a missed violation
- * over a false positive".
+ * <p>Primary detection is AST-backed via {@link AnalysisFact#BLOCKING_CALL}.
+ * The text scanner remains only as a conservative fallback for files that could
+ * not be parsed.
  */
 public final class BlockingCallRule extends AbstractRule {
 
@@ -44,6 +33,24 @@ public final class BlockingCallRule extends AbstractRule {
 
     @Override
     public List<Finding> apply(SourceUnit unit, RuleContext ctx) {
+        if (unit.parsed()) {
+            return astFindings(unit, ctx);
+        }
+        return textFallbackFindings(unit, ctx);
+    }
+
+    private List<Finding> astFindings(SourceUnit unit, RuleContext ctx) {
+        List<Finding> findings = new ArrayList<>();
+        for (AnalysisFact fact : ctx.projectModel().facts(AnalysisFact.BLOCKING_CALL)) {
+            if (!unit.file().relativePath().equals(fact.file())) {
+                continue;
+            }
+            findings.add(blockingFinding(ctx, fact.file(), fact.line(), fact.column(), fact.subject()));
+        }
+        return findings;
+    }
+
+    private List<Finding> textFallbackFindings(SourceUnit unit, RuleContext ctx) {
         List<Finding> findings = new ArrayList<>();
         List<String> lines = unit.file().lines();
         ScanState state = new ScanState(ctx);
@@ -54,21 +61,27 @@ public final class BlockingCallRule extends AbstractRule {
             boolean inLifecycleMethod = state.beforeLine(code);
             int column = code.indexOf(NEEDLE);
             if (inLifecycleMethod && column >= 0) {
-                findings.add(finding(ctx, unit.file().relativePath(), i + 1)
-                        .column(column + 1)
-                        .what("Thread.sleep(...) blocks the calling thread; inside a Step "
-                                + "lifecycle method it freezes the Worker tick.")
-                        .why("One Worker ticks every Flow it owns on a single thread. A "
-                                + "blocking call stalls all other Flows on that Worker until "
-                                + "it returns. Flower relies on quick, repeatable ticks.")
-                        .fix("Start the wait in onEnter (ctx.startTimeout / ctx.subscribe) and "
-                                + "return StepResult.stay() until a signal or ctx.timedOut() "
-                                + "resolves it.")
-                        .build());
+                findings.add(blockingFinding(
+                        ctx,
+                        unit.file().relativePath(),
+                        i + 1,
+                        column + 1,
+                        "Thread.sleep(...)"));
             }
             state.afterLine(code);
         }
         return findings;
+    }
+
+    private Finding blockingFinding(RuleContext ctx, String file, int line, int column, String call) {
+        return finding(ctx, file, line)
+                .column(column)
+                .what(call + " blocks the calling thread; inside a Step lifecycle method it freezes the Worker tick.")
+                .why("One Worker ticks every Flow it owns on a single thread. A blocking call stalls all "
+                        + "other Flows on that Worker until it returns. Flower relies on quick, repeatable ticks.")
+                .fix("Start the wait in onEnter (ctx.startTimeout / ctx.subscribe) and return "
+                        + "StepResult.stay() until a signal or ctx.timedOut() resolves it.")
+                .build();
     }
 
     private static String stripCommentsAndLiterals(String line) {

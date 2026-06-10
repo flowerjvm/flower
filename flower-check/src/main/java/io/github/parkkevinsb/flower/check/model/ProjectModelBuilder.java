@@ -16,6 +16,8 @@ import com.github.javaparser.ast.expr.NameExpr;
 import com.github.javaparser.ast.expr.ObjectCreationExpr;
 import com.github.javaparser.ast.expr.SimpleName;
 import com.github.javaparser.ast.expr.StringLiteralExpr;
+import com.github.javaparser.ast.stmt.ForStmt;
+import com.github.javaparser.ast.stmt.WhileStmt;
 import com.github.javaparser.ast.type.ClassOrInterfaceType;
 import io.github.parkkevinsb.flower.check.config.FlowerCheckConfig;
 import io.github.parkkevinsb.flower.check.parse.SourceUnit;
@@ -52,6 +54,8 @@ public final class ProjectModelBuilder {
     private static final Set<String> AGENT_WRITE_METHODS = new HashSet<>(Arrays.asList(
             "save", "update", "delete", "insert", "execute", "dispatch", "post", "put",
             "send", "create", "write", "mutate"));
+    private static final Set<String> BLOCKING_METHODS = new HashSet<>(Arrays.asList(
+            "sleep", "wait", "join"));
     private static final List<String> DEFAULT_PROVIDER_NAMES = Arrays.asList(
             "OpenAI", "Anthropic", "ChatClient", "LlmClient", "LLMClient", "AiClient", "AIClient");
 
@@ -207,6 +211,7 @@ public final class ProjectModelBuilder {
             if (info == null || !info.step) {
                 continue;
             }
+            analyzeBlockingCalls(info, facts);
             analyzeStepWait(info, facts);
             analyzeRuntimeOwnership(info, facts);
             for (MethodDeclaration method : declaration.getMethods()) {
@@ -262,6 +267,154 @@ public final class ProjectModelBuilder {
                     info.simpleName,
                     "waits for a signal/event and returns StepResult.stay() without a timeout"));
         }
+    }
+
+    private void analyzeBlockingCalls(ClassInfo info, List<AnalysisFact> facts) {
+        Set<MethodDeclaration> inScope = lifecycleAndPrivateHelpers(info);
+        Set<String> emitted = new LinkedHashSet<>();
+        for (MethodDeclaration method : inScope) {
+            for (MethodCallExpr call : method.findAll(MethodCallExpr.class)) {
+                String blocking = blockingCallName(call);
+                if (blocking == null) {
+                    continue;
+                }
+                String key = info.file + ":" + line(call) + ":" + column(call) + ":" + blocking;
+                if (!emitted.add(key)) {
+                    continue;
+                }
+                facts.add(new AnalysisFact(
+                        AnalysisFact.BLOCKING_CALL,
+                        info.file,
+                        line(call),
+                        column(call),
+                        blocking,
+                        "blocking call in " + info.simpleName + "." + method.getNameAsString()));
+            }
+            for (WhileStmt loop : method.findAll(WhileStmt.class)) {
+                if (looksLikeBusyWait(loop)) {
+                    facts.add(new AnalysisFact(
+                            AnalysisFact.BLOCKING_CALL,
+                            info.file,
+                            line(loop),
+                            column(loop),
+                            "busy wait loop",
+                            "busy-wait loop in " + info.simpleName + "." + method.getNameAsString()));
+                }
+            }
+            for (ForStmt loop : method.findAll(ForStmt.class)) {
+                if (looksLikeBusyWait(loop)) {
+                    facts.add(new AnalysisFact(
+                            AnalysisFact.BLOCKING_CALL,
+                            info.file,
+                            line(loop),
+                            column(loop),
+                            "busy wait loop",
+                            "busy-wait loop in " + info.simpleName + "." + method.getNameAsString()));
+                }
+            }
+        }
+    }
+
+    private Set<MethodDeclaration> lifecycleAndPrivateHelpers(ClassInfo info) {
+        Map<String, MethodDeclaration> privateMethods = new HashMap<>();
+        Set<MethodDeclaration> inScope = new LinkedHashSet<>();
+        for (MethodDeclaration method : info.declaration.getMethods()) {
+            if (method.isPrivate()) {
+                privateMethods.put(method.getNameAsString(), method);
+            }
+            if (LIFECYCLE_METHODS.contains(method.getNameAsString())) {
+                inScope.add(method);
+            }
+        }
+        List<MethodDeclaration> queue = new ArrayList<>(inScope);
+        for (int i = 0; i < queue.size(); i++) {
+            MethodDeclaration current = queue.get(i);
+            for (MethodCallExpr call : current.findAll(MethodCallExpr.class)) {
+                MethodDeclaration helper = privateMethods.get(call.getNameAsString());
+                if (helper != null && isLocalHelperCall(call) && inScope.add(helper)) {
+                    queue.add(helper);
+                }
+            }
+        }
+        return inScope;
+    }
+
+    private boolean isLocalHelperCall(MethodCallExpr call) {
+        if (!call.getScope().isPresent()) {
+            return true;
+        }
+        return "this".equals(call.getScope().get().toString());
+    }
+
+    private String blockingCallName(MethodCallExpr call) {
+        String name = call.getNameAsString();
+        if (BLOCKING_METHODS.contains(name)) {
+            if ("sleep".equals(name) && !isScopeNamed(call, "Thread")) {
+                return null;
+            }
+            return callLabel(call);
+        }
+        if ("get".equals(name) && call.getArguments().isEmpty() && looksLikeFutureGet(call)) {
+            return callLabel(call);
+        }
+        if (looksLikeBlockingIo(call)) {
+            return callLabel(call);
+        }
+        return null;
+    }
+
+    private boolean looksLikeFutureGet(MethodCallExpr call) {
+        if (!call.getScope().isPresent()) {
+            return false;
+        }
+        String scope = call.getScope().get().toString().toLowerCase(Locale.ROOT);
+        return scope.contains("future") || scope.contains("completionstage") || scope.contains("promise");
+    }
+
+    private boolean looksLikeBlockingIo(MethodCallExpr call) {
+        String name = call.getNameAsString();
+        if (!("read".equals(name) || "executeQuery".equals(name) || "executeUpdate".equals(name)
+                || "execute".equals(name) || "send".equals(name))) {
+            return false;
+        }
+        if (!call.getScope().isPresent()) {
+            return false;
+        }
+        String scope = call.getScope().get().toString().toLowerCase(Locale.ROOT);
+        return scope.contains("socket")
+                || scope.contains("stream")
+                || scope.contains("reader")
+                || scope.contains("jdbc")
+                || scope.contains("statement")
+                || scope.contains("connection")
+                || scope.contains("http")
+                || scope.contains("client");
+    }
+
+    private boolean looksLikeBusyWait(WhileStmt loop) {
+        String text = loop.toString().toLowerCase(Locale.ROOT);
+        return (text.contains("while (true)") || text.contains("while(true)")
+                || text.contains("isdone()") || text.contains("iscomplete()")
+                || text.contains("isready()"))
+                && !text.contains("timedout()")
+                && !text.contains("starttimeout(")
+                && !text.contains("thread.sleep")
+                && !text.contains("return ");
+    }
+
+    private boolean looksLikeBusyWait(ForStmt loop) {
+        String text = loop.toString().toLowerCase(Locale.ROOT);
+        return (text.contains("for (;;)") || text.contains("for(;;)"))
+                && !text.contains("timedout()")
+                && !text.contains("thread.sleep")
+                && !text.contains("return ");
+    }
+
+    private String callLabel(MethodCallExpr call) {
+        if (call.getScope().isPresent()) {
+            return call.getScope().get().toString() + "." + call.getNameAsString() + "(...)";
+        }
+        return call.getNameAsString() + "(...)";
     }
 
     private boolean hasFiniteWaitHint(String text) {

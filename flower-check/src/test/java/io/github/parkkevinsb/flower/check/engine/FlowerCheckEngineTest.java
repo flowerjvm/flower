@@ -47,6 +47,93 @@ class FlowerCheckEngineTest {
     }
 
     @Test
+    void reportsBlockingCallInsidePrivateHelperReachedFromLifecycle(@TempDir Path root) throws IOException {
+        writeJava(root, "HelperWaitStep.java",
+                "package demo;",
+                "class HelperWaitStep extends Step {",
+                "    protected StepResult onTick(StepContext ctx) throws Exception {",
+                "        waitForExternalWork();",
+                "        return StepResult.done();",
+                "    }",
+                "    private void waitForExternalWork() throws Exception {",
+                "        Thread.sleep(1000);",
+                "    }",
+                "}");
+
+        CheckResult result = FlowerCheckEngine.create(FlowerCheckConfig.defaults())
+                .run(Collections.singletonList(root.toString()));
+
+        assertThat(result.findings()).hasSize(1);
+        assertThat(result.findings().get(0).ruleId()).isEqualTo("FLOWER-CHECK-001");
+        assertThat(result.findings().get(0).line()).isEqualTo(8);
+    }
+
+    @Test
+    void reportsWaitJoinFutureGetAndBusyWaitInsideLifecycle(@TempDir Path root) throws IOException {
+        writeJava(root, "BlockingShapesStep.java",
+                "package demo;",
+                "class BlockingShapesStep extends Step {",
+                "    private Object lock;",
+                "    private Thread worker;",
+                "    private java.util.concurrent.Future<?> future;",
+                "    protected StepResult onTick(StepContext ctx) throws Exception {",
+                "        lock.wait();",
+                "        worker.join();",
+                "        future.get();",
+                "        while (!future.isDone()) { }",
+                "        return StepResult.done();",
+                "    }",
+                "}");
+
+        CheckResult result = FlowerCheckEngine.create(FlowerCheckConfig.defaults())
+                .run(Collections.singletonList(root.toString()));
+
+        assertThat(result.findings())
+                .extracting(Finding::ruleId)
+                .containsOnly("FLOWER-CHECK-001");
+        assertThat(result.findings()).hasSize(4);
+    }
+
+    @Test
+    void allowsFutureGetWithTimeout(@TempDir Path root) throws IOException {
+        writeJava(root, "TimedFutureStep.java",
+                "package demo;",
+                "class TimedFutureStep extends Step {",
+                "    private java.util.concurrent.Future<?> future;",
+                "    protected StepResult onTick(StepContext ctx) throws Exception {",
+                "        future.get(1, java.util.concurrent.TimeUnit.SECONDS);",
+                "        return StepResult.done();",
+                "    }",
+                "}");
+
+        CheckResult result = FlowerCheckEngine.create(FlowerCheckConfig.defaults())
+                .run(Collections.singletonList(root.toString()));
+
+        assertThat(result.findings()).isEmpty();
+        assertThat(result.failed()).isFalse();
+    }
+
+    @Test
+    void ignoresBlockingCallInConstructorOutsideStepLifecycle(@TempDir Path root) throws IOException {
+        writeJava(root, "ConstructorWaitStep.java",
+                "package demo;",
+                "class ConstructorWaitStep extends Step {",
+                "    ConstructorWaitStep() throws Exception {",
+                "        Thread.sleep(1000);",
+                "    }",
+                "    protected StepResult onTick(StepContext ctx) {",
+                "        return StepResult.done();",
+                "    }",
+                "}");
+
+        CheckResult result = FlowerCheckEngine.create(FlowerCheckConfig.defaults())
+                .run(Collections.singletonList(root.toString()));
+
+        assertThat(result.findings()).isEmpty();
+        assertThat(result.failed()).isFalse();
+    }
+
+    @Test
     void ignoresBlockingCallOutsideStepLifecycle(@TempDir Path root) throws IOException {
         writeJava(root, "SampleMain.java",
                 "package demo;",
