@@ -5,9 +5,8 @@ import io.github.parkkevinsb.flower.check.finding.Finding;
 import java.util.List;
 
 /**
- * Renders findings to an output sink. An extension point: the skeleton ships
- * {@link PlainTextReporter}; a SARIF reporter (for CI annotations) plugs in
- * behind the same interface later.
+ * Renders findings to an output sink. The CLI currently ships plain text and
+ * SARIF implementations behind the same interface.
  */
 public interface Reporter {
 

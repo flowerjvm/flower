@@ -5,7 +5,9 @@ import io.github.parkkevinsb.flower.check.config.FlowerCheckConfig;
 import io.github.parkkevinsb.flower.check.engine.CheckResult;
 import io.github.parkkevinsb.flower.check.engine.FlowerCheckEngine;
 import io.github.parkkevinsb.flower.check.report.PlainTextReporter;
+import io.github.parkkevinsb.flower.check.report.ReportFormat;
 import io.github.parkkevinsb.flower.check.report.Reporter;
+import io.github.parkkevinsb.flower.check.report.SarifReporter;
 
 /**
  * Command-line entry point. Wiring only — argument parsing, engine run,
@@ -19,7 +21,6 @@ import io.github.parkkevinsb.flower.check.report.Reporter;
 public final class FlowerCheckCli {
 
     private final ConfigLoader configLoader = new ConfigLoader();
-    private final Reporter reporter = new PlainTextReporter();
 
     public static void main(String[] args) {
         int code = new FlowerCheckCli().execute(args, System.out, System.err);
@@ -58,8 +59,15 @@ public final class FlowerCheckCli {
             return ExitCode.USAGE;
         }
 
-        reporter.report(result.findings(), result.acceptedFindings(), out);
+        reporter(parsed.reportFormat()).report(result.findings(), result.acceptedFindings(), out);
         return result.failed() ? ExitCode.FINDINGS : ExitCode.OK;
+    }
+
+    private static Reporter reporter(ReportFormat format) {
+        if (format == ReportFormat.SARIF) {
+            return new SarifReporter();
+        }
+        return new PlainTextReporter();
     }
 
     private static void appendLine(Appendable sink, String text) {

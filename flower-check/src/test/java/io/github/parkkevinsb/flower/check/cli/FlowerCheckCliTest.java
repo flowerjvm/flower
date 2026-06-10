@@ -69,6 +69,44 @@ class FlowerCheckCliTest {
         assertThat(err.toString()).isEmpty();
     }
 
+    @Test
+    void formatOptionSelectsSarifReporter(@TempDir Path root) throws IOException {
+        writeJava(root, "WaitStep.java",
+                "package demo;",
+                "class WaitStep extends Step {",
+                "    protected StepResult onTick(StepContext ctx) throws Exception {",
+                "        Thread.sleep(1000);",
+                "        return StepResult.done();",
+                "    }",
+                "}");
+
+        StringBuilder out = new StringBuilder();
+        StringBuilder err = new StringBuilder();
+        int code = new FlowerCheckCli().execute(new String[] {
+                "--format", "sarif",
+                root.toString()
+        }, out, err);
+
+        assertThat(code).isEqualTo(ExitCode.FINDINGS);
+        assertThat(out.toString()).contains("\"version\": \"2.1.0\"");
+        assertThat(out.toString()).contains("\"ruleId\": \"FLOWER-CHECK-001\"");
+        assertThat(out.toString()).doesNotContain("flower-check: 1 finding");
+        assertThat(err.toString()).isEmpty();
+    }
+
+    @Test
+    void invalidFormatIsUsageError(@TempDir Path root) {
+        StringBuilder out = new StringBuilder();
+        StringBuilder err = new StringBuilder();
+        int code = new FlowerCheckCli().execute(new String[] {
+                "--format", "xml",
+                root.toString()
+        }, out, err);
+
+        assertThat(code).isEqualTo(ExitCode.USAGE);
+        assertThat(err.toString()).contains("invalid report format");
+    }
+
     private static void writeJava(Path root, String name, String... lines) throws IOException {
         Path file = root.resolve(name);
         Files.write(file, String.join("\n", lines).getBytes(StandardCharsets.UTF_8));

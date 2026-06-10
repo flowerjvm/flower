@@ -31,7 +31,7 @@ source paths
   -> ProjectModel build  (pass 1: type hierarchy, flow builders, step ids)
   -> Rule execution      (pass 2: each Rule inspects model + AST)
   -> Findings            (id, severity, file, line, message, why, fix)
-  -> Reporter            (plain text now; SARIF later)
+  -> Reporter            (plain text or SARIF)
   -> exit code           (non-zero when any finding at/above fail threshold)
 ```
 
@@ -67,7 +67,7 @@ io.github.parkkevinsb.flower.check
   rule.core   FLOWER-CHECK-001..005 (Step/Flow usage rules)
   rule.agent  FLOWER-CHECK-006..008 (agent-runtime rules)
   finding     Finding, FindingCollector, suppression
-  report      Reporter, PlainTextReporter, (future) SarifReporter
+  report      Reporter, PlainTextReporter, SarifReporter
   config      FlowerCheckConfig, baseline loading
 ```
 
@@ -231,6 +231,7 @@ flower-check.config (or flower-check section in build config)
 ```bash
 flower-check src/main/java
 flower-check --config flower-check.config src/main/java another/src
+flower-check --format sarif src/main/java > flower-check.sarif
 ```
 
 ```text
