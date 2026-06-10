@@ -55,6 +55,16 @@ mvn verify -Dflower.check.writeBaseline=flower-check-baseline.txt
 `flower.check.writeBaseline` records current findings and exits successfully so
 a project can adopt the checker without fixing all existing debt at once.
 
+Integration coverage:
+
+```bash
+mvn -pl flower-check-maven-plugin -am verify
+```
+
+The plugin runs Maven Invoker fixture projects that prove `mvn verify` succeeds
+for clean host code, fails for unsafe Flower Step blocking, accepts an explicit
+baseline, and accepts the official scheduler approval annotation.
+
 Scheduler approval example:
 
 ```java

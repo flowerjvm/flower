@@ -189,6 +189,8 @@ Current implementation:
 6. Official source-retained check annotations are available for host projects.
 7. The Maven plugin runs flower-check in host applications during `verify`.
 8. The Flower reactor also self-checks its own source roots during `verify`.
+9. Maven plugin behavior is covered by Invoker fixture projects that run real
+   host `mvn verify` builds.
 ```
 
 Use a parser when rules need structure, such as identifying classes extending
