@@ -233,6 +233,8 @@ flower-check src/main/java
 flower-check --config flower-check.config src/main/java another/src
 flower-check --format sarif src/main/java > flower-check.sarif
 flower-check --list-rules
+mvn verify
+mvn -Dflower.check.skip=true verify
 ```
 
 ```text
@@ -241,8 +243,10 @@ exit 1   findings at or above failOn (build should fail)
 exit 2   usage error (bad arguments / unreadable path)
 ```
 
-Gradle and Maven wrappers map the same engine onto `flowerCheck` /
-`flower-check:check` goals and feed findings into the build's failure channel.
+Maven `verify` runs the same engine from the `flower-check` module and scans
+the Flower reactor source roots. `-Dflower.check.skip=true` is available for
+explicit local bypass only. Gradle and dedicated Maven wrappers can later map
+the same engine onto `flowerCheck` / `flower-check:check` goals.
 
 ## Why This Shape
 

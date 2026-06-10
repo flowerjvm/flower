@@ -1,6 +1,6 @@
 # flower-check
 
-`flower-check` is a future Flower developer tooling module.
+`flower-check` is a Flower build-time developer tooling module.
 
 It is not part of `flower-core` runtime execution. Its job is to inspect a
 host application's source code and fail the build when generated or handwritten
@@ -13,7 +13,7 @@ flows, steps, AI harnesses, or agent-runtime actions.
 
 Documentation and MCP guidance can help, but guidance is not enforcement.
 
-`flower-check` should become the enforcement layer:
+`flower-check` is the enforcement layer:
 
 ```text
 AI agent writes code
@@ -25,7 +25,7 @@ AI agent writes code
 
 ## Placement
 
-`flower-check` should start inside the main `flower` repository.
+`flower-check` lives inside the main `flower` repository.
 
 Reason:
 
@@ -42,8 +42,9 @@ flower-check-gradle-plugin
 flower-check-maven-plugin
 ```
 
-A compiling skeleton now exists, so `flower-check` is registered in the Maven
-reactor. The design and rules live in [`docs/`](docs) — start at
+A compiling implementation now exists, so `flower-check` is registered in the
+Maven reactor and runs during the module's `verify` phase. The design and
+rules live in [`docs/`](docs) - start at
 [`docs/00-INDEX.md`](docs/00-INDEX.md). Contributors (human or AI) must follow
 [`AGENTS.md`](AGENTS.md) before writing code.
 
@@ -88,13 +89,14 @@ Local:
 
 ```bash
 flower-check src/main/java
+flower-check --list-rules
 ```
 
-Gradle:
+Maven:
 
 ```bash
-./gradlew flowerCheck
-./gradlew check
+mvn verify
+mvn -Dflower.check.skip=true verify
 ```
 
 CI:
@@ -143,14 +145,14 @@ The first useful version should be small, boring, and strict.
 
 ## Implementation Notes
 
-Start simple:
+Current implementation:
 
 ```text
-1. CLI that scans source files.
-2. Rule interface.
-3. Java parser or conservative text-based prototype.
-4. SARIF or plain text output later.
-5. Gradle/Maven integration after CLI proves useful.
+1. CLI scans Java source files.
+2. JavaParser is primary; conservative text fallback remains.
+3. Rules are discovered through ServiceLoader.
+4. Plain text and SARIF reporters are available.
+5. Maven verify runs flower-check over the Flower reactor source roots.
 ```
 
 Use a parser when rules need structure, such as identifying classes extending

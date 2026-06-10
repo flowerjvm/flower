@@ -1,5 +1,6 @@
 package io.github.parkkevinsb.flower.core.worker;
 
+import io.github.parkkevinsb.flower.core.annotation.FlowerSchedulerApproved;
 import io.github.parkkevinsb.flower.core.event.EventBus;
 import io.github.parkkevinsb.flower.core.flow.Flow;
 import io.github.parkkevinsb.flower.core.flow.FlowId;
@@ -154,6 +155,8 @@ public final class Worker {
      * Start the internal scheduler. Engine calls this; user code does not
      * need to call it directly when using Engine.
      */
+    @FlowerSchedulerApproved(
+            "Flower Worker owns the framework tick loop; user code must not add its own recurring scheduler.")
     public void start() {
         synchronized (stateLock) {
             ensureAttached();

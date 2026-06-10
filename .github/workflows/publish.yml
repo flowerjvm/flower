@@ -8,9 +8,12 @@ on:
     paths:
       - pom.xml
       - flower-core/**
+      - flower-persistence-jdbc/**
       - flower-bloom-adapter/**
       - flower-spring-boot-starter/**
       - flower-observability/**
+      - flower-testkit/**
+      - flower-check/**
       - .github/workflows/publish.yml
 
 permissions:

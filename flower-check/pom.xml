@@ -61,6 +61,33 @@
                     </archive>
                 </configuration>
             </plugin>
+            <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>exec-maven-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>flower-check-verify</id>
+                        <phase>verify</phase>
+                        <goals>
+                            <goal>java</goal>
+                        </goals>
+                        <configuration>
+                            <skip>${flower.check.skip}</skip>
+                            <mainClass>io.github.parkkevinsb.flower.check.cli.FlowerCheckVerify</mainClass>
+                            <classpathScope>runtime</classpathScope>
+                            <arguments>
+                                <argument>${project.basedir}/../flower-core/src/main/java</argument>
+                                <argument>${project.basedir}/../flower-persistence-jdbc/src/main/java</argument>
+                                <argument>${project.basedir}/../flower-bloom-adapter/src/main/java</argument>
+                                <argument>${project.basedir}/../flower-spring-boot-starter/src/main/java</argument>
+                                <argument>${project.basedir}/../flower-observability/src/main/java</argument>
+                                <argument>${project.basedir}/../flower-testkit/src/main/java</argument>
+                                <argument>${project.basedir}/src/main/java</argument>
+                            </arguments>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
         </plugins>
     </build>
 </project>
