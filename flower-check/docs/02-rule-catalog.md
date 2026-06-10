@@ -466,6 +466,11 @@ The default approval annotation names are:
 @ApprovedScheduler
 ```
 
+`@FlowerSchedulerApproved` is provided by the optional
+`flower-check-annotations` artifact as a SOURCE-retained marker. Host projects
+may use it directly, or define their own project-local approval annotation and
+list that name in `schedulerApprovalAnnotations`.
+
 Projects may add more names through `schedulerApprovalAnnotations` in
 `flower-check.config`.
 

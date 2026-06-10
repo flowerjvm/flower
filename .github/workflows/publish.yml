@@ -13,6 +13,7 @@ on:
       - flower-spring-boot-starter/**
       - flower-observability/**
       - flower-testkit/**
+      - flower-check-annotations/**
       - flower-check/**
       - flower-check-maven-plugin/**
       - .github/workflows/publish.yml

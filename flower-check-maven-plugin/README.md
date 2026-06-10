@@ -5,6 +5,18 @@ Maven integration for `flower-check`.
 Add this plugin to a project that uses Flower when you want `mvn verify` to fail
 if the project uses Flower in unsafe ways.
 
+Use the official source-retained approval annotation when a recurring scheduler
+is truly intentional:
+
+```xml
+<dependency>
+    <groupId>io.github.parkkevinsb.flower</groupId>
+    <artifactId>flower-check-annotations</artifactId>
+    <version>0.1.0-SNAPSHOT</version>
+    <scope>provided</scope>
+</dependency>
+```
+
 ```xml
 <plugin>
     <groupId>io.github.parkkevinsb.flower</groupId>
@@ -42,3 +54,23 @@ mvn verify -Dflower.check.writeBaseline=flower-check-baseline.txt
 
 `flower.check.writeBaseline` records current findings and exits successfully so
 a project can adopt the checker without fixing all existing debt at once.
+
+Scheduler approval example:
+
+```java
+import io.github.parkkevinsb.flower.check.annotation.FlowerSchedulerApproved;
+import org.springframework.scheduling.annotation.Scheduled;
+
+class ReconciliationJob {
+
+    @FlowerSchedulerApproved(
+        reason = "User approved periodic partner reconciliation outside a Flower flow",
+        approvedBy = "ops-owner",
+        approvedAt = "2026-06-11",
+        reference = "OPS-1234"
+    )
+    @Scheduled(fixedDelay = 60000)
+    void reconcile() {
+    }
+}
+```

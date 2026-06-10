@@ -96,6 +96,13 @@ flower-check --list-rules
 Host application Maven build:
 
 ```xml
+<dependency>
+    <groupId>io.github.parkkevinsb.flower</groupId>
+    <artifactId>flower-check-annotations</artifactId>
+    <version>0.1.0-SNAPSHOT</version>
+    <scope>provided</scope>
+</dependency>
+
 <plugin>
     <groupId>io.github.parkkevinsb.flower</groupId>
     <artifactId>flower-check-maven-plugin</artifactId>
@@ -119,6 +126,10 @@ mvn -Dflower.check.skip=true verify
 
 This scans the host project's `src/main/java` by default. Any active finding at
 or above `failOn` fails that host build.
+
+The annotations dependency is optional unless the project needs an official
+approval marker such as `@FlowerSchedulerApproved` for intentional recurring
+schedulers. Projects may still configure their own approval annotation names.
 
 CI:
 
@@ -175,8 +186,9 @@ Current implementation:
 3. Rules are discovered through ServiceLoader.
 4. Plain text and SARIF reporters are available.
 5. Existing findings can be written to a baseline file for controlled adoption.
-6. The Maven plugin runs flower-check in host applications during `verify`.
-7. The Flower reactor also self-checks its own source roots during `verify`.
+6. Official source-retained check annotations are available for host projects.
+7. The Maven plugin runs flower-check in host applications during `verify`.
+8. The Flower reactor also self-checks its own source roots during `verify`.
 ```
 
 Use a parser when rules need structure, such as identifying classes extending

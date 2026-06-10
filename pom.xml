@@ -54,6 +54,7 @@
         <module>flower-spring-boot-starter</module>
         <module>flower-observability</module>
         <module>flower-testkit</module>
+        <module>flower-check-annotations</module>
         <module>flower-check</module>
         <module>flower-check-maven-plugin</module>
     </modules>
@@ -127,6 +128,11 @@
             <dependency>
                 <groupId>io.github.parkkevinsb.flower</groupId>
                 <artifactId>flower-testkit</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.github.parkkevinsb.flower</groupId>
+                <artifactId>flower-check-annotations</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>

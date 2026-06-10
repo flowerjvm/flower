@@ -47,6 +47,8 @@ demands it.
 
 ```text
 flower-check            CLI + engine + rules (start here)
+flower-check-annotations
+                        optional SOURCE-retained policy markers for host code
 flower-check-maven-plugin
                         Maven plugin wrapper for host applications
 flower-check-gradle     Gradle plugin wrapper (later)

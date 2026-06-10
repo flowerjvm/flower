@@ -227,10 +227,10 @@ class RuleCatalogTest {
     void allowsScheduledMethodWithDefaultApprovalAnnotation(@TempDir Path root) throws IOException {
         writeJava(root, "ApprovedScheduledCleanup.java",
                 "package demo;",
+                "import io.github.parkkevinsb.flower.check.annotation.FlowerSchedulerApproved;",
                 "@interface Scheduled { long fixedRate() default 0L; }",
-                "@interface FlowerSchedulerApproved { }",
                 "class ApprovedScheduledCleanup {",
-                "    @FlowerSchedulerApproved",
+                "    @FlowerSchedulerApproved(reason = \"User approved the recurring cleanup scheduler\")",
                 "    @Scheduled(fixedRate = 1000L)",
                 "    void run() { }",
                 "}");
