@@ -5,9 +5,9 @@ import io.github.parkkevinsb.flower.check.finding.Finding;
 import io.github.parkkevinsb.flower.check.finding.FindingCollector;
 import io.github.parkkevinsb.flower.check.model.ProjectModel;
 import io.github.parkkevinsb.flower.check.model.ProjectModelBuilder;
+import io.github.parkkevinsb.flower.check.parse.JavaParserParser;
 import io.github.parkkevinsb.flower.check.parse.Parser;
 import io.github.parkkevinsb.flower.check.parse.SourceUnit;
-import io.github.parkkevinsb.flower.check.parse.TextFallbackParser;
 import io.github.parkkevinsb.flower.check.rule.Rule;
 import io.github.parkkevinsb.flower.check.rule.RuleContext;
 import io.github.parkkevinsb.flower.check.rule.RuleRegistry;
@@ -42,10 +42,10 @@ public final class FlowerCheckEngine {
         this.config = config;
     }
 
-    /** Default wiring: text-fallback parser + service-loaded rules. */
+    /** Default wiring: JavaParser with text fallback + service-loaded rules. */
     public static FlowerCheckEngine create(FlowerCheckConfig config) {
         return new FlowerCheckEngine(
-                new TextFallbackParser(),
+                new JavaParserParser(),
                 RuleRegistry.fromServiceLoader(),
                 config);
     }

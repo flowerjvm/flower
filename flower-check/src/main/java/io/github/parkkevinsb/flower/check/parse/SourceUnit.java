@@ -9,13 +9,13 @@ import java.util.Optional;
  * A {@link SourceFile} together with the result of parsing it.
  *
  * <p>The AST is deliberately typed as {@link Object} so no concrete parser type
- * leaks past the {@code parse} package. Rules that need structure cast it
- * through a small helper added alongside the real {@code Parser} implementation;
- * text-based rules use {@link #file()} lines directly.
+ * leaks past the {@code parse} package. Text-based rules use {@link #file()}
+ * lines directly; structural model builders can unwrap parser-specific ASTs
+ * through helpers that live in {@code parse}.
  *
  * <p>When {@link #parsed()} is false the file could not be parsed. Rules must
  * tolerate that (fall back to conservative text checks or skip), and the engine
- * emits at most an INFO note — a parse failure alone never fails the build.
+ * emits at most an INFO note - a parse failure alone never fails the build.
  */
 public final class SourceUnit {
 

@@ -23,16 +23,11 @@
     </description>
 
     <dependencies>
-        <!--
-            The skeleton intentionally has NO external runtime dependencies.
-
-            The parser is behind the io...check.parse.Parser interface with a
-            text fallback, so the project compiles on Java 8 and inside the
-            reactor today. When AST rules are implemented, add JavaParser here
-            (managed via a property in the parent pom) and provide a
-            JavaParserParser implementation behind the same interface. Do not
-            let any parser/AST type leak into the rule.* or finding.* packages.
-        -->
+        <!-- Build-time parser only. Keep JavaParser imports inside parse.*. -->
+        <dependency>
+            <groupId>com.github.javaparser</groupId>
+            <artifactId>javaparser-core</artifactId>
+        </dependency>
         <dependency>
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter</artifactId>

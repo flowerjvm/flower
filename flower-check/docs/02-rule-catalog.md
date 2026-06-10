@@ -63,6 +63,41 @@ Use this map before adding or tightening a rule:
 If a rule cannot point to one of these anchors or to equivalent upstream source
 code, do not enable it by default.
 
+## Core API Baseline
+
+This catalog was reconfirmed against `flower-core` on 2026-06-10. Rule
+implementations must use these current API facts, even when older design notes
+show earlier names:
+
+```text
+Step lifecycle:
+  Step.onEnter(ctx)
+  Step.onTick(ctx)
+  Step.onExit(ctx)
+  Step.onReset(ctx)
+  DurableStep.onResume(ctx)
+
+StepResult factories:
+  stay()
+  done()
+  repeat()
+  goTo(String stepId)
+  finish()
+  fail(Throwable cause)
+
+FlowBuilder durable API:
+  durable()
+  step(String, Step)
+  step(String, Step, Guard)
+  durableStep(String, Step, RecoveryPolicy)
+  durableStep(String, Step, Guard, RecoveryPolicy)
+```
+
+There is no current public `StepResult.advance()`, `StepResult.defer()`,
+`StepResult.goTo(..., mode)`, or `durableStep(...)` overload without a
+`RecoveryPolicy`. A rule should not search for APIs that cannot compile in the
+current core unless it is explicitly a migration rule and is opt-in.
+
 ## Scope Of A "Step Lifecycle Method"
 
 Several rules apply *inside Step lifecycle methods*. That means the bodies of
@@ -139,11 +174,11 @@ with an explicit timeout and a `try/catch(TimeoutException)` is allowed.
 OpenAI, etc.) or an obvious blocking model client.
 
 **Why:** Model calls are slow, failure-prone, and need quality validation,
-retry, and refine handling. The canonical Flower design puts AI work behind a
-harness flow and an async hand-off, not a synchronous call on the tick
-(`archdox .../FLOWER_BLOOM_RUNTIME.md`: *Harness = Flower Flow*; the
-`execute-ai-review` step submits async and observes via `stepNo`). A direct SDK
-call also re-introduces the FLOWER-CHECK-001 blocking problem.
+retry, and refine handling. The Flower README requires Step work to stay
+asynchronous in shape: start external work, return `stay()`, and observe
+completion on later ticks. Agent/action state also belongs in a higher-level
+module, not in `flower-core` or a raw Step. A direct SDK call re-introduces the
+FLOWER-CHECK-001 blocking problem.
 
 **Fix:** Submit the model call to an executor / harness service in `onEnter` (or
 `stepNo 0`), then observe the result over ticks. Route model access through the
@@ -211,14 +246,17 @@ a suppression comment with a reason.
 
 **Severity:** ERROR
 
-**What:** A `Flow.builder(...).durable()` chain that adds a step without a
-recovery policy:
+**What:** A `Flow.builder(...).durable()` chain that adds a step whose recovery
+policy cannot be resolved:
 
 ```text
-.durable() ... .step("x", new XStep())          // missing policy
+.durable() ... .step("x", new XStep())          // XStep is not DurableStep
 ```
 
-or a plain `.step(...)` mixed into a durable flow.
+`durableStep(...)` without a `RecoveryPolicy` is not a current core API and
+should not be a detection target. A plain `.step(...)` is valid only when the
+step type is known to extend `DurableStep`, because `StepDefinition` resolves
+that step's built-in policy.
 
 **Why:** Durable mode is checkpoint/resume: after a restart the host rebuilds a
 fresh Flow and resumes from the saved position. Every step must declare how it
@@ -227,12 +265,15 @@ Checkpoint/Resume: *durable flows require every step to declare a recovery
 policy*; `08-current-implementation-update.md`).
 
 **Fix:** Use `.durableStep("x", new XStep(), RecoveryPolicy.REENTER_IDEMPOTENT)`
-when re-running `onEnter` is safe, or extend `DurableStep` with
-`RecoveryPolicy.RESUME_ONLY` and implement `onResume(ctx)` when entry and
-recovery must differ.
+when re-running `onEnter` is safe. When entry and recovery must differ, extend
+`DurableStep` with `RecoveryPolicy.RESUME_ONLY` and implement `onResume(ctx)`;
+the step may then be recoverable through its own `DurableStep` policy.
 
-Detection: in a builder chain where `.durable()` is present, flag any `.step(`
-call and any `.durableStep(` missing a `RecoveryPolicy` argument.
+Detection: in a builder chain where `.durable()` is present, flag `.step(...)`
+calls whose step argument is known not to extend `DurableStep`, or whose type
+cannot be proven recoverable from the analyzed source/configuration. Do not flag
+`.durableStep(...)` calls with a `RecoveryPolicy`; the missing-policy overload
+does not exist in current core.
 
 ---
 
@@ -397,12 +438,13 @@ Detection: a Step-typed field/local that is `static` or reused across multiple
 
 ## Tier 2 — Agent Runtime (FLOWER-CHECK-006..008)
 
-These target the agent/harness layer (the future `flower-agent-runtime` and the
-patterns proven in `archdox`). They are **off by default** until a project
-opts in (`config: rule.agent enabled`), because they need project-specific
-type names (`ActionRegistry`, `PolicyGate`, audit/approval services). They
-encode the rule the README states: an agent write action must go through
-controlled gates, not raw side effects.
+These target the future agent/harness layer described as outside `flower-core`
+in `flower/README.md` and `flower-dev-notes/08-current-implementation-update.md`.
+They are **off by default** until a project opts in (`config: rule.agent
+enabled`), because they need project-specific type names (`ActionRegistry`,
+`PolicyGate`, audit/approval services). They encode the boundary that agent and
+approval state belongs above core, not in `ExecutionContext` or raw Step side
+effects.
 
 ### FLOWER-CHECK-006 — Agent write actions must not bypass ActionRegistry / PolicyGate
 
@@ -413,10 +455,9 @@ dispatch, HTTP mutation, file/storage write) without going through the
 registered action / policy gate.
 
 **Why:** Agent actions must be registered and policy-checked, not free-form side
-effects. `archdox` routes agent execution through registered commands and emits
-`AI_HARNESS_BLOCKED_BY_POLICY` when a policy denies it
-(`FLOWER_BLOOM_RUNTIME.md` Operation Event;
-`ARCHDOX_AGENT_ARCHITECTURE.md` — every command is registered and authorized).
+effects. Current Flower docs deliberately keep agent/action/approval state out
+of `flower-core` and reserve it for a higher-level `flower-agent-runtime`
+boundary.
 
 **Fix:** Register the action and dispatch through `ActionRegistry`/`PolicyGate`
 so the write is gated, observable, and revocable.
@@ -428,11 +469,9 @@ so the write is gated, observable, and revocable.
 **What:** An agent/business write action with no corresponding audit/operation
 event.
 
-**Why:** Important state changes must leave an operation-event trail so
-operators can see cost, failures, and stuck/blocked actions
-(`FLOWER_BLOOM_RUNTIME.md` Operation Event list:
-`AI_HARNESS_REQUESTED/STARTED/COMPLETED/FAILED/...`). An unaudited write is
-invisible to admin/console and to recovery reasoning.
+**Why:** Important state changes must leave an operation/audit trail so
+operators can see cost, failures, and stuck/blocked actions. An unaudited write
+is invisible to admin/console and to recovery reasoning.
 
 **Fix:** Emit an audit/operation event (or require one via the action contract)
 alongside the write.
