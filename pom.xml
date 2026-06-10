@@ -54,6 +54,7 @@
         <module>flower-spring-boot-starter</module>
         <module>flower-observability</module>
         <module>flower-testkit</module>
+        <module>flower-check</module>
     </modules>
 
     <distributionManagement>

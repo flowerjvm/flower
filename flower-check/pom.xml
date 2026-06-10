@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0
+                             https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>io.github.parkkevinsb.flower</groupId>
+        <artifactId>flower-parent</artifactId>
+        <version>0.1.0-SNAPSHOT</version>
+        <relativePath>../pom.xml</relativePath>
+    </parent>
+
+    <artifactId>flower-check</artifactId>
+    <packaging>jar</packaging>
+
+    <name>Flower Check</name>
+    <description>
+        Flower developer tooling: scans host application source and fails the
+        build when Flower code violates known Flower patterns. Build-time only;
+        never on the flower-core runtime path. See docs/00-INDEX.md.
+    </description>
+
+    <dependencies>
+        <!--
+            The skeleton intentionally has NO external runtime dependencies.
+
+            The parser is behind the io...check.parse.Parser interface with a
+            text fallback, so the project compiles on Java 8 and inside the
+            reactor today. When AST rules are implemented, add JavaParser here
+            (managed via a property in the parent pom) and provide a
+            JavaParserParser implementation behind the same interface. Do not
+            let any parser/AST type leak into the rule.* or finding.* packages.
+        -->
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.assertj</groupId>
+            <artifactId>assertj-core</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-jar-plugin</artifactId>
+                <configuration>
+                    <archive>
+                        <manifest>
+                            <mainClass>io.github.parkkevinsb.flower.check.cli.FlowerCheckCli</mainClass>
+                        </manifest>
+                    </archive>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+</project>

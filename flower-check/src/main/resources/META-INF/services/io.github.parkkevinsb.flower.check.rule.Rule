@@ -1,0 +1,4 @@
+# flower-check rules discovered by ServiceLoader.
+# Add one fully-qualified Rule implementation per line.
+# See docs/02-rule-catalog.md and AGENTS.md ("How To Add A Rule").
+io.github.parkkevinsb.flower.check.rule.core.BlockingCallRule
