@@ -18,14 +18,23 @@ public final class ProjectModel {
 
     private final List<StepType> stepTypes;
     private final List<FlowBuilderSite> flowBuilders;
+    private final List<AnalysisFact> facts;
 
     public ProjectModel(List<StepType> stepTypes, List<FlowBuilderSite> flowBuilders) {
+        this(stepTypes, flowBuilders, Collections.<AnalysisFact>emptyList());
+    }
+
+    public ProjectModel(List<StepType> stepTypes, List<FlowBuilderSite> flowBuilders, List<AnalysisFact> facts) {
         this.stepTypes = Collections.unmodifiableList(new ArrayList<>(stepTypes));
         this.flowBuilders = Collections.unmodifiableList(new ArrayList<>(flowBuilders));
+        this.facts = Collections.unmodifiableList(new ArrayList<>(facts));
     }
 
     public static ProjectModel empty() {
-        return new ProjectModel(Collections.<StepType>emptyList(), Collections.<FlowBuilderSite>emptyList());
+        return new ProjectModel(
+                Collections.<StepType>emptyList(),
+                Collections.<FlowBuilderSite>emptyList(),
+                Collections.<AnalysisFact>emptyList());
     }
 
     public List<StepType> stepTypes() {
@@ -34,6 +43,20 @@ public final class ProjectModel {
 
     public List<FlowBuilderSite> flowBuilders() {
         return flowBuilders;
+    }
+
+    public List<AnalysisFact> facts() {
+        return facts;
+    }
+
+    public List<AnalysisFact> facts(String kind) {
+        List<AnalysisFact> out = new ArrayList<>();
+        for (AnalysisFact fact : facts) {
+            if (fact.kind().equals(kind)) {
+                out.add(fact);
+            }
+        }
+        return out;
     }
 
     /** True when a class with the given simple name was identified as a Step. */

@@ -2,3 +2,17 @@
 # Add one fully-qualified Rule implementation per line.
 # See docs/02-rule-catalog.md and AGENTS.md ("How To Add A Rule").
 io.github.parkkevinsb.flower.check.rule.core.BlockingCallRule
+io.github.parkkevinsb.flower.check.rule.core.ProviderCallRule
+io.github.parkkevinsb.flower.check.rule.core.FlowDriveRule
+io.github.parkkevinsb.flower.check.rule.core.MissingTimeoutRule
+io.github.parkkevinsb.flower.check.rule.core.DurableRecoveryPolicyRule
+io.github.parkkevinsb.flower.check.rule.agent.AgentWriteGateRule
+io.github.parkkevinsb.flower.check.rule.agent.AgentAuditRule
+io.github.parkkevinsb.flower.check.rule.agent.ApprovalRequiredActionRule
+io.github.parkkevinsb.flower.check.rule.core.GoToTargetRule
+io.github.parkkevinsb.flower.check.rule.core.EventCallbackRule
+io.github.parkkevinsb.flower.check.rule.core.StepRuntimeOwnershipRule
+io.github.parkkevinsb.flower.check.rule.core.RawSubscriptionRule
+io.github.parkkevinsb.flower.check.rule.core.DuplicateStepIdRule
+io.github.parkkevinsb.flower.check.rule.core.ExecutionContextRule
+io.github.parkkevinsb.flower.check.rule.core.SharedStepInstanceRule
