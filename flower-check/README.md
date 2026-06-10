@@ -85,7 +85,7 @@ FLOWER-CHECK-008
 
 ## Enforcement Path
 
-Local:
+CLI:
 
 ```bash
 flower-check src/main/java
@@ -93,12 +93,32 @@ flower-check --write-baseline flower-check-baseline.txt src/main/java
 flower-check --list-rules
 ```
 
-Maven:
+Host application Maven build:
+
+```xml
+<plugin>
+    <groupId>io.github.parkkevinsb.flower</groupId>
+    <artifactId>flower-check-maven-plugin</artifactId>
+    <version>0.1.0-SNAPSHOT</version>
+    <executions>
+        <execution>
+            <goals>
+                <goal>check</goal>
+            </goals>
+        </execution>
+    </executions>
+</plugin>
+```
+
+Then:
 
 ```bash
 mvn verify
 mvn -Dflower.check.skip=true verify
 ```
+
+This scans the host project's `src/main/java` by default. Any active finding at
+or above `failOn` fails that host build.
 
 CI:
 
@@ -155,7 +175,8 @@ Current implementation:
 3. Rules are discovered through ServiceLoader.
 4. Plain text and SARIF reporters are available.
 5. Existing findings can be written to a baseline file for controlled adoption.
-6. Maven verify runs flower-check over the Flower reactor source roots.
+6. The Maven plugin runs flower-check in host applications during `verify`.
+7. The Flower reactor also self-checks its own source roots during `verify`.
 ```
 
 Use a parser when rules need structure, such as identifying classes extending

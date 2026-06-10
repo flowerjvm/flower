@@ -12,6 +12,7 @@ on:
       - flower-observability/**
       - flower-testkit/**
       - flower-check/**
+      - flower-check-maven-plugin/**
       - .github/workflows/ci.yml
 
 permissions:

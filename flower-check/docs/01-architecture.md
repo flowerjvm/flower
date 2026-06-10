@@ -47,13 +47,14 @@ demands it.
 
 ```text
 flower-check            CLI + engine + rules (start here)
+flower-check-maven-plugin
+                        Maven plugin wrapper for host applications
 flower-check-gradle     Gradle plugin wrapper (later)
-flower-check-maven      Maven plugin wrapper (later)
 ```
 
 Do not add `flower-check` to the Maven reactor until there is real code, per
-the top-level README. The Gradle/Maven wrappers are thin: they collect source
-roots and configuration, then call the same engine the CLI calls.
+the top-level README. The Maven and future Gradle wrappers are thin: they
+collect source roots and configuration, then call the same engine the CLI calls.
 
 Internal package layout:
 
@@ -233,6 +234,7 @@ flower-check src/main/java
 flower-check --config flower-check.config src/main/java another/src
 flower-check --format sarif src/main/java > flower-check.sarif
 flower-check --write-baseline flower-check-baseline.txt src/main/java
+flower-check:check
 flower-check --list-rules
 mvn verify
 mvn -Dflower.check.skip=true verify
@@ -249,9 +251,10 @@ findings in baseline format and exits 0 when writing succeeds, because the
 purpose is to record accepted debt before enabling the normal failing check.
 
 Maven `verify` runs the same engine from the `flower-check` module and scans
-the Flower reactor source roots. `-Dflower.check.skip=true` is available for
-explicit local bypass only. Gradle and dedicated Maven wrappers can later map
-the same engine onto `flowerCheck` / `flower-check:check` goals.
+host application source roots when the `flower-check-maven-plugin` is added to
+that host build. The Flower reactor also self-checks its own source roots so the
+rules stay healthy. `-Dflower.check.skip=true` is available for explicit local
+bypass only. Gradle can later map the same engine onto a `flowerCheck` task.
 
 CI must run `mvn verify` for pull requests so generated or handwritten Flower
 code is checked before merge.

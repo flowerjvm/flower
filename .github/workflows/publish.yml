@@ -14,6 +14,7 @@ on:
       - flower-observability/**
       - flower-testkit/**
       - flower-check/**
+      - flower-check-maven-plugin/**
       - .github/workflows/publish.yml
 
 permissions:

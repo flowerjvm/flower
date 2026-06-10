@@ -83,6 +83,7 @@
                                 <argument>${project.basedir}/../flower-observability/src/main/java</argument>
                                 <argument>${project.basedir}/../flower-testkit/src/main/java</argument>
                                 <argument>${project.basedir}/src/main/java</argument>
+                                <argument>${project.basedir}/../flower-check-maven-plugin/src/main/java</argument>
                             </arguments>
                         </configuration>
                     </execution>
