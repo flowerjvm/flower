@@ -16,9 +16,10 @@ import java.util.Optional;
  * <pre>
  * flower-check [--config &lt;file&gt;] [--fail-on error|warning|info]
  *              [--format plain|sarif] &lt;path&gt; [&lt;path&gt; ...]
+ * flower-check [--config &lt;file&gt;] --list-rules
  * </pre>
  *
- * Parsing is deliberately tiny — no args framework. Add flags here as the CLI
+ * Parsing is deliberately tiny: no args framework. Add flags here as the CLI
  * grows (e.g. {@code --format sarif}, {@code --list-rules}).
  */
 public final class CliArguments {
@@ -27,15 +28,18 @@ public final class CliArguments {
     private final Optional<Path> configPath;
     private final Optional<Severity> failOn;
     private final ReportFormat reportFormat;
+    private final boolean listRules;
 
     private CliArguments(List<String> sourceRoots,
                          Optional<Path> configPath,
                          Optional<Severity> failOn,
-                         ReportFormat reportFormat) {
+                         ReportFormat reportFormat,
+                         boolean listRules) {
         this.sourceRoots = sourceRoots;
         this.configPath = configPath;
         this.failOn = failOn;
         this.reportFormat = reportFormat;
+        this.listRules = listRules;
     }
 
     public List<String> sourceRoots() {
@@ -54,12 +58,17 @@ public final class CliArguments {
         return reportFormat;
     }
 
+    public boolean listRules() {
+        return listRules;
+    }
+
     /** @throws IllegalArgumentException on malformed input (CLI maps to exit 2). */
     public static CliArguments parse(String[] args) {
         List<String> roots = new ArrayList<>();
         Optional<Path> configPath = Optional.empty();
         Optional<Severity> failOn = Optional.empty();
         ReportFormat reportFormat = ReportFormat.PLAIN;
+        boolean listRules = false;
 
         for (int i = 0; i < args.length; i++) {
             String arg = args[i];
@@ -73,6 +82,9 @@ public final class CliArguments {
                 case "--format":
                     reportFormat = ReportFormat.parse(requireValue(args, ++i, "--format"));
                     break;
+                case "--list-rules":
+                    listRules = true;
+                    break;
                 default:
                     if (arg.startsWith("--")) {
                         throw new IllegalArgumentException("unknown option: " + arg);
@@ -81,10 +93,10 @@ public final class CliArguments {
             }
         }
 
-        if (roots.isEmpty()) {
+        if (roots.isEmpty() && !listRules) {
             throw new IllegalArgumentException("at least one source path is required");
         }
-        return new CliArguments(roots, configPath, failOn, reportFormat);
+        return new CliArguments(roots, configPath, failOn, reportFormat, listRules);
     }
 
     private static String requireValue(String[] args, int index, String option) {
@@ -104,6 +116,7 @@ public final class CliArguments {
 
     public static String usage() {
         return "usage: flower-check [--config <file>] [--fail-on error|warning|info] "
-                + "[--format plain|sarif] <path> [<path> ...]";
+                + "[--format plain|sarif] <path> [<path> ...]\n"
+                + "       flower-check [--config <file>] --list-rules";
     }
 }

@@ -7,15 +7,18 @@ import io.github.parkkevinsb.flower.check.engine.FlowerCheckEngine;
 import io.github.parkkevinsb.flower.check.report.PlainTextReporter;
 import io.github.parkkevinsb.flower.check.report.ReportFormat;
 import io.github.parkkevinsb.flower.check.report.Reporter;
+import io.github.parkkevinsb.flower.check.report.RuleListReporter;
 import io.github.parkkevinsb.flower.check.report.SarifReporter;
+import io.github.parkkevinsb.flower.check.rule.RuleRegistry;
 
 /**
- * Command-line entry point. Wiring only — argument parsing, engine run,
+ * Command-line entry point. Wiring only: argument parsing, engine run,
  * reporting, exit code. No rule logic lives here.
  *
  * <pre>
  * flower-check src/main/java
  * flower-check --config flower-check.config src/main/java another/src
+ * flower-check --list-rules
  * </pre>
  */
 public final class FlowerCheckCli {
@@ -49,6 +52,12 @@ public final class FlowerCheckCli {
         } catch (RuntimeException e) {
             appendLine(err, "flower-check: " + e.getMessage());
             return ExitCode.USAGE;
+        }
+
+        if (parsed.listRules()) {
+            RuleRegistry registry = RuleRegistry.fromServiceLoader();
+            new RuleListReporter().report(registry.all(), registry.enabled(config), config, out);
+            return ExitCode.OK;
         }
 
         CheckResult result;

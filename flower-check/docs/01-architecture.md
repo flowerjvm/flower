@@ -232,6 +232,7 @@ flower-check.config (or flower-check section in build config)
 flower-check src/main/java
 flower-check --config flower-check.config src/main/java another/src
 flower-check --format sarif src/main/java > flower-check.sarif
+flower-check --list-rules
 ```
 
 ```text

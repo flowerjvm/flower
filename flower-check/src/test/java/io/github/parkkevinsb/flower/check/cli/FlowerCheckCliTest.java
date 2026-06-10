@@ -13,6 +13,46 @@ import static org.assertj.core.api.Assertions.assertThat;
 class FlowerCheckCliTest {
 
     @Test
+    void listRulesDoesNotRequireSourceRoot() {
+        StringBuilder out = new StringBuilder();
+        StringBuilder err = new StringBuilder();
+        int code = new FlowerCheckCli().execute(new String[] {
+                "--list-rules"
+        }, out, err);
+
+        assertThat(code).isEqualTo(ExitCode.OK);
+        assertThat(out.toString()).contains("flower-check rules:");
+        assertThat(out.toString()).contains("FLOWER-CHECK-001");
+        assertThat(out.toString()).contains("FLOWER-CHECK-016");
+        assertThat(out.toString()).contains("opt-in");
+        assertThat(err.toString()).isEmpty();
+    }
+
+    @Test
+    void listRulesReflectsConfig(@TempDir Path root) throws IOException {
+        Path config = root.resolve("flower-check.config");
+        Files.write(config, String.join("\n",
+                "rules:",
+                "  FLOWER-CHECK-001: off",
+                "  FLOWER-CHECK-004: info",
+                "agentRulesEnabled: true").getBytes(StandardCharsets.UTF_8));
+
+        StringBuilder out = new StringBuilder();
+        StringBuilder err = new StringBuilder();
+        int code = new FlowerCheckCli().execute(new String[] {
+                "--config", config.toString(),
+                "--list-rules"
+        }, out, err);
+
+        assertThat(code).isEqualTo(ExitCode.OK);
+        assertThat(out.toString()).containsPattern("FLOWER-CHECK-001\\s+ERROR\\s+disabled");
+        assertThat(out.toString()).containsPattern("FLOWER-CHECK-004\\s+INFO\\s+enabled");
+        assertThat(out.toString()).containsPattern("FLOWER-CHECK-006\\s+ERROR\\s+enabled");
+        assertThat(out.toString()).contains("flower-check: 16 rules.");
+        assertThat(err.toString()).isEmpty();
+    }
+
+    @Test
     void failOnOptionPreservesLoadedConfig(@TempDir Path root) throws IOException {
         Path config = root.resolve("flower-check.config");
         Files.write(config, String.join("\n",
