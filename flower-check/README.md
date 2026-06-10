@@ -103,6 +103,7 @@ CI:
 
 ```text
 pull request
+-> mvn verify
 -> flower-check
 -> tests
 -> build

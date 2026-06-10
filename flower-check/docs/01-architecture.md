@@ -248,6 +248,9 @@ the Flower reactor source roots. `-Dflower.check.skip=true` is available for
 explicit local bypass only. Gradle and dedicated Maven wrappers can later map
 the same engine onto `flowerCheck` / `flower-check:check` goals.
 
+CI must run `mvn verify` for pull requests so generated or handwritten Flower
+code is checked before merge.
+
 ## Why This Shape
 
 - **Two passes** because the rules that matter are cross-file (step-id
