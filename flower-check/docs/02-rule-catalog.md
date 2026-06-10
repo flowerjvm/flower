@@ -22,6 +22,47 @@ violation — not a style opinion.
 Every rule states: **what** is detected, **why** it is risky, and the **fix**.
 A rule that cannot fill all three does not belong here.
 
+## Development Notes Grounding
+
+Rules must be grounded in `flower-core`, the public `flower/README.md`, and the
+private rationale in `../../flower-dev-notes` when that workspace is available.
+Use this map before adding or tightening a rule:
+
+```text
+01-scope-and-principles.md
+  - core stays small and Java 8 compatible
+  - Step instances are stateful and owned by one Flow
+  - event callbacks record signal/payload only; onTick decides progress
+
+02-core-architecture.md
+  - Engine -> Worker -> Flow -> Step ownership
+  - Worker ticks Flows sequentially
+  - Step ids are unique within a Flow
+  - Step creation/dependency wiring belongs to user factories, not core magic
+
+03-step-stepno-and-flow-control.md
+  - Flow-level stepId is different from Step-internal stepNo
+  - goTo targets a declared Flow-level step id
+  - time/old tick waits move to StepContext timeout patterns
+
+04-events-bloom-and-threading.md
+  - Flower core does not import Bloom
+  - ctx.subscribe is the framework-managed Step subscription path
+  - event handlers run off the Worker boundary and must not decide StepResult
+
+08-current-implementation-update.md
+  - durable support is checkpoint/resume, not replay
+  - ExecutionContext is identity only, never business state
+  - tenantId is not part of FlowId; runId survives recovery
+
+09-flower-testkit.md
+  - testkit is outside core and depends on core only
+  - deterministic Flow tests should use harness-style tick/assert helpers
+```
+
+If a rule cannot point to one of these anchors or to equivalent upstream source
+code, do not enable it by default.
+
 ## Scope Of A "Step Lifecycle Method"
 
 Several rules apply *inside Step lifecycle methods*. That means the bodies of
