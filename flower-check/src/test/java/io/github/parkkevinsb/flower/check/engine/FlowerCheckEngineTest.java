@@ -13,6 +13,7 @@ import java.nio.file.Path;
 import java.util.Collections;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * End-to-end skeleton test: the pipeline loads a file, runs the registered
@@ -140,6 +141,99 @@ class FlowerCheckEngineTest {
                 "class SampleMain {",
                 "    public static void main(String[] args) throws Exception {",
                 "        Thread.sleep(1000);",
+                "    }",
+                "}");
+
+        CheckResult result = FlowerCheckEngine.create(FlowerCheckConfig.defaults())
+                .run(Collections.singletonList(root.toString()));
+
+        assertThat(result.findings()).isEmpty();
+        assertThat(result.failed()).isFalse();
+    }
+
+    @Test
+    void suppressesFindingOnFollowingLineWhenReasonIsPresent(@TempDir Path root) throws IOException {
+        writeJava(root, "SuppressedWaitStep.java",
+                "package demo;",
+                "class SuppressedWaitStep extends Step {",
+                "    protected StepResult onTick(StepContext ctx) throws Exception {",
+                "        // flower-check:ignore FLOWER-CHECK-001 reason: legacy API blocks briefly",
+                "        Thread.sleep(1000);",
+                "        return StepResult.done();",
+                "    }",
+                "}");
+
+        CheckResult result = FlowerCheckEngine.create(FlowerCheckConfig.defaults())
+                .run(Collections.singletonList(root.toString()));
+
+        assertThat(result.findings()).isEmpty();
+        assertThat(result.failed()).isFalse();
+    }
+
+    @Test
+    void suppressesFindingOnSameLineWhenReasonIsPresent(@TempDir Path root) throws IOException {
+        writeJava(root, "InlineSuppressedWaitStep.java",
+                "package demo;",
+                "class InlineSuppressedWaitStep extends Step {",
+                "    protected StepResult onTick(StepContext ctx) throws Exception {",
+                "        Thread.sleep(1000); // flower-check:ignore FLOWER-CHECK-001 reason: test fixture",
+                "        return StepResult.done();",
+                "    }",
+                "}");
+
+        CheckResult result = FlowerCheckEngine.create(FlowerCheckConfig.defaults())
+                .run(Collections.singletonList(root.toString()));
+
+        assertThat(result.findings()).isEmpty();
+        assertThat(result.failed()).isFalse();
+    }
+
+    @Test
+    void doesNotSuppressDifferentRule(@TempDir Path root) throws IOException {
+        writeJava(root, "WrongRuleSuppressionStep.java",
+                "package demo;",
+                "class WrongRuleSuppressionStep extends Step {",
+                "    protected StepResult onTick(StepContext ctx) throws Exception {",
+                "        // flower-check:ignore FLOWER-CHECK-002 reason: not the blocking-call rule",
+                "        Thread.sleep(1000);",
+                "        return StepResult.done();",
+                "    }",
+                "}");
+
+        CheckResult result = FlowerCheckEngine.create(FlowerCheckConfig.defaults())
+                .run(Collections.singletonList(root.toString()));
+
+        assertThat(result.findings()).hasSize(1);
+        assertThat(result.findings().get(0).ruleId()).isEqualTo("FLOWER-CHECK-001");
+        assertThat(result.failed()).isTrue();
+    }
+
+    @Test
+    void rejectsSuppressionWithoutReason(@TempDir Path root) throws IOException {
+        writeJava(root, "BadSuppressionStep.java",
+                "package demo;",
+                "class BadSuppressionStep extends Step {",
+                "    protected StepResult onTick(StepContext ctx) throws Exception {",
+                "        // flower-check:ignore FLOWER-CHECK-001",
+                "        Thread.sleep(1000);",
+                "        return StepResult.done();",
+                "    }",
+                "}");
+
+        assertThatThrownBy(() -> FlowerCheckEngine.create(FlowerCheckConfig.defaults())
+                .run(Collections.singletonList(root.toString())))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("invalid flower-check suppression");
+    }
+
+    @Test
+    void ignoresSuppressionSyntaxMentionedOutsideLineComment(@TempDir Path root) throws IOException {
+        writeJava(root, "SuppressionDocsStep.java",
+                "package demo;",
+                "/** Mention // flower-check:ignore FLOWER-CHECK-001 without making a suppression. */",
+                "class SuppressionDocsStep extends Step {",
+                "    protected StepResult onTick(StepContext ctx) {",
+                "        return StepResult.done();",
                 "    }",
                 "}");
 

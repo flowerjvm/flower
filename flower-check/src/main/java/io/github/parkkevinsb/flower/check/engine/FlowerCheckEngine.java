@@ -3,6 +3,8 @@ package io.github.parkkevinsb.flower.check.engine;
 import io.github.parkkevinsb.flower.check.config.FlowerCheckConfig;
 import io.github.parkkevinsb.flower.check.finding.Finding;
 import io.github.parkkevinsb.flower.check.finding.FindingCollector;
+import io.github.parkkevinsb.flower.check.finding.Suppression;
+import io.github.parkkevinsb.flower.check.finding.SuppressionScanner;
 import io.github.parkkevinsb.flower.check.model.ProjectModel;
 import io.github.parkkevinsb.flower.check.model.ProjectModelBuilder;
 import io.github.parkkevinsb.flower.check.parse.JavaParserParser;
@@ -35,6 +37,7 @@ public final class FlowerCheckEngine {
     private final RuleRegistry registry;
     private final FlowerCheckConfig config;
     private final SourceLoader sourceLoader = new SourceLoader();
+    private final SuppressionScanner suppressionScanner = new SuppressionScanner();
 
     public FlowerCheckEngine(Parser parser, RuleRegistry registry, FlowerCheckConfig config) {
         this.parser = parser;
@@ -54,8 +57,10 @@ public final class FlowerCheckEngine {
         // Load + parse.
         List<SourceFile> files = sourceLoader.load(roots);
         List<SourceUnit> units = new ArrayList<>(files.size());
+        List<Suppression> suppressions = new ArrayList<>();
         for (SourceFile file : files) {
             units.add(parser.parse(file));
+            suppressions.addAll(suppressionScanner.scan(file));
         }
 
         // Pass 1: shared facts.
@@ -73,6 +78,7 @@ public final class FlowerCheckEngine {
                 }
             }
         }
+        collector.suppressAll(suppressions);
 
         // Decide failure.
         List<Finding> findings = collector.findings();

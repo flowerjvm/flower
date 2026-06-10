@@ -11,8 +11,8 @@ import java.util.List;
  * Accumulates findings from a run and answers the questions the engine needs:
  * the sorted finding list and the worst severity seen.
  *
- * <p>Suppression filtering and baseline handling hook in here (TODO), so the
- * engine stays simple.
+ * <p>Suppression filtering hooks in here so the engine stays simple. Baseline
+ * handling will use the same collection boundary later.
  */
 public final class FindingCollector {
 
@@ -34,6 +34,20 @@ public final class FindingCollector {
         return findings.size();
     }
 
+    public void suppressAll(Collection<Suppression> suppressions) {
+        if (suppressions.isEmpty() || findings.isEmpty()) {
+            return;
+        }
+        List<Finding> kept = new ArrayList<>();
+        for (Finding finding : findings) {
+            if (!isSuppressed(finding, suppressions)) {
+                kept.add(finding);
+            }
+        }
+        findings.clear();
+        findings.addAll(kept);
+    }
+
     /** Findings sorted by file, then line, then rule id — stable output order. */
     public List<Finding> findings() {
         List<Finding> sorted = new ArrayList<>(findings);
@@ -53,5 +67,14 @@ public final class FindingCollector {
             }
         }
         return worst;
+    }
+
+    private static boolean isSuppressed(Finding finding, Collection<Suppression> suppressions) {
+        for (Suppression suppression : suppressions) {
+            if (suppression.suppresses(finding)) {
+                return true;
+            }
+        }
+        return false;
     }
 }

@@ -7,8 +7,8 @@ import java.util.Objects;
  * {@code // flower-check:ignore FLOWER-CHECK-004 reason: <text>}.
  *
  * <p>A reason is mandatory (see {@code docs/01-architecture.md} Suppression).
- * Skeleton: a value holder. The comment scanner and the match logic against a
- * {@link Finding} (same file, same rule, same/adjacent line) are TODO.
+ * Suppressions are intentionally narrow: same file, same rule, and the same
+ * line or the immediately following line.
  */
 public final class Suppression {
 
@@ -19,9 +19,12 @@ public final class Suppression {
 
     public Suppression(String file, int line, String ruleId, String reason) {
         this.file = Objects.requireNonNull(file, "file");
+        if (line < 1) {
+            throw new IllegalArgumentException("suppression line must be positive");
+        }
         this.line = line;
-        this.ruleId = Objects.requireNonNull(ruleId, "ruleId");
-        this.reason = Objects.requireNonNull(reason, "reason");
+        this.ruleId = requiredText(ruleId, "ruleId");
+        this.reason = requiredText(reason, "reason");
     }
 
     public String file() {
@@ -42,9 +45,16 @@ public final class Suppression {
 
     /** True when this suppression should silence the given finding. */
     public boolean suppresses(Finding finding) {
-        // TODO(codex): match file + ruleId, and line within the suppressed element.
         return file.equals(finding.file())
                 && ruleId.equals(finding.ruleId())
-                && line == finding.line();
+                && (line == finding.line() || line + 1 == finding.line());
+    }
+
+    private static String requiredText(String value, String name) {
+        String text = Objects.requireNonNull(value, name).trim();
+        if (text.isEmpty()) {
+            throw new IllegalArgumentException("suppression " + name + " is required");
+        }
+        return text;
     }
 }
