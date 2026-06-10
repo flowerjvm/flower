@@ -3,6 +3,7 @@ package io.github.parkkevinsb.flower.check.config;
 import io.github.parkkevinsb.flower.check.rule.Severity;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashSet;
@@ -20,11 +21,18 @@ import java.util.Set;
  */
 public final class FlowerCheckConfig {
 
+    private static final List<String> DEFAULT_SCHEDULER_APPROVAL_ANNOTATIONS = Arrays.asList(
+            "FlowerSchedulerApproved",
+            "UserApprovedScheduler",
+            "SchedulerApproved",
+            "ApprovedScheduler");
+
     private final Severity failOn;
     private final Map<String, Severity> severityOverrides;
     private final Set<String> disabledRules;
     private final List<String> stepBaseClasses;
     private final List<String> providerClientNames;
+    private final List<String> schedulerApprovalAnnotations;
     private final boolean agentRulesEnabled;
 
     private FlowerCheckConfig(Builder b) {
@@ -33,6 +41,8 @@ public final class FlowerCheckConfig {
         this.disabledRules = Collections.unmodifiableSet(new LinkedHashSet<>(b.disabledRules));
         this.stepBaseClasses = Collections.unmodifiableList(new ArrayList<>(b.stepBaseClasses));
         this.providerClientNames = Collections.unmodifiableList(new ArrayList<>(b.providerClientNames));
+        this.schedulerApprovalAnnotations =
+                Collections.unmodifiableList(new ArrayList<>(b.schedulerApprovalAnnotations));
         this.agentRulesEnabled = b.agentRulesEnabled;
     }
 
@@ -65,6 +75,11 @@ public final class FlowerCheckConfig {
         return providerClientNames;
     }
 
+    /** Annotation names that mark a recurring scheduler as explicitly user-approved. */
+    public List<String> schedulerApprovalAnnotations() {
+        return schedulerApprovalAnnotations;
+    }
+
     public boolean agentRulesEnabled() {
         return agentRulesEnabled;
     }
@@ -89,6 +104,9 @@ public final class FlowerCheckConfig {
         for (String name : providerClientNames) {
             copy.addProviderClientName(name);
         }
+        for (String name : schedulerApprovalAnnotations) {
+            copy.addSchedulerApprovalAnnotation(name);
+        }
         return copy;
     }
 
@@ -98,6 +116,8 @@ public final class FlowerCheckConfig {
         private final Set<String> disabledRules = new LinkedHashSet<>();
         private final List<String> stepBaseClasses = new ArrayList<>();
         private final List<String> providerClientNames = new ArrayList<>();
+        private final List<String> schedulerApprovalAnnotations =
+                new ArrayList<>(DEFAULT_SCHEDULER_APPROVAL_ANNOTATIONS);
         private boolean agentRulesEnabled = false; // Tier 2 is opt-in
 
         public Builder failOn(Severity failOn) {
@@ -122,6 +142,13 @@ public final class FlowerCheckConfig {
 
         public Builder addProviderClientName(String name) {
             this.providerClientNames.add(name);
+            return this;
+        }
+
+        public Builder addSchedulerApprovalAnnotation(String name) {
+            if (!this.schedulerApprovalAnnotations.contains(name)) {
+                this.schedulerApprovalAnnotations.add(name);
+            }
             return this;
         }
 

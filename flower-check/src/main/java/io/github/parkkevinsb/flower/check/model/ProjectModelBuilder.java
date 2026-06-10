@@ -2,6 +2,7 @@ package io.github.parkkevinsb.flower.check.model;
 
 import com.github.javaparser.ast.CompilationUnit;
 import com.github.javaparser.ast.Node;
+import com.github.javaparser.ast.expr.AnnotationExpr;
 import com.github.javaparser.ast.body.BodyDeclaration;
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
 import com.github.javaparser.ast.body.ConstructorDeclaration;
@@ -56,6 +57,11 @@ public final class ProjectModelBuilder {
             "send", "create", "write", "mutate"));
     private static final Set<String> BLOCKING_METHODS = new HashSet<>(Arrays.asList(
             "sleep", "wait", "join"));
+    private static final Set<String> SCHEDULER_ANNOTATIONS = new HashSet<>(Arrays.asList(
+            "Scheduled", "Schedules", "EnableScheduling"));
+    private static final Set<String> RECURRING_SCHEDULER_METHODS = new HashSet<>(Arrays.asList(
+            "scheduleAtFixedRate", "scheduleWithFixedDelay",
+            "addCronTask", "addFixedRateTask", "addFixedDelayTask"));
     private static final List<String> DEFAULT_PROVIDER_NAMES = Arrays.asList(
             "OpenAI", "Anthropic", "ChatClient", "LlmClient", "LLMClient", "AiClient", "AIClient");
 
@@ -82,6 +88,7 @@ public final class ProjectModelBuilder {
             analyzeStepClasses(ast, classesByName, facts);
             analyzeFlowFactories(ast, classesByName, constants, flowBuilders, facts);
             analyzeSharedStepInstances(ast, facts);
+            analyzeSchedulerUsage(ast, facts);
             analyzeAgentFacts(ast, facts);
         }
 
@@ -844,6 +851,117 @@ public final class ProjectModelBuilder {
 
     private boolean looksLikeStepType(String typeName) {
         return simpleType(typeName).endsWith("Step");
+    }
+
+    private void analyzeSchedulerUsage(UnitAst ast, List<AnalysisFact> facts) {
+        for (MethodDeclaration method : ast.compilationUnit.findAll(MethodDeclaration.class)) {
+            for (AnnotationExpr annotation : method.getAnnotations()) {
+                String name = simpleType(annotation.getNameAsString());
+                if (SCHEDULER_ANNOTATIONS.contains(name) && !hasSchedulerApproval(method)) {
+                    facts.add(new AnalysisFact(
+                            AnalysisFact.UNAPPROVED_RECURRING_SCHEDULER,
+                            ast.file,
+                            line(annotation),
+                            column(annotation),
+                            "@" + name,
+                            "recurring scheduler annotation @" + name
+                                    + " has no explicit user approval annotation"));
+                }
+            }
+        }
+
+        for (ClassOrInterfaceDeclaration declaration
+                : ast.compilationUnit.findAll(ClassOrInterfaceDeclaration.class)) {
+            for (AnnotationExpr annotation : declaration.getAnnotations()) {
+                String name = simpleType(annotation.getNameAsString());
+                if ("EnableScheduling".equals(name) && !hasSchedulerApproval(declaration)) {
+                    facts.add(new AnalysisFact(
+                            AnalysisFact.UNAPPROVED_RECURRING_SCHEDULER,
+                            ast.file,
+                            line(annotation),
+                            column(annotation),
+                            "@" + name,
+                            "Spring scheduling is enabled without an explicit user approval annotation"));
+                }
+            }
+        }
+
+        for (MethodCallExpr call : ast.compilationUnit.findAll(MethodCallExpr.class)) {
+            if (isRecurringSchedulerCall(call) && !hasSchedulerApproval(call)) {
+                facts.add(new AnalysisFact(
+                        AnalysisFact.UNAPPROVED_RECURRING_SCHEDULER,
+                        ast.file,
+                        line(call),
+                        column(call),
+                        call.getNameAsString() + "(...)",
+                        "recurring scheduler call " + call.getNameAsString()
+                                + "(...) has no explicit user approval annotation"));
+            }
+        }
+    }
+
+    private boolean isRecurringSchedulerCall(MethodCallExpr call) {
+        String name = call.getNameAsString();
+        if (RECURRING_SCHEDULER_METHODS.contains(name)) {
+            return true;
+        }
+        if ("schedule".equals(name) && call.getArguments().size() >= 3 && call.getScope().isPresent()) {
+            return call.getScope().get().toString().toLowerCase(Locale.ROOT).contains("timer");
+        }
+        return false;
+    }
+
+    private boolean hasSchedulerApproval(Node node) {
+        if (node instanceof MethodDeclaration
+                && hasSchedulerApprovalAnnotation(((MethodDeclaration) node).getAnnotations())) {
+            return true;
+        }
+        if (node instanceof ClassOrInterfaceDeclaration
+                && hasSchedulerApprovalAnnotation(((ClassOrInterfaceDeclaration) node).getAnnotations())) {
+            return true;
+        }
+        MethodDeclaration method = enclosingMethod(node);
+        if (method != null && hasSchedulerApprovalAnnotation(method.getAnnotations())) {
+            return true;
+        }
+        ClassOrInterfaceDeclaration declaration = enclosingClass(node);
+        return declaration != null && hasSchedulerApprovalAnnotation(declaration.getAnnotations());
+    }
+
+    private boolean hasSchedulerApprovalAnnotation(Iterable<AnnotationExpr> annotations) {
+        for (AnnotationExpr annotation : annotations) {
+            String name = simpleType(annotation.getNameAsString());
+            for (String approved : config.schedulerApprovalAnnotations()) {
+                if (name.equals(simpleType(approved))) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    private MethodDeclaration enclosingMethod(Node node) {
+        Optional<Node> current = node.getParentNode();
+        while (current.isPresent()) {
+            Node parent = current.get();
+            if (parent instanceof MethodDeclaration) {
+                return (MethodDeclaration) parent;
+            }
+            current = parent.getParentNode();
+        }
+        return null;
+    }
+
+    private ClassOrInterfaceDeclaration enclosingClass(Node node) {
+        Optional<Node> current = node.getParentNode();
+        while (current.isPresent()) {
+            Node parent = current.get();
+            if (parent instanceof ClassOrInterfaceDeclaration) {
+                return (ClassOrInterfaceDeclaration) parent;
+            }
+            current = parent.getParentNode();
+        }
+        return null;
     }
 
     private void analyzeAgentFacts(UnitAst ast, List<AnalysisFact> facts) {

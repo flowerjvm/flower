@@ -16,3 +16,4 @@ io.github.parkkevinsb.flower.check.rule.core.RawSubscriptionRule
 io.github.parkkevinsb.flower.check.rule.core.DuplicateStepIdRule
 io.github.parkkevinsb.flower.check.rule.core.ExecutionContextRule
 io.github.parkkevinsb.flower.check.rule.core.SharedStepInstanceRule
+io.github.parkkevinsb.flower.check.rule.core.SchedulerApprovalRule

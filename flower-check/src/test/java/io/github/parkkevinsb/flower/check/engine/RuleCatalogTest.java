@@ -211,6 +211,80 @@ class RuleCatalogTest {
     }
 
     @Test
+    void detectsSpringScheduledMethodWithoutApproval(@TempDir Path root) throws IOException {
+        writeJava(root, "ScheduledCleanup.java",
+                "package demo;",
+                "@interface Scheduled { long fixedRate() default 0L; }",
+                "class ScheduledCleanup {",
+                "    @Scheduled(fixedRate = 1000L)",
+                "    void run() { }",
+                "}");
+
+        assertHasRule(run(root), "FLOWER-CHECK-016");
+    }
+
+    @Test
+    void allowsScheduledMethodWithDefaultApprovalAnnotation(@TempDir Path root) throws IOException {
+        writeJava(root, "ApprovedScheduledCleanup.java",
+                "package demo;",
+                "@interface Scheduled { long fixedRate() default 0L; }",
+                "@interface FlowerSchedulerApproved { }",
+                "class ApprovedScheduledCleanup {",
+                "    @FlowerSchedulerApproved",
+                "    @Scheduled(fixedRate = 1000L)",
+                "    void run() { }",
+                "}");
+
+        assertThat(run(root).findings()).isEmpty();
+    }
+
+    @Test
+    void detectsRecurringSchedulerApiWithoutApproval(@TempDir Path root) throws IOException {
+        writeJava(root, "PollingJob.java",
+                "package demo;",
+                "class PollingJob {",
+                "    void start(java.util.concurrent.ScheduledExecutorService scheduler) {",
+                "        scheduler.scheduleAtFixedRate(() -> { }, 0L, 1L, java.util.concurrent.TimeUnit.SECONDS);",
+                "    }",
+                "}");
+
+        assertHasRule(run(root), "FLOWER-CHECK-016");
+    }
+
+    @Test
+    void allowsRecurringSchedulerApiWithConfiguredApprovalAnnotation(@TempDir Path root) throws IOException {
+        writeJava(root, "ApprovedPollingJob.java",
+                "package demo;",
+                "@interface ProjectSchedulerApproved { }",
+                "@ProjectSchedulerApproved",
+                "class ApprovedPollingJob {",
+                "    void start(java.util.concurrent.ScheduledExecutorService scheduler) {",
+                "        scheduler.scheduleWithFixedDelay(() -> { }, 0L, 1L, java.util.concurrent.TimeUnit.SECONDS);",
+                "    }",
+                "}");
+
+        CheckResult result = FlowerCheckEngine.create(FlowerCheckConfig.builder()
+                        .addSchedulerApprovalAnnotation("ProjectSchedulerApproved")
+                        .build())
+                .run(Collections.singletonList(root.toString()));
+
+        assertThat(result.findings()).isEmpty();
+    }
+
+    @Test
+    void allowsOneShotTaskSchedulerScheduleWithoutApproval(@TempDir Path root) throws IOException {
+        writeJava(root, "PartnerDelay.java",
+                "package demo;",
+                "class PartnerDelay {",
+                "    void delay(TaskScheduler scheduler) {",
+                "        scheduler.schedule(() -> { }, java.time.Instant.now());",
+                "    }",
+                "}");
+
+        assertThat(run(root).findings()).isEmpty();
+    }
+
+    @Test
     void agentRulesAreOptIn(@TempDir Path root) throws IOException {
         writeJava(root, "DeleteAction.java",
                 "package demo;",

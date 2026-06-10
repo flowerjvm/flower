@@ -58,6 +58,11 @@ Use this map before adding or tightening a rule:
 09-flower-testkit.md
   - testkit is outside core and depends on core only
   - deterministic Flow tests should use harness-style tick/assert helpers
+
+User scheduler approval requirement
+  - recurring Spring/Java schedulers must not be introduced as an AI shortcut
+  - every recurring scheduler must carry an explicit user-approval annotation
+  - one-shot delayed simulation remains allowed; repeated/cron work is gated
 ```
 
 If a rule cannot point to one of these anchors or to equivalent upstream source
@@ -123,7 +128,7 @@ every other Flow on that Worker.
 
 ---
 
-## Tier 1 — Step / Flow Usage (FLOWER-CHECK-001..005, 009..015)
+## Tier 1 — Step / Flow Usage (FLOWER-CHECK-001..005, 009..016)
 
 ### FLOWER-CHECK-001 — No blocking on the Worker thread
 
@@ -436,6 +441,50 @@ Detection: a Step-typed field/local that is `static` or reused across multiple
 
 ---
 
+### FLOWER-CHECK-016 — Recurring schedulers require explicit user approval
+
+**Severity:** ERROR
+
+**What:** Code introduces recurring scheduler behavior without an approval
+annotation on the same method or class:
+
+```text
+@Scheduled(...)
+@EnableScheduling
+scheduler.scheduleAtFixedRate(...)
+scheduler.scheduleWithFixedDelay(...)
+taskRegistrar.addCronTask(...) / addFixedRateTask(...) / addFixedDelayTask(...)
+timer.scheduleAtFixedRate(...)
+```
+
+The default approval annotation names are:
+
+```text
+@FlowerSchedulerApproved
+@UserApprovedScheduler
+@SchedulerApproved
+@ApprovedScheduler
+```
+
+Projects may add more names through `schedulerApprovalAnnotations` in
+`flower-check.config`.
+
+**Why:** Recurring schedulers are a common escape hatch when an agent does not
+want to model waiting, retry, or approval through Flower's explicit Step/Flow
+boundary. Hidden cron/poll loops can duplicate Flow execution, bypass user
+approval, or keep doing work after the Flow should be parked.
+
+**Fix:** Prefer an explicit Flower wait pattern: start the external request,
+return `StepResult.stay()`, and resume from an event/signal/timeout. If a real
+recurring scheduler is still required, get user approval and mark the method or
+class with an approved annotation.
+
+Detection: AST scan for Spring scheduling annotations and recurring Java/Spring
+scheduler APIs. One-shot delayed calls such as `TaskScheduler.schedule(...,
+Instant)` are not flagged; they are not periodic work.
+
+---
+
 ## Tier 2 — Agent Runtime (FLOWER-CHECK-006..008)
 
 These target the future agent/harness layer described as outside `flower-core`
@@ -516,6 +565,7 @@ FLOWER-CHECK-012  WARNING  Prefer framework-managed subscriptions in a Step
 FLOWER-CHECK-013  ERROR    Step ids must be unique within a Flow
 FLOWER-CHECK-014  WARNING  ExecutionContext is not a business context
 FLOWER-CHECK-015  WARNING  Do not share a Step instance across Flows
+FLOWER-CHECK-016  ERROR    Recurring schedulers require user approval
 ```
 
 ## False-Positive Baseline

@@ -25,6 +25,8 @@ class ConfigLoaderTest {
                 "stepBaseClasses:",
                 "  - com.acme.flow.AbstractDomainStep",
                 "providerClientNames: OpenAIClient, com.acme.llm.ProviderClient",
+                "schedulerApprovalAnnotations:",
+                "  - ProjectSchedulerApproved",
                 "agentRulesEnabled: true");
 
         FlowerCheckConfig config = new ConfigLoader().load(Optional.of(configFile));
@@ -34,6 +36,7 @@ class ConfigLoaderTest {
         assertThat(config.isDisabled("FLOWER-CHECK-007")).isTrue();
         assertThat(config.stepBaseClasses()).containsExactly("com.acme.flow.AbstractDomainStep");
         assertThat(config.providerClientNames()).containsExactly("OpenAIClient", "com.acme.llm.ProviderClient");
+        assertThat(config.schedulerApprovalAnnotations()).contains("ProjectSchedulerApproved");
         assertThat(config.agentRulesEnabled()).isTrue();
     }
 

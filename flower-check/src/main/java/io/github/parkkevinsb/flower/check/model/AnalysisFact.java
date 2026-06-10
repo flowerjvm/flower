@@ -23,6 +23,7 @@ public final class AnalysisFact {
     public static final String DUPLICATE_STEP_ID = "duplicate-step-id";
     public static final String EXECUTION_CONTEXT_BUSINESS_USE = "execution-context-business-use";
     public static final String SHARED_STEP_INSTANCE = "shared-step-instance";
+    public static final String UNAPPROVED_RECURRING_SCHEDULER = "unapproved-recurring-scheduler";
     public static final String AGENT_WRITE_BYPASS = "agent-write-bypass";
     public static final String AGENT_MISSING_AUDIT = "agent-missing-audit";
     public static final String APPROVAL_DIRECT_EXECUTION = "approval-direct-execution";

@@ -24,6 +24,8 @@ import io.github.parkkevinsb.flower.check.rule.Severity;
  * stepBaseClasses:
  *   - com.acme.flow.AbstractDomainStep
  * providerClientNames: OpenAIClient, com.acme.llm.Client
+ * schedulerApprovalAnnotations:
+ *   - ProjectSchedulerApproved
  * agentRulesEnabled: true
  * </pre>
  */
@@ -113,6 +115,8 @@ public final class ConfigLoader {
                 addListValues(lineNo, "stepbaseclasses", value);
             } else if ("providerclientnames".equals(normalized)) {
                 addListValues(lineNo, "providerclientnames", value);
+            } else if ("schedulerapprovalannotations".equals(normalized)) {
+                addListValues(lineNo, "schedulerapprovalannotations", value);
             } else if ("disabledrules".equals(normalized)) {
                 addListValues(lineNo, "disabledrules", value);
             } else if ("rules".equals(normalized) || "severity".equals(normalized)) {
@@ -175,6 +179,8 @@ public final class ConfigLoader {
                     builder.addStepBaseClass(cleaned);
                 } else if ("providerclientnames".equals(sectionName)) {
                     builder.addProviderClientName(cleaned);
+                } else if ("schedulerapprovalannotations".equals(sectionName)) {
+                    builder.addSchedulerApprovalAnnotation(cleaned);
                 } else if ("disabledrules".equals(sectionName)) {
                     builder.disableRule(cleaned);
                 } else {
@@ -207,6 +213,7 @@ public final class ConfigLoader {
                     || "severity".equals(key)
                     || "stepbaseclasses".equals(key)
                     || "providerclientnames".equals(key)
+                    || "schedulerapprovalannotations".equals(key)
                     || "disabledrules".equals(key);
         }
 
