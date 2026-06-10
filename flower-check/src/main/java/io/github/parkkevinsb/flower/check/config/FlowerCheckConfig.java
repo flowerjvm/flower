@@ -15,8 +15,8 @@ import java.util.Set;
  * overrides, disabled rules, project-specific Step base classes, and opt-in
  * switches. Defaults are strict (see {@code docs/00-INDEX.md} governance).
  *
- * <p>Skeleton: immutable value built through {@link Builder}. {@link ConfigLoader}
- * will populate it from a config file; for now {@link #defaults()} is used.
+ * <p>Immutable value built through {@link Builder}. {@link ConfigLoader}
+ * populates it from the small {@code flower-check.config} format.
  */
 public final class FlowerCheckConfig {
 
@@ -71,6 +71,25 @@ public final class FlowerCheckConfig {
 
     public static Builder builder() {
         return new Builder();
+    }
+
+    public Builder toBuilder() {
+        Builder copy = builder()
+                .failOn(failOn)
+                .agentRulesEnabled(agentRulesEnabled);
+        for (Map.Entry<String, Severity> e : severityOverrides.entrySet()) {
+            copy.overrideSeverity(e.getKey(), e.getValue());
+        }
+        for (String ruleId : disabledRules) {
+            copy.disableRule(ruleId);
+        }
+        for (String name : stepBaseClasses) {
+            copy.addStepBaseClass(name);
+        }
+        for (String name : providerClientNames) {
+            copy.addProviderClientName(name);
+        }
+        return copy;
     }
 
     public static final class Builder {

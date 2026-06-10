@@ -1,0 +1,78 @@
+package io.github.parkkevinsb.flower.check.config;
+
+import io.github.parkkevinsb.flower.check.rule.Severity;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
+
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.Optional;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
+class ConfigLoaderTest {
+
+    @Test
+    void loadsDocumentShapeConfig(@TempDir Path root) throws IOException {
+        Path configFile = writeConfig(root,
+                "rules:",
+                "  FLOWER-CHECK-004: warning",
+                "  FLOWER-CHECK-007: off",
+                "failOn: warning",
+                "stepBaseClasses:",
+                "  - com.acme.flow.AbstractDomainStep",
+                "providerClientNames: OpenAIClient, com.acme.llm.ProviderClient",
+                "agentRulesEnabled: true");
+
+        FlowerCheckConfig config = new ConfigLoader().load(Optional.of(configFile));
+
+        assertThat(config.failOn()).isEqualTo(Severity.WARNING);
+        assertThat(config.effectiveSeverity("FLOWER-CHECK-004", Severity.ERROR)).isEqualTo(Severity.WARNING);
+        assertThat(config.isDisabled("FLOWER-CHECK-007")).isTrue();
+        assertThat(config.stepBaseClasses()).containsExactly("com.acme.flow.AbstractDomainStep");
+        assertThat(config.providerClientNames()).containsExactly("OpenAIClient", "com.acme.llm.ProviderClient");
+        assertThat(config.agentRulesEnabled()).isTrue();
+    }
+
+    @Test
+    void loadsInlineAliases(@TempDir Path root) throws IOException {
+        Path configFile = writeConfig(root,
+                "disabledRules: [FLOWER-CHECK-001, FLOWER-CHECK-002]",
+                "severity.FLOWER-CHECK-003: info",
+                "agentRules: yes");
+
+        FlowerCheckConfig config = new ConfigLoader().load(Optional.of(configFile));
+
+        assertThat(config.isDisabled("FLOWER-CHECK-001")).isTrue();
+        assertThat(config.isDisabled("FLOWER-CHECK-002")).isTrue();
+        assertThat(config.effectiveSeverity("FLOWER-CHECK-003", Severity.ERROR)).isEqualTo(Severity.INFO);
+        assertThat(config.agentRulesEnabled()).isTrue();
+    }
+
+    @Test
+    void rejectsUnknownKeys(@TempDir Path root) throws IOException {
+        Path configFile = writeConfig(root, "surprise: true");
+
+        assertThatThrownBy(() -> new ConfigLoader().load(Optional.of(configFile)))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("unknown config key");
+    }
+
+    @Test
+    void acceptsUtf8BomOnFirstKey(@TempDir Path root) throws IOException {
+        Path configFile = writeConfig(root, "\uFEFFrules:", "  FLOWER-CHECK-007: off");
+
+        FlowerCheckConfig config = new ConfigLoader().load(Optional.of(configFile));
+
+        assertThat(config.isDisabled("FLOWER-CHECK-007")).isTrue();
+    }
+
+    private static Path writeConfig(Path root, String... lines) throws IOException {
+        Path file = root.resolve("flower-check.config");
+        Files.write(file, String.join("\n", lines).getBytes(StandardCharsets.UTF_8));
+        return file;
+    }
+}

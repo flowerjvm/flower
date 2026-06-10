@@ -41,7 +41,7 @@ public final class FlowerCheckCli {
         try {
             config = configLoader.load(parsed.configPath());
             if (parsed.failOn().isPresent()) {
-                config = FlowerCheckConfig.builder()
+                config = config.toBuilder()
                         .failOn(parsed.failOn().get())
                         .build();
             }
