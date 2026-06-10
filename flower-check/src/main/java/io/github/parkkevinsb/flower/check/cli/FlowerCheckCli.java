@@ -4,12 +4,17 @@ import io.github.parkkevinsb.flower.check.config.ConfigLoader;
 import io.github.parkkevinsb.flower.check.config.FlowerCheckConfig;
 import io.github.parkkevinsb.flower.check.engine.CheckResult;
 import io.github.parkkevinsb.flower.check.engine.FlowerCheckEngine;
+import io.github.parkkevinsb.flower.check.finding.BaselineWriter;
+import io.github.parkkevinsb.flower.check.finding.Finding;
 import io.github.parkkevinsb.flower.check.report.PlainTextReporter;
 import io.github.parkkevinsb.flower.check.report.ReportFormat;
 import io.github.parkkevinsb.flower.check.report.Reporter;
 import io.github.parkkevinsb.flower.check.report.RuleListReporter;
 import io.github.parkkevinsb.flower.check.report.SarifReporter;
 import io.github.parkkevinsb.flower.check.rule.RuleRegistry;
+
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Command-line entry point. Wiring only: argument parsing, engine run,
@@ -18,6 +23,7 @@ import io.github.parkkevinsb.flower.check.rule.RuleRegistry;
  * <pre>
  * flower-check src/main/java
  * flower-check --config flower-check.config src/main/java another/src
+ * flower-check --write-baseline flower-check-baseline.txt src/main/java
  * flower-check --list-rules
  * </pre>
  */
@@ -43,7 +49,7 @@ public final class FlowerCheckCli {
 
         FlowerCheckConfig config;
         try {
-            config = configLoader.load(parsed.configPath());
+            config = configLoader.load(parsed.configPath(), parsed.baselineOutputPath().isPresent());
             if (parsed.failOn().isPresent()) {
                 config = config.toBuilder()
                         .failOn(parsed.failOn().get())
@@ -66,6 +72,22 @@ public final class FlowerCheckCli {
         } catch (RuntimeException e) {
             appendLine(err, "flower-check: " + e.getMessage());
             return ExitCode.USAGE;
+        }
+
+        if (parsed.baselineOutputPath().isPresent()) {
+            try {
+                List<Finding> baselineFindings = new ArrayList<>();
+                baselineFindings.addAll(result.acceptedFindings());
+                baselineFindings.addAll(result.findings());
+                int count = new BaselineWriter().write(baselineFindings, parsed.baselineOutputPath().get());
+                appendLine(out, "flower-check: wrote " + count + " baseline "
+                        + (count == 1 ? "finding" : "findings") + " to "
+                        + parsed.baselineOutputPath().get());
+                return ExitCode.OK;
+            } catch (RuntimeException e) {
+                appendLine(err, "flower-check: " + e.getMessage());
+                return ExitCode.USAGE;
+            }
         }
 
         reporter(parsed.reportFormat()).report(result.findings(), result.acceptedFindings(), out);

@@ -34,6 +34,10 @@ import io.github.parkkevinsb.flower.check.rule.Severity;
 public final class ConfigLoader {
 
     public FlowerCheckConfig load(Optional<Path> configPath) {
+        return load(configPath, false);
+    }
+
+    public FlowerCheckConfig load(Optional<Path> configPath, boolean allowMissingBaseline) {
         if (!configPath.isPresent()) {
             return FlowerCheckConfig.defaults();
         }
@@ -42,7 +46,7 @@ public final class ConfigLoader {
             throw new IllegalArgumentException("config file does not exist: " + path);
         }
         try {
-            return new Parser(path, Files.readAllLines(path, StandardCharsets.UTF_8)).parse();
+            return new Parser(path, Files.readAllLines(path, StandardCharsets.UTF_8), allowMissingBaseline).parse();
         } catch (IOException e) {
             throw new UncheckedIOException("could not read config file: " + path, e);
         }
@@ -51,12 +55,14 @@ public final class ConfigLoader {
     private static final class Parser {
         private final Path path;
         private final List<String> lines;
+        private final boolean allowMissingBaseline;
         private final FlowerCheckConfig.Builder builder = FlowerCheckConfig.builder();
         private String section;
 
-        Parser(Path path, List<String> lines) {
+        Parser(Path path, List<String> lines, boolean allowMissingBaseline) {
             this.path = path;
             this.lines = lines;
+            this.allowMissingBaseline = allowMissingBaseline;
         }
 
         FlowerCheckConfig parse() {
@@ -120,7 +126,10 @@ public final class ConfigLoader {
             } else if ("schedulerapprovalannotations".equals(normalized)) {
                 addListValues(lineNo, "schedulerapprovalannotations", value);
             } else if ("baselinefile".equals(normalized) || "baseline".equals(normalized)) {
-                builder.addBaselineEntries(new BaselineLoader().load(resolvePath(value)));
+                Path baseline = resolvePath(value);
+                if (Files.isRegularFile(baseline) || !allowMissingBaseline) {
+                    builder.addBaselineEntries(new BaselineLoader().load(baseline));
+                }
             } else if ("disabledrules".equals(normalized)) {
                 addListValues(lineNo, "disabledrules", value);
             } else if ("rules".equals(normalized) || "severity".equals(normalized)) {

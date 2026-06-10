@@ -110,6 +110,90 @@ class FlowerCheckCliTest {
     }
 
     @Test
+    void writesBaselineAndDoesNotFailOnCurrentFindings(@TempDir Path root) throws IOException {
+        Path baseline = root.resolve("flower-check-baseline.txt");
+        writeJava(root, "WaitStep.java",
+                "package demo;",
+                "class WaitStep extends Step {",
+                "    protected StepResult onTick(StepContext ctx) throws Exception {",
+                "        Thread.sleep(1000);",
+                "        return StepResult.done();",
+                "    }",
+                "}");
+
+        StringBuilder out = new StringBuilder();
+        StringBuilder err = new StringBuilder();
+        int code = new FlowerCheckCli().execute(new String[] {
+                "--write-baseline", baseline.toString(),
+                root.toString()
+        }, out, err);
+
+        assertThat(code).isEqualTo(ExitCode.OK);
+        assertThat(out.toString()).contains("wrote 1 baseline finding");
+        assertThat(new String(Files.readAllBytes(baseline), StandardCharsets.UTF_8))
+                .contains("FLOWER-CHECK-001 WaitStep.java:4");
+        assertThat(err.toString()).isEmpty();
+    }
+
+    @Test
+    void writeBaselineKeepsCurrentlyAcceptedDebt(@TempDir Path root) throws IOException {
+        Path config = root.resolve("flower-check.config");
+        Path baseline = root.resolve("flower-check-baseline.txt");
+        Files.write(baseline, "FLOWER-CHECK-001 WaitStep.java:4\n".getBytes(StandardCharsets.UTF_8));
+        Files.write(config, "baselineFile: flower-check-baseline.txt\n".getBytes(StandardCharsets.UTF_8));
+        writeJava(root, "WaitStep.java",
+                "package demo;",
+                "class WaitStep extends Step {",
+                "    protected StepResult onTick(StepContext ctx) throws Exception {",
+                "        Thread.sleep(1000);",
+                "        return StepResult.done();",
+                "    }",
+                "}");
+
+        StringBuilder out = new StringBuilder();
+        StringBuilder err = new StringBuilder();
+        int code = new FlowerCheckCli().execute(new String[] {
+                "--config", config.toString(),
+                "--write-baseline", baseline.toString(),
+                root.toString()
+        }, out, err);
+
+        assertThat(code).isEqualTo(ExitCode.OK);
+        assertThat(out.toString()).contains("wrote 1 baseline finding");
+        assertThat(new String(Files.readAllBytes(baseline), StandardCharsets.UTF_8))
+                .isEqualTo("FLOWER-CHECK-001 WaitStep.java:4\n");
+        assertThat(err.toString()).isEmpty();
+    }
+
+    @Test
+    void writeBaselineCanCreateConfiguredMissingBaselineFile(@TempDir Path root) throws IOException {
+        Path config = root.resolve("flower-check.config");
+        Path baseline = root.resolve("flower-check-baseline.txt");
+        Files.write(config, "baselineFile: flower-check-baseline.txt\n".getBytes(StandardCharsets.UTF_8));
+        writeJava(root, "WaitStep.java",
+                "package demo;",
+                "class WaitStep extends Step {",
+                "    protected StepResult onTick(StepContext ctx) throws Exception {",
+                "        Thread.sleep(1000);",
+                "        return StepResult.done();",
+                "    }",
+                "}");
+
+        StringBuilder out = new StringBuilder();
+        StringBuilder err = new StringBuilder();
+        int code = new FlowerCheckCli().execute(new String[] {
+                "--config", config.toString(),
+                "--write-baseline", baseline.toString(),
+                root.toString()
+        }, out, err);
+
+        assertThat(code).isEqualTo(ExitCode.OK);
+        assertThat(new String(Files.readAllBytes(baseline), StandardCharsets.UTF_8))
+                .isEqualTo("FLOWER-CHECK-001 WaitStep.java:4\n");
+        assertThat(err.toString()).isEmpty();
+    }
+
+    @Test
     void formatOptionSelectsSarifReporter(@TempDir Path root) throws IOException {
         writeJava(root, "WaitStep.java",
                 "package demo;",

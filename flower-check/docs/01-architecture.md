@@ -232,6 +232,7 @@ flower-check.config (or flower-check section in build config)
 flower-check src/main/java
 flower-check --config flower-check.config src/main/java another/src
 flower-check --format sarif src/main/java > flower-check.sarif
+flower-check --write-baseline flower-check-baseline.txt src/main/java
 flower-check --list-rules
 mvn verify
 mvn -Dflower.check.skip=true verify
@@ -242,6 +243,10 @@ exit 0   no findings at or above failOn
 exit 1   findings at or above failOn (build should fail)
 exit 2   usage error (bad arguments / unreadable path)
 ```
+
+`--write-baseline <file>` is an adoption/update mode. It writes the current
+findings in baseline format and exits 0 when writing succeeds, because the
+purpose is to record accepted debt before enabling the normal failing check.
 
 Maven `verify` runs the same engine from the `flower-check` module and scans
 the Flower reactor source roots. `-Dflower.check.skip=true` is available for

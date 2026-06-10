@@ -15,7 +15,8 @@ import java.util.Optional;
  *
  * <pre>
  * flower-check [--config &lt;file&gt;] [--fail-on error|warning|info]
- *              [--format plain|sarif] &lt;path&gt; [&lt;path&gt; ...]
+ *              [--format plain|sarif] [--write-baseline &lt;file&gt;]
+ *              &lt;path&gt; [&lt;path&gt; ...]
  * flower-check [--config &lt;file&gt;] --list-rules
  * </pre>
  *
@@ -28,17 +29,20 @@ public final class CliArguments {
     private final Optional<Path> configPath;
     private final Optional<Severity> failOn;
     private final ReportFormat reportFormat;
+    private final Optional<Path> baselineOutputPath;
     private final boolean listRules;
 
     private CliArguments(List<String> sourceRoots,
                          Optional<Path> configPath,
                          Optional<Severity> failOn,
                          ReportFormat reportFormat,
+                         Optional<Path> baselineOutputPath,
                          boolean listRules) {
         this.sourceRoots = sourceRoots;
         this.configPath = configPath;
         this.failOn = failOn;
         this.reportFormat = reportFormat;
+        this.baselineOutputPath = baselineOutputPath;
         this.listRules = listRules;
     }
 
@@ -58,6 +62,10 @@ public final class CliArguments {
         return reportFormat;
     }
 
+    public Optional<Path> baselineOutputPath() {
+        return baselineOutputPath;
+    }
+
     public boolean listRules() {
         return listRules;
     }
@@ -68,6 +76,7 @@ public final class CliArguments {
         Optional<Path> configPath = Optional.empty();
         Optional<Severity> failOn = Optional.empty();
         ReportFormat reportFormat = ReportFormat.PLAIN;
+        Optional<Path> baselineOutputPath = Optional.empty();
         boolean listRules = false;
 
         for (int i = 0; i < args.length; i++) {
@@ -81,6 +90,9 @@ public final class CliArguments {
                     break;
                 case "--format":
                     reportFormat = ReportFormat.parse(requireValue(args, ++i, "--format"));
+                    break;
+                case "--write-baseline":
+                    baselineOutputPath = Optional.of(Paths.get(requireValue(args, ++i, "--write-baseline")));
                     break;
                 case "--list-rules":
                     listRules = true;
@@ -96,7 +108,10 @@ public final class CliArguments {
         if (roots.isEmpty() && !listRules) {
             throw new IllegalArgumentException("at least one source path is required");
         }
-        return new CliArguments(roots, configPath, failOn, reportFormat, listRules);
+        if (listRules && baselineOutputPath.isPresent()) {
+            throw new IllegalArgumentException("--write-baseline cannot be combined with --list-rules");
+        }
+        return new CliArguments(roots, configPath, failOn, reportFormat, baselineOutputPath, listRules);
     }
 
     private static String requireValue(String[] args, int index, String option) {
@@ -116,7 +131,7 @@ public final class CliArguments {
 
     public static String usage() {
         return "usage: flower-check [--config <file>] [--fail-on error|warning|info] "
-                + "[--format plain|sarif] <path> [<path> ...]\n"
+                + "[--format plain|sarif] [--write-baseline <file>] <path> [<path> ...]\n"
                 + "       flower-check [--config <file>] --list-rules";
     }
 }

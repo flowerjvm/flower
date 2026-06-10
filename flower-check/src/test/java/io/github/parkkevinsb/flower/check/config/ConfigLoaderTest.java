@@ -76,6 +76,24 @@ class ConfigLoaderTest {
     }
 
     @Test
+    void rejectsMissingBaselineFileByDefault(@TempDir Path root) throws IOException {
+        Path configFile = writeConfig(root, "baselineFile: flower-check-baseline.txt");
+
+        assertThatThrownBy(() -> new ConfigLoader().load(Optional.of(configFile)))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("baseline file does not exist");
+    }
+
+    @Test
+    void allowsMissingBaselineFileWhenWritingBaseline(@TempDir Path root) throws IOException {
+        Path configFile = writeConfig(root, "baselineFile: flower-check-baseline.txt");
+
+        FlowerCheckConfig config = new ConfigLoader().load(Optional.of(configFile), true);
+
+        assertThat(config.baselineEntries()).isEmpty();
+    }
+
+    @Test
     void rejectsUnknownKeys(@TempDir Path root) throws IOException {
         Path configFile = writeConfig(root, "surprise: true");
 

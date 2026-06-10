@@ -89,6 +89,7 @@ Local:
 
 ```bash
 flower-check src/main/java
+flower-check --write-baseline flower-check-baseline.txt src/main/java
 flower-check --list-rules
 ```
 
@@ -153,7 +154,8 @@ Current implementation:
 2. JavaParser is primary; conservative text fallback remains.
 3. Rules are discovered through ServiceLoader.
 4. Plain text and SARIF reporters are available.
-5. Maven verify runs flower-check over the Flower reactor source roots.
+5. Existing findings can be written to a baseline file for controlled adoption.
+6. Maven verify runs flower-check over the Flower reactor source roots.
 ```
 
 Use a parser when rules need structure, such as identifying classes extending
