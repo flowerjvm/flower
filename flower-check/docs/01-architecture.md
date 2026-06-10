@@ -209,6 +209,9 @@ disable the whole tool.
 - **Baseline file**: `flower-check-baseline.txt` records findings that exist
   today so a team can adopt the tool without fixing everything at once. New
   violations still fail; baselined ones are reported as accepted debt.
+  Baseline lines are intentionally copy/paste-friendly:
+  `FLOWER-CHECK-001 src/main/java/demo/WaitStep.java:42` (a severity token after
+  the rule id is also accepted).
 - **Config disable**: a rule can be turned off or down-graded in config, but
   the default posture is strict.
 
@@ -220,6 +223,7 @@ flower-check.config (or flower-check section in build config)
   failOn: error                    # build fails at this severity and above
   stepBaseClasses:                 # extra project-specific Step base classes
     - com.acme.flow.AbstractDomainStep
+  baselineFile: flower-check-baseline.txt
 ```
 
 ## CLI And Exit Codes

@@ -12,4 +12,8 @@ import java.util.List;
 public interface Reporter {
 
     void report(List<Finding> findings, Appendable out);
+
+    default void report(List<Finding> findings, List<Finding> acceptedFindings, Appendable out) {
+        report(findings, out);
+    }
 }

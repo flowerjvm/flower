@@ -58,7 +58,7 @@ public final class FlowerCheckCli {
             return ExitCode.USAGE;
         }
 
-        reporter.report(result.findings(), out);
+        reporter.report(result.findings(), result.acceptedFindings(), out);
         return result.failed() ? ExitCode.FINDINGS : ExitCode.OK;
     }
 

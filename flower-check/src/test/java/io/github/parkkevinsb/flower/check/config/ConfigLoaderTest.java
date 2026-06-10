@@ -56,6 +56,26 @@ class ConfigLoaderTest {
     }
 
     @Test
+    void loadsBaselineFileRelativeToConfig(@TempDir Path root) throws IOException {
+        Files.write(root.resolve("flower-check-baseline.txt"),
+                "FLOWER-CHECK-001 ERROR WaitStep.java:4\n".getBytes(StandardCharsets.UTF_8));
+        Path configFile = writeConfig(root, "baselineFile: flower-check-baseline.txt");
+
+        FlowerCheckConfig config = new ConfigLoader().load(Optional.of(configFile));
+
+        assertThat(config.baselineEntries()).hasSize(1);
+        assertThat(config.baselineEntries().get(0).matches(io.github.parkkevinsb.flower.check.finding.Finding.builder()
+                .ruleId("FLOWER-CHECK-001")
+                .severity(Severity.ERROR)
+                .file("WaitStep.java")
+                .line(4)
+                .what("what")
+                .why("why")
+                .fix("fix")
+                .build())).isTrue();
+    }
+
+    @Test
     void rejectsUnknownKeys(@TempDir Path root) throws IOException {
         Path configFile = writeConfig(root, "surprise: true");
 

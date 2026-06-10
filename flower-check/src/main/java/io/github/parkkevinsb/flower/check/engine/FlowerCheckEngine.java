@@ -79,11 +79,12 @@ public final class FlowerCheckEngine {
             }
         }
         collector.suppressAll(suppressions);
+        List<Finding> acceptedFindings = collector.acceptBaseline(config.baselineEntries());
 
         // Decide failure.
         List<Finding> findings = collector.findings();
         Severity worst = collector.worstSeverity();
         boolean failed = worst != null && worst.atLeast(config.failOn());
-        return new CheckResult(findings, worst, failed);
+        return new CheckResult(findings, acceptedFindings, worst, failed);
     }
 }

@@ -13,17 +13,31 @@ import java.util.List;
 public final class CheckResult {
 
     private final List<Finding> findings;
+    private final List<Finding> acceptedFindings;
     private final Severity worstSeverity;
     private final boolean failed;
 
     public CheckResult(List<Finding> findings, Severity worstSeverity, boolean failed) {
+        this(findings, Collections.<Finding>emptyList(), worstSeverity, failed);
+    }
+
+    public CheckResult(List<Finding> findings,
+                       List<Finding> acceptedFindings,
+                       Severity worstSeverity,
+                       boolean failed) {
         this.findings = Collections.unmodifiableList(findings);
+        this.acceptedFindings = Collections.unmodifiableList(acceptedFindings);
         this.worstSeverity = worstSeverity;
         this.failed = failed;
     }
 
     public List<Finding> findings() {
         return findings;
+    }
+
+    /** Findings accepted by the baseline. They are reported but do not fail the run. */
+    public List<Finding> acceptedFindings() {
+        return acceptedFindings;
     }
 
     /** Highest severity seen, or null when there were no findings. */

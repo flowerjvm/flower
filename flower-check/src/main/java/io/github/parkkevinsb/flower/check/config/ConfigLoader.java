@@ -9,6 +9,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
 
+import io.github.parkkevinsb.flower.check.finding.BaselineLoader;
 import io.github.parkkevinsb.flower.check.rule.Severity;
 
 /**
@@ -26,6 +27,7 @@ import io.github.parkkevinsb.flower.check.rule.Severity;
  * providerClientNames: OpenAIClient, com.acme.llm.Client
  * schedulerApprovalAnnotations:
  *   - ProjectSchedulerApproved
+ * baselineFile: flower-check-baseline.txt
  * agentRulesEnabled: true
  * </pre>
  */
@@ -117,6 +119,8 @@ public final class ConfigLoader {
                 addListValues(lineNo, "providerclientnames", value);
             } else if ("schedulerapprovalannotations".equals(normalized)) {
                 addListValues(lineNo, "schedulerapprovalannotations", value);
+            } else if ("baselinefile".equals(normalized) || "baseline".equals(normalized)) {
+                builder.addBaselineEntries(new BaselineLoader().load(resolvePath(value)));
             } else if ("disabledrules".equals(normalized)) {
                 addListValues(lineNo, "disabledrules", value);
             } else if ("rules".equals(normalized) || "severity".equals(normalized)) {
@@ -215,6 +219,15 @@ public final class ConfigLoader {
                     || "providerclientnames".equals(key)
                     || "schedulerapprovalannotations".equals(key)
                     || "disabledrules".equals(key);
+        }
+
+        private Path resolvePath(String value) {
+            Path candidate = path.getFileSystem().getPath(cleaned(value));
+            if (candidate.isAbsolute()) {
+                return candidate.normalize();
+            }
+            Path parent = path.getParent();
+            return (parent == null ? candidate : parent.resolve(candidate)).normalize();
         }
 
         private IllegalArgumentException error(int lineNo, String message) {

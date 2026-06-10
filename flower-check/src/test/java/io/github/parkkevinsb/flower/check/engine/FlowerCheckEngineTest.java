@@ -1,6 +1,7 @@
 package io.github.parkkevinsb.flower.check.engine;
 
 import io.github.parkkevinsb.flower.check.config.FlowerCheckConfig;
+import io.github.parkkevinsb.flower.check.finding.BaselineEntry;
 import io.github.parkkevinsb.flower.check.finding.Finding;
 import io.github.parkkevinsb.flower.check.rule.Severity;
 import org.junit.jupiter.api.Test;
@@ -44,6 +45,49 @@ class FlowerCheckEngineTest {
         assertThat(finding.why()).isNotEmpty();
         assertThat(finding.fix()).isNotEmpty();
         assertThat(result.worstSeverity()).isEqualTo(Severity.ERROR);
+        assertThat(result.failed()).isTrue();
+    }
+
+    @Test
+    void baselineAcceptedFindingDoesNotFailRun(@TempDir Path root) throws IOException {
+        writeJava(root, "WaitStep.java",
+                "package demo;",
+                "class WaitStep extends Step {",
+                "    protected StepResult onTick(StepContext ctx) throws Exception {",
+                "        Thread.sleep(1000);",
+                "        return StepResult.done();",
+                "    }",
+                "}");
+
+        CheckResult result = FlowerCheckEngine.create(FlowerCheckConfig.builder()
+                        .addBaselineEntry(new BaselineEntry("FLOWER-CHECK-001", "WaitStep.java", 4))
+                        .build())
+                .run(Collections.singletonList(root.toString()));
+
+        assertThat(result.findings()).isEmpty();
+        assertThat(result.acceptedFindings()).hasSize(1);
+        assertThat(result.acceptedFindings().get(0).ruleId()).isEqualTo("FLOWER-CHECK-001");
+        assertThat(result.failed()).isFalse();
+    }
+
+    @Test
+    void baselineDoesNotHideNewFindingAtDifferentLine(@TempDir Path root) throws IOException {
+        writeJava(root, "WaitStep.java",
+                "package demo;",
+                "class WaitStep extends Step {",
+                "    protected StepResult onTick(StepContext ctx) throws Exception {",
+                "        Thread.sleep(1000);",
+                "        return StepResult.done();",
+                "    }",
+                "}");
+
+        CheckResult result = FlowerCheckEngine.create(FlowerCheckConfig.builder()
+                        .addBaselineEntry(new BaselineEntry("FLOWER-CHECK-001", "WaitStep.java", 99))
+                        .build())
+                .run(Collections.singletonList(root.toString()));
+
+        assertThat(result.findings()).hasSize(1);
+        assertThat(result.acceptedFindings()).isEmpty();
         assertThat(result.failed()).isTrue();
     }
 

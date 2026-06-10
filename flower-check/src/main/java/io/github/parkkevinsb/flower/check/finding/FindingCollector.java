@@ -11,8 +11,7 @@ import java.util.List;
  * Accumulates findings from a run and answers the questions the engine needs:
  * the sorted finding list and the worst severity seen.
  *
- * <p>Suppression filtering hooks in here so the engine stays simple. Baseline
- * handling will use the same collection boundary later.
+ * <p>Suppression and baseline filtering hook in here so the engine stays simple.
  */
 public final class FindingCollector {
 
@@ -48,14 +47,27 @@ public final class FindingCollector {
         findings.addAll(kept);
     }
 
+    public List<Finding> acceptBaseline(Collection<BaselineEntry> baselineEntries) {
+        List<Finding> accepted = new ArrayList<>();
+        if (baselineEntries.isEmpty() || findings.isEmpty()) {
+            return accepted;
+        }
+        List<Finding> kept = new ArrayList<>();
+        for (Finding finding : findings) {
+            if (isBaselined(finding, baselineEntries)) {
+                accepted.add(finding);
+            } else {
+                kept.add(finding);
+            }
+        }
+        findings.clear();
+        findings.addAll(kept);
+        return sorted(accepted);
+    }
+
     /** Findings sorted by file, then line, then rule id — stable output order. */
     public List<Finding> findings() {
-        List<Finding> sorted = new ArrayList<>(findings);
-        sorted.sort(Comparator
-                .comparing(Finding::file)
-                .thenComparingInt(Finding::line)
-                .thenComparing(Finding::ruleId));
-        return sorted;
+        return sorted(findings);
     }
 
     /** Highest severity among collected findings, or null when empty. */
@@ -76,5 +88,23 @@ public final class FindingCollector {
             }
         }
         return false;
+    }
+
+    private static boolean isBaselined(Finding finding, Collection<BaselineEntry> baselineEntries) {
+        for (BaselineEntry entry : baselineEntries) {
+            if (entry.matches(finding)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static List<Finding> sorted(Collection<Finding> source) {
+        List<Finding> sorted = new ArrayList<>(source);
+        sorted.sort(Comparator
+                .comparing(Finding::file)
+                .thenComparingInt(Finding::line)
+                .thenComparing(Finding::ruleId));
+        return sorted;
     }
 }

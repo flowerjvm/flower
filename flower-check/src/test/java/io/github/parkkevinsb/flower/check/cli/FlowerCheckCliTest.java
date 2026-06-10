@@ -41,6 +41,34 @@ class FlowerCheckCliTest {
         assertThat(err.toString()).isEmpty();
     }
 
+    @Test
+    void reportsBaselineAcceptedDebtWithoutFailing(@TempDir Path root) throws IOException {
+        Path config = root.resolve("flower-check.config");
+        Files.write(root.resolve("flower-check-baseline.txt"),
+                "FLOWER-CHECK-001 WaitStep.java:4\n".getBytes(StandardCharsets.UTF_8));
+        Files.write(config, "baselineFile: flower-check-baseline.txt\n".getBytes(StandardCharsets.UTF_8));
+        writeJava(root, "WaitStep.java",
+                "package demo;",
+                "class WaitStep extends Step {",
+                "    protected StepResult onTick(StepContext ctx) throws Exception {",
+                "        Thread.sleep(1000);",
+                "        return StepResult.done();",
+                "    }",
+                "}");
+
+        StringBuilder out = new StringBuilder();
+        StringBuilder err = new StringBuilder();
+        int code = new FlowerCheckCli().execute(new String[] {
+                "--config", config.toString(),
+                root.toString()
+        }, out, err);
+
+        assertThat(code).isEqualTo(ExitCode.OK);
+        assertThat(out.toString()).contains("accepted debt from baseline");
+        assertThat(out.toString()).contains("BASELINE  FLOWER-CHECK-001");
+        assertThat(err.toString()).isEmpty();
+    }
+
     private static void writeJava(Path root, String name, String... lines) throws IOException {
         Path file = root.resolve(name);
         Files.write(file, String.join("\n", lines).getBytes(StandardCharsets.UTF_8));

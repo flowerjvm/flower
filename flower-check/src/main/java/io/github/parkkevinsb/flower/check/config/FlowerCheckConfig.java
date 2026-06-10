@@ -1,5 +1,6 @@
 package io.github.parkkevinsb.flower.check.config;
 
+import io.github.parkkevinsb.flower.check.finding.BaselineEntry;
 import io.github.parkkevinsb.flower.check.rule.Severity;
 
 import java.util.ArrayList;
@@ -33,6 +34,7 @@ public final class FlowerCheckConfig {
     private final List<String> stepBaseClasses;
     private final List<String> providerClientNames;
     private final List<String> schedulerApprovalAnnotations;
+    private final List<BaselineEntry> baselineEntries;
     private final boolean agentRulesEnabled;
 
     private FlowerCheckConfig(Builder b) {
@@ -43,6 +45,7 @@ public final class FlowerCheckConfig {
         this.providerClientNames = Collections.unmodifiableList(new ArrayList<>(b.providerClientNames));
         this.schedulerApprovalAnnotations =
                 Collections.unmodifiableList(new ArrayList<>(b.schedulerApprovalAnnotations));
+        this.baselineEntries = Collections.unmodifiableList(new ArrayList<>(b.baselineEntries));
         this.agentRulesEnabled = b.agentRulesEnabled;
     }
 
@@ -80,6 +83,11 @@ public final class FlowerCheckConfig {
         return schedulerApprovalAnnotations;
     }
 
+    /** Findings accepted as existing debt for this run. New findings still fail. */
+    public List<BaselineEntry> baselineEntries() {
+        return baselineEntries;
+    }
+
     public boolean agentRulesEnabled() {
         return agentRulesEnabled;
     }
@@ -107,6 +115,9 @@ public final class FlowerCheckConfig {
         for (String name : schedulerApprovalAnnotations) {
             copy.addSchedulerApprovalAnnotation(name);
         }
+        for (BaselineEntry entry : baselineEntries) {
+            copy.addBaselineEntry(entry);
+        }
         return copy;
     }
 
@@ -118,6 +129,7 @@ public final class FlowerCheckConfig {
         private final List<String> providerClientNames = new ArrayList<>();
         private final List<String> schedulerApprovalAnnotations =
                 new ArrayList<>(DEFAULT_SCHEDULER_APPROVAL_ANNOTATIONS);
+        private final List<BaselineEntry> baselineEntries = new ArrayList<>();
         private boolean agentRulesEnabled = false; // Tier 2 is opt-in
 
         public Builder failOn(Severity failOn) {
@@ -149,6 +161,16 @@ public final class FlowerCheckConfig {
             if (!this.schedulerApprovalAnnotations.contains(name)) {
                 this.schedulerApprovalAnnotations.add(name);
             }
+            return this;
+        }
+
+        public Builder addBaselineEntry(BaselineEntry entry) {
+            this.baselineEntries.add(entry);
+            return this;
+        }
+
+        public Builder addBaselineEntries(List<BaselineEntry> entries) {
+            this.baselineEntries.addAll(entries);
             return this;
         }
 
