@@ -1,0 +1,45 @@
+name: Flower Check
+
+on:
+  pull_request:
+    paths:
+      - build.gradle
+      - build.gradle.kts
+      - settings.gradle
+      - settings.gradle.kts
+      - gradle.properties
+      - gradle/**
+      - gradlew
+      - gradlew.bat
+      - src/**
+      - flower-check.config
+      - .github/workflows/flower-check.yml
+      - .github/workflows/flower-check-gradle.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+
+      - name: Prepare Gradle wrapper
+        run: chmod +x ./gradlew
+
+      - name: Verify Flower usage
+        run: ./gradlew --no-daemon check
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

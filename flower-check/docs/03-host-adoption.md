@@ -25,6 +25,10 @@ Use the templates under `../templates/`:
 flower-check.config              default host configuration
 maven-plugin.xml                 dependency/plugin snippet for pom.xml
 github-actions-flower-check.yml  pull-request workflow example
+gradle-build.gradle.kts          Kotlin DSL task snippet for build.gradle.kts
+gradle-build.gradle              Groovy DSL task snippet for build.gradle
+github-actions-flower-check-gradle.yml
+                                 Gradle pull-request workflow example
 ```
 
 The templates are intentionally small and reviewable. They must not require a
@@ -57,6 +61,38 @@ site:
 The annotation is SOURCE-retained. It documents approval for source analysis
 and has no runtime behavior.
 
+## Gradle Adoption
+
+Until a dedicated Gradle plugin module exists, Gradle host projects should wire
+the `flower-check` CLI jar into the normal `check` lifecycle. Copy the matching
+snippet into the host build file:
+
+```text
+templates/gradle-build.gradle.kts  -> build.gradle.kts
+templates/gradle-build.gradle      -> build.gradle
+```
+
+The snippets create a detached `flowerCheck` configuration, add the
+`flower-check` CLI jar, add `flower-check-annotations` as `compileOnly`, and
+register a `flowerCheck` `JavaExec` task. The task scans `src/main/java` and is
+attached to `check`, so violations fail the normal Gradle build:
+
+```bash
+./gradlew check
+```
+
+Temporary local bypasses must stay explicit:
+
+```bash
+./gradlew -Pflower.check.skip=true check
+```
+
+For controlled debt migration, generate a reviewed baseline with:
+
+```bash
+./gradlew -Pflower.check.writeBaseline=flower-check-baseline.txt check
+```
+
 ## CI Adoption
 
 Copy `templates/github-actions-flower-check.yml` to:
@@ -73,6 +109,12 @@ If the host project consumes Flower snapshots from GitHub Packages, the
 workflow must provide package read credentials in Maven `settings.xml`. The
 template uses `GITHUB_TOKEN` for the common case. Cross-repository/private
 package access may require a repository secret with `read:packages`.
+
+For Gradle projects, copy `templates/github-actions-flower-check-gradle.yml`
+instead, usually to `.github/workflows/flower-check.yml`. The Gradle workflow
+runs `./gradlew --no-daemon check`, and the build script snippet reads
+`GITHUB_ACTOR` / `GITHUB_TOKEN` when resolving Flower artifacts from GitHub
+Packages.
 
 ## Existing Debt
 

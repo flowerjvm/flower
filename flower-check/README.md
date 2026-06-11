@@ -123,6 +123,10 @@ Copyable host project templates live in [`templates/`](templates):
 flower-check.config              default host configuration
 maven-plugin.xml                 dependency/plugin snippet for pom.xml
 github-actions-flower-check.yml  pull-request workflow example
+gradle-build.gradle.kts          Kotlin DSL task snippet for build.gradle.kts
+gradle-build.gradle              Groovy DSL task snippet for build.gradle
+github-actions-flower-check-gradle.yml
+                                 Gradle pull-request workflow example
 ```
 
 Then:
@@ -130,6 +134,8 @@ Then:
 ```bash
 mvn verify
 mvn -Dflower.check.skip=true verify
+./gradlew check
+./gradlew -Pflower.check.skip=true check
 ```
 
 This scans the host project's `src/main/java` by default. Any active finding at
