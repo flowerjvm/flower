@@ -15,6 +15,7 @@ on:
       - flower-check/**
       - flower-check-maven-plugin/**
       - flower-check-gradle-plugin/**
+      - .github/scripts/**
       - .github/workflows/ci.yml
 
 permissions:

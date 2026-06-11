@@ -17,6 +17,7 @@ on:
       - flower-check/**
       - flower-check-maven-plugin/**
       - flower-check-gradle-plugin/**
+      - .github/scripts/**
       - .github/workflows/publish.yml
 
 permissions:
@@ -77,6 +78,10 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Resolve Flower version
+        id: flower-version
+        run: echo "version=$(mvn -q -DforceStdout help:evaluate -Dexpression=project.version)" >> "$GITHUB_OUTPUT"
+
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
@@ -85,4 +90,11 @@ jobs:
       - name: Publish Gradle plugin to GitHub Packages
         run: gradle -p flower-check-gradle-plugin --no-daemon check publish
         env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Verify Gradle plugin remote consumption
+        run: bash .github/scripts/verify-flower-check-gradle-plugin-remote.sh
+        env:
+          FLOWER_VERSION: ${{ steps.flower-version.outputs.version }}
+          GITHUB_ACTOR: ${{ github.actor }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

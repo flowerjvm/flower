@@ -82,4 +82,6 @@ gradle -p flower-check-gradle-plugin --no-daemon check
 ```
 
 Publishing uses the Gradle `maven-publish` plugin and the same GitHub Packages
-repository as the Maven modules.
+repository as the Maven modules. The repository publish workflow verifies the
+published plugin by creating a temporary external Gradle project, resolving the
+plugin from GitHub Packages, and running `check`.

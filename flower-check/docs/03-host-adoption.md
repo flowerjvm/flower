@@ -149,6 +149,12 @@ runs `./gradlew --no-daemon check`, and the build script/plugin snippet reads
 `GITHUB_ACTOR` / `GITHUB_TOKEN` when resolving Flower artifacts from GitHub
 Packages.
 
+The Flower repository publish workflow also performs a remote-consumption smoke
+test after publishing `flower-check-gradle-plugin`: it creates a temporary host
+Gradle project, resolves the plugin from GitHub Packages, and runs `check`.
+This protects host projects from broken plugin marker metadata, credentials, or
+repository declarations.
+
 ## Existing Debt
 
 For a host project that already has findings, use one controlled adoption pass:
