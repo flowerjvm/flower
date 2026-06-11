@@ -32,6 +32,14 @@ is truly intentional:
 </plugin>
 ```
 
+The same snippet is available at
+[`../flower-check/templates/maven-plugin.xml`](../flower-check/templates/maven-plugin.xml).
+Use
+[`../flower-check/templates/flower-check.config`](../flower-check/templates/flower-check.config)
+and
+[`../flower-check/templates/github-actions-flower-check.yml`](../flower-check/templates/github-actions-flower-check.yml)
+as the starter host project configuration.
+
 Default behavior:
 
 ```text

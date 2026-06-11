@@ -117,6 +117,14 @@ Host application Maven build:
 </plugin>
 ```
 
+Copyable host project templates live in [`templates/`](templates):
+
+```text
+flower-check.config              default host configuration
+maven-plugin.xml                 dependency/plugin snippet for pom.xml
+github-actions-flower-check.yml  pull-request workflow example
+```
+
 Then:
 
 ```bash

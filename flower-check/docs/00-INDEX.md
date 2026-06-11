@@ -53,6 +53,9 @@ L2  docs/01-architecture.md
 L3  docs/02-rule-catalog.md
       The enforced rules (FLOWER-CHECK-001..015), each grounded and self-explaining.
 
+L3  docs/03-host-adoption.md
+      How host projects adopt flower-check through Maven and CI templates.
+
 L4  (none yet)
       Future: docs/19-progress.md or similar implementation logs.
 ```

@@ -8,6 +8,7 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -53,6 +54,18 @@ class ConfigLoaderTest {
         assertThat(config.isDisabled("FLOWER-CHECK-002")).isTrue();
         assertThat(config.effectiveSeverity("FLOWER-CHECK-003", Severity.ERROR)).isEqualTo(Severity.INFO);
         assertThat(config.agentRulesEnabled()).isTrue();
+    }
+
+    @Test
+    void loadsHostProjectTemplateConfig() {
+        Path template = templatePath("flower-check.config");
+
+        FlowerCheckConfig config = new ConfigLoader().load(Optional.of(template));
+
+        assertThat(config.failOn()).isEqualTo(Severity.ERROR);
+        assertThat(config.agentRulesEnabled()).isFalse();
+        assertThat(config.schedulerApprovalAnnotations()).contains("FlowerSchedulerApproved");
+        assertThat(config.baselineEntries()).isEmpty();
     }
 
     @Test
@@ -115,5 +128,14 @@ class ConfigLoaderTest {
         Path file = root.resolve("flower-check.config");
         Files.write(file, String.join("\n", lines).getBytes(StandardCharsets.UTF_8));
         return file;
+    }
+
+    private static Path templatePath(String name) {
+        Path userDir = Paths.get(System.getProperty("user.dir"));
+        Path fromModule = userDir.resolve("templates").resolve(name);
+        if (Files.isRegularFile(fromModule)) {
+            return fromModule;
+        }
+        return userDir.resolve("flower-check").resolve("templates").resolve(name);
     }
 }

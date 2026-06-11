@@ -1,0 +1,19 @@
+<dependency>
+    <groupId>io.github.parkkevinsb.flower</groupId>
+    <artifactId>flower-check-annotations</artifactId>
+    <version>0.1.0-SNAPSHOT</version>
+    <scope>provided</scope>
+</dependency>
+
+<plugin>
+    <groupId>io.github.parkkevinsb.flower</groupId>
+    <artifactId>flower-check-maven-plugin</artifactId>
+    <version>0.1.0-SNAPSHOT</version>
+    <executions>
+        <execution>
+            <goals>
+                <goal>check</goal>
+            </goals>
+        </execution>
+    </executions>
+</plugin>

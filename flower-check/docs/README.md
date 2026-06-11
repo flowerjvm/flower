@@ -23,4 +23,5 @@ L0  ../README.md             purpose, scope, non-goals (constitution)
 L1  00-INDEX.md              doc levels + governance + source of truth
 L2  01-architecture.md       how the checker is built
 L3  02-rule-catalog.md       the enforced rules (FLOWER-CHECK-001..015)
+L3  03-host-adoption.md      host Maven/CI adoption path
 ```
