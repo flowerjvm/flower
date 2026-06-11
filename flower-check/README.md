@@ -205,6 +205,8 @@ Current implementation:
 8. The Flower reactor also self-checks its own source roots during `verify`.
 9. Maven plugin behavior is covered by Invoker fixture projects that run real
    host `mvn verify` builds.
+10. Gradle adoption snippets have opt-in smoke coverage that runs temporary
+    host Gradle builds when `-Dflower.check.gradle.smoke=true` is set.
 ```
 
 Use a parser when rules need structure, such as identifying classes extending

@@ -73,6 +73,16 @@ The plugin runs Maven Invoker fixture projects that prove `mvn verify` succeeds
 for clean host code, fails for unsafe Flower Step blocking, accepts an explicit
 baseline, and accepts the official scheduler approval annotation.
 
+Gradle template smoke coverage is opt-in because the main Maven reactor should
+not require Gradle on every machine:
+
+```bash
+mvn -pl flower-check-maven-plugin -am verify -Dflower.check.gradle.smoke=true
+```
+
+If Gradle is not on `PATH`, add
+`-Dflower.check.gradle.executable=/path/to/gradle`.
+
 Scheduler approval example:
 
 ```java

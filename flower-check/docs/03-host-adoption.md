@@ -93,6 +93,22 @@ For controlled debt migration, generate a reviewed baseline with:
 ./gradlew -Pflower.check.writeBaseline=flower-check-baseline.txt check
 ```
 
+The Flower repository keeps Gradle template smoke tests opt-in so the normal
+Maven reactor does not require Gradle on every developer machine. To validate
+the templates against real temporary Gradle host projects, run:
+
+```bash
+mvn -pl flower-check-maven-plugin -am verify -Dflower.check.gradle.smoke=true
+```
+
+If Gradle is not on `PATH`, pass it explicitly:
+
+```bash
+mvn -pl flower-check-maven-plugin -am verify \
+  -Dflower.check.gradle.smoke=true \
+  -Dflower.check.gradle.executable=/path/to/gradle
+```
+
 ## CI Adoption
 
 Copy `templates/github-actions-flower-check.yml` to:
