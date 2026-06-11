@@ -138,6 +138,12 @@ The workflow runs `mvn -B verify` for pull requests. Because the Maven plugin is
 bound to `verify`, Flower usage violations block the pull request through the
 normal Maven build.
 
+The Flower repository publish workflow also performs a remote-consumption smoke
+test after publishing `flower-check-maven-plugin`: it creates a temporary host
+Maven project, resolves the plugin from GitHub Packages with an isolated local
+repository, and runs `verify`. This protects host projects from broken plugin
+metadata, credentials, or repository declarations.
+
 If the host project consumes Flower snapshots from GitHub Packages, the
 workflow must provide package read credentials in Maven `settings.xml`. The
 template uses `GITHUB_TOKEN` for the common case. Cross-repository/private
@@ -149,9 +155,9 @@ runs `./gradlew --no-daemon check`, and the build script/plugin snippet reads
 `GITHUB_ACTOR` / `GITHUB_TOKEN` when resolving Flower artifacts from GitHub
 Packages.
 
-The Flower repository publish workflow also performs a remote-consumption smoke
-test after publishing `flower-check-gradle-plugin`: it creates a temporary host
-Gradle project, resolves the plugin from GitHub Packages, and runs `check`.
+The Flower repository publish workflow performs the same remote-consumption
+smoke after publishing `flower-check-gradle-plugin`: it creates a temporary
+host Gradle project, resolves the plugin from GitHub Packages, and runs `check`.
 This protects host projects from broken plugin marker metadata, credentials, or
 repository declarations.
 

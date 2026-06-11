@@ -82,6 +82,13 @@ jobs:
         id: flower-version
         run: echo "version=$(mvn -q -DforceStdout help:evaluate -Dexpression=project.version)" >> "$GITHUB_OUTPUT"
 
+      - name: Verify Maven plugin remote consumption
+        run: bash .github/scripts/verify-flower-check-maven-plugin-remote.sh
+        env:
+          FLOWER_VERSION: ${{ steps.flower-version.outputs.version }}
+          GITHUB_ACTOR: ${{ github.actor }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
         with:

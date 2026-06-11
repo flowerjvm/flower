@@ -73,6 +73,10 @@ The plugin runs Maven Invoker fixture projects that prove `mvn verify` succeeds
 for clean host code, fails for unsafe Flower Step blocking, accepts an explicit
 baseline, and accepts the official scheduler approval annotation.
 
+The repository publish workflow also verifies the published plugin by creating
+a temporary external Maven project, resolving `flower-check-maven-plugin` from
+GitHub Packages with an isolated local repository, and running `verify`.
+
 Gradle template smoke coverage is opt-in because the main Maven reactor should
 not require Gradle on every machine:
 

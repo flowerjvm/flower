@@ -214,8 +214,9 @@ Current implementation:
     host Gradle builds when `-Dflower.check.gradle.smoke=true` is set.
 11. The dedicated Gradle plugin registers `flowerCheck`, wires it into `check`,
     and is covered by Gradle TestKit functional tests.
-12. The publish workflow re-consumes the published Gradle plugin from GitHub
-    Packages in a temporary host Gradle project before the snapshot is accepted.
+12. The publish workflow re-consumes the published Maven and Gradle plugins
+    from GitHub Packages in temporary host projects before the snapshot is
+    accepted.
 ```
 
 Use a parser when rules need structure, such as identifying classes extending
