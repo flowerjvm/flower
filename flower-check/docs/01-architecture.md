@@ -51,11 +51,12 @@ flower-check-annotations
                         optional SOURCE-retained policy markers for host code
 flower-check-maven-plugin
                         Maven plugin wrapper for host applications
-flower-check-gradle     Gradle plugin wrapper (later)
+flower-check-gradle-plugin
+                        Gradle plugin wrapper for host applications
 ```
 
 Do not add `flower-check` to the Maven reactor until there is real code, per
-the top-level README. The Maven and future Gradle wrappers are thin: they
+the top-level README. The Maven and Gradle wrappers are thin: they
 collect source roots and configuration, then call the same engine the CLI calls.
 
 Internal package layout:
@@ -256,7 +257,8 @@ Maven `verify` runs the same engine from the `flower-check` module and scans
 host application source roots when the `flower-check-maven-plugin` is added to
 that host build. The Flower reactor also self-checks its own source roots so the
 rules stay healthy. `-Dflower.check.skip=true` is available for explicit local
-bypass only. Gradle can later map the same engine onto a `flowerCheck` task.
+bypass only. Gradle maps the same engine onto a `flowerCheck` task and wires it
+into the normal `check` lifecycle.
 
 CI must run `mvn verify` for pull requests so generated or handwritten Flower
 code is checked before merge.

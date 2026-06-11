@@ -1,0 +1,25 @@
+// Copy this snippet into build.gradle in the host Flower project.
+plugins {
+    id 'java'
+    id 'io.github.parkkevinsb.flower.flower-check' version '0.1.0-SNAPSHOT'
+}
+
+repositories {
+    mavenCentral()
+    maven {
+        name = 'GitHubPackages'
+        url = uri('https://maven.pkg.github.com/parkkevinsb/flower')
+        credentials {
+            username = findProperty('gpr.user') ?: System.getenv('GITHUB_ACTOR') ?: ''
+            password = findProperty('gpr.key') ?: System.getenv('GITHUB_TOKEN') ?: ''
+        }
+    }
+}
+
+dependencies {
+    compileOnly 'io.github.parkkevinsb.flower:flower-check-annotations:0.1.0-SNAPSHOT'
+}
+
+flowerCheck {
+    includeTests = false
+}

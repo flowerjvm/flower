@@ -25,10 +25,18 @@ class TemplateFilesTest {
 
     @Test
     void gradleTemplatesWireFlowerCheckIntoCheck() throws IOException {
+        String pluginKotlinSettings = templateText("gradle-plugin-settings.gradle.kts");
+        String pluginKotlinBuild = templateText("gradle-plugin-build.gradle.kts");
+        String pluginGroovySettings = templateText("gradle-plugin-settings.gradle");
+        String pluginGroovyBuild = templateText("gradle-plugin-build.gradle");
         String kotlin = templateText("gradle-build.gradle.kts");
         String groovy = templateText("gradle-build.gradle");
         String workflow = templateText("github-actions-flower-check-gradle.yml");
 
+        assertThat(pluginKotlinSettings).contains("pluginManagement");
+        assertThat(pluginKotlinBuild).contains("io.github.parkkevinsb.flower.flower-check");
+        assertThat(pluginGroovySettings).contains("pluginManagement");
+        assertThat(pluginGroovyBuild).contains("io.github.parkkevinsb.flower.flower-check");
         assertThat(kotlin).contains("tasks.register<JavaExec>(\"flowerCheck\")");
         assertThat(kotlin).contains("dependsOn(\"flowerCheck\")");
         assertThat(kotlin).contains("flower.check.writeBaseline");

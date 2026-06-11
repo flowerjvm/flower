@@ -2,6 +2,7 @@
 target/
 
 # Gradle / IDE build output
+.gradle/
 build/
 
 pom.xml.tag

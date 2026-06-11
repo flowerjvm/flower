@@ -25,6 +25,11 @@ Use the templates under `../templates/`:
 flower-check.config              default host configuration
 maven-plugin.xml                 dependency/plugin snippet for pom.xml
 github-actions-flower-check.yml  pull-request workflow example
+gradle-plugin-settings.gradle.kts
+                                 Kotlin DSL plugin repository snippet
+gradle-plugin-build.gradle.kts   Kotlin DSL plugin application snippet
+gradle-plugin-settings.gradle    Groovy DSL plugin repository snippet
+gradle-plugin-build.gradle       Groovy DSL plugin application snippet
 gradle-build.gradle.kts          Kotlin DSL task snippet for build.gradle.kts
 gradle-build.gradle              Groovy DSL task snippet for build.gradle
 github-actions-flower-check-gradle.yml
@@ -63,19 +68,18 @@ and has no runtime behavior.
 
 ## Gradle Adoption
 
-Until a dedicated Gradle plugin module exists, Gradle host projects should wire
-the `flower-check` CLI jar into the normal `check` lifecycle. Copy the matching
-snippet into the host build file:
+Gradle host projects should prefer the dedicated plugin. Copy the matching
+settings/build snippets:
 
 ```text
-templates/gradle-build.gradle.kts  -> build.gradle.kts
-templates/gradle-build.gradle      -> build.gradle
+templates/gradle-plugin-settings.gradle.kts  -> settings.gradle.kts
+templates/gradle-plugin-build.gradle.kts     -> build.gradle.kts
+templates/gradle-plugin-settings.gradle      -> settings.gradle
+templates/gradle-plugin-build.gradle         -> build.gradle
 ```
 
-The snippets create a detached `flowerCheck` configuration, add the
-`flower-check` CLI jar, add `flower-check-annotations` as `compileOnly`, and
-register a `flowerCheck` `JavaExec` task. The task scans `src/main/java` and is
-attached to `check`, so violations fail the normal Gradle build:
+The plugin registers a `flowerCheck` task and attaches it to `check`, so
+violations fail the normal Gradle build:
 
 ```bash
 ./gradlew check
@@ -93,9 +97,22 @@ For controlled debt migration, generate a reviewed baseline with:
 ./gradlew -Pflower.check.writeBaseline=flower-check-baseline.txt check
 ```
 
-The Flower repository keeps Gradle template smoke tests opt-in so the normal
-Maven reactor does not require Gradle on every developer machine. To validate
-the templates against real temporary Gradle host projects, run:
+The older direct-CLI task snippets remain available for projects that cannot
+apply the Gradle plugin yet:
+
+```text
+templates/gradle-build.gradle.kts  -> build.gradle.kts
+templates/gradle-build.gradle      -> build.gradle
+```
+
+Those snippets create a detached `flowerCheck` configuration, add the
+`flower-check` CLI jar, add `flower-check-annotations` as `compileOnly`, and
+register a `flowerCheck` `JavaExec` task. The task scans `src/main/java` and is
+attached to `check`.
+
+The Flower repository keeps direct-CLI Gradle template smoke tests opt-in so
+the normal Maven reactor does not require Gradle on every developer machine. To
+validate those templates against real temporary Gradle host projects, run:
 
 ```bash
 mvn -pl flower-check-maven-plugin -am verify -Dflower.check.gradle.smoke=true
@@ -128,7 +145,7 @@ package access may require a repository secret with `read:packages`.
 
 For Gradle projects, copy `templates/github-actions-flower-check-gradle.yml`
 instead, usually to `.github/workflows/flower-check.yml`. The Gradle workflow
-runs `./gradlew --no-daemon check`, and the build script snippet reads
+runs `./gradlew --no-daemon check`, and the build script/plugin snippet reads
 `GITHUB_ACTOR` / `GITHUB_TOKEN` when resolving Flower artifacts from GitHub
 Packages.
 

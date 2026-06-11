@@ -123,6 +123,11 @@ Copyable host project templates live in [`templates/`](templates):
 flower-check.config              default host configuration
 maven-plugin.xml                 dependency/plugin snippet for pom.xml
 github-actions-flower-check.yml  pull-request workflow example
+gradle-plugin-settings.gradle.kts
+                                 Kotlin DSL plugin repository snippet
+gradle-plugin-build.gradle.kts   Kotlin DSL plugin application snippet
+gradle-plugin-settings.gradle    Groovy DSL plugin repository snippet
+gradle-plugin-build.gradle       Groovy DSL plugin application snippet
 gradle-build.gradle.kts          Kotlin DSL task snippet for build.gradle.kts
 gradle-build.gradle              Groovy DSL task snippet for build.gradle
 github-actions-flower-check-gradle.yml
@@ -207,6 +212,8 @@ Current implementation:
    host `mvn verify` builds.
 10. Gradle adoption snippets have opt-in smoke coverage that runs temporary
     host Gradle builds when `-Dflower.check.gradle.smoke=true` is set.
+11. The dedicated Gradle plugin registers `flowerCheck`, wires it into `check`,
+    and is covered by Gradle TestKit functional tests.
 ```
 
 Use a parser when rules need structure, such as identifying classes extending

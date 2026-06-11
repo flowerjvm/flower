@@ -60,6 +60,11 @@ Engine
 - `flower-observability`: listeners and helpers for logging, dumps, metrics,
   tracing, and awaiting flow completion.
 - `flower-testkit`: optional test helpers for deterministic Flow tests.
+- `flower-check`: build-time Flower usage checker for host applications.
+- `flower-check-annotations`: SOURCE-retained approval markers consumed by
+  `flower-check`.
+- `flower-check-maven-plugin`: Maven `verify` integration for `flower-check`.
+- `flower-check-gradle-plugin`: Gradle `check` integration for `flower-check`.
 
 ## Build
 
