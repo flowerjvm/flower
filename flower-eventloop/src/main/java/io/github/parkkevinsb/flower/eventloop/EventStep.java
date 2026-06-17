@@ -25,9 +25,10 @@ package io.github.parkkevinsb.flower.eventloop;
  * decide the transition when the wake-up arrives.
  *
  * <p>All callbacks run on the event-loop thread. They must be quick and
- * non-blocking. For LLM, MCP, HTTP, database, or tool work, enqueue the work on
- * another executor/service and publish only the completion event back to the
- * worker's {@link EventStepContext#eventBus()}.
+ * non-blocking. For LLM, MCP, HTTP, database, or tool work, use
+ * {@link EventStepContext#offload(Runnable)} or another external service and
+ * publish only the completion event back to the worker's
+ * {@link EventStepContext#eventBus()}.
  */
 public abstract class EventStep {
 

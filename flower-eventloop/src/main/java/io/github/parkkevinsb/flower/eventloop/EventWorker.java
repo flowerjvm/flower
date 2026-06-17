@@ -17,6 +17,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.PriorityQueue;
 import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -63,6 +64,7 @@ public final class EventWorker {
     private final EventBus eventBus;
     private final EventFlowCheckpointStore checkpointStore;
     private final List<FlowerListener> listeners;
+    private final Executor offloadExecutor;
 
     private final Object stateLock = new Object();
     private final Map<FlowId, FlowRuntime> active = new LinkedHashMap<>();
@@ -76,6 +78,15 @@ public final class EventWorker {
 
     public EventWorker(String name, Clock clock, EventBus eventBus) {
         this(name, clock, eventBus, EventFlowCheckpointStore.NOOP);
+    }
+
+    public EventWorker(
+            String name,
+            Clock clock,
+            EventBus eventBus,
+            Executor offloadExecutor) {
+        this(name, clock, eventBus, EventFlowCheckpointStore.NOOP,
+                Collections.<FlowerListener>emptyList(), offloadExecutor);
     }
 
     public EventWorker(
@@ -99,7 +110,27 @@ public final class EventWorker {
             Clock clock,
             EventBus eventBus,
             EventFlowCheckpointStore checkpointStore,
+            Executor offloadExecutor) {
+        this(name, clock, eventBus, checkpointStore,
+                Collections.<FlowerListener>emptyList(), offloadExecutor);
+    }
+
+    public EventWorker(
+            String name,
+            Clock clock,
+            EventBus eventBus,
+            EventFlowCheckpointStore checkpointStore,
             List<FlowerListener> listeners) {
+        this(name, clock, eventBus, checkpointStore, listeners, null);
+    }
+
+    public EventWorker(
+            String name,
+            Clock clock,
+            EventBus eventBus,
+            EventFlowCheckpointStore checkpointStore,
+            List<FlowerListener> listeners,
+            Executor offloadExecutor) {
         if (name == null || name.isEmpty()) {
             throw new IllegalArgumentException("name must not be null or empty");
         }
@@ -116,6 +147,7 @@ public final class EventWorker {
         this.clock = clock;
         this.eventBus = eventBus;
         this.checkpointStore = checkpointStore;
+        this.offloadExecutor = offloadExecutor;
         this.listeners = listeners == null
                 ? Collections.<FlowerListener>emptyList()
                 : Collections.unmodifiableList(new ArrayList<>(listeners));
@@ -545,6 +577,25 @@ public final class EventWorker {
         return true;
     }
 
+    private void offload(final Runnable task) {
+        if (task == null) {
+            throw new IllegalArgumentException("task must not be null");
+        }
+        if (offloadExecutor == null) {
+            throw new IllegalStateException("EventWorker " + name + " has no offload executor");
+        }
+        offloadExecutor.execute(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    task.run();
+                } catch (Throwable t) {
+                    notifyWorkerError(t);
+                }
+            }
+        });
+    }
+
     private void failFlow(FlowRuntime rt, Throwable cause) {
         safeExit(rt);
         clearAwaits(rt);
@@ -956,6 +1007,11 @@ public final class EventWorker {
         @Override
         public EventBus eventBus() {
             return eventBus;
+        }
+
+        @Override
+        public void offload(Runnable task) {
+            EventWorker.this.offload(task);
         }
 
         @Override

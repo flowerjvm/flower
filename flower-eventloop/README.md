@@ -86,6 +86,25 @@ return EventStepResult.await(AwaitCondition.event(LlmResponded.class))
         .thenPublish(new LlmRequested("hello"));
 ```
 
+For blocking calls, construct the worker with an offload executor and schedule
+the work after awaits are registered:
+
+```java
+EventWorker worker = new EventWorker("agents", SystemClock.INSTANCE, bus, offloadExecutor);
+
+return EventStepResult.await(
+        AwaitCondition.event(ToolCompleted.class),
+        AwaitCondition.deadlineIn(30_000))
+        .thenRunOffloaded(ctx -> {
+            ToolCompleted completed = toolClient.callBlocking(...);
+            ctx.eventBus().publish(completed);
+        });
+```
+
+The event-loop thread only registers awaits and submits the task. The offloaded
+task owns the blocking call and publishes completion/failure events back to the
+event bus.
+
 `EventStepResult` has no `stay()`. Instead:
 
 - `await(AwaitCondition...)` — keep this step, wait for these conditions
@@ -95,6 +114,9 @@ return EventStepResult.await(AwaitCondition.event(LlmResponded.class))
 - `fail(cause)` — fail the flow
 - `thenPublish(event)` / `thenRun(effect)` — run effects after the result is
   accepted; for `await`, effects run after awaits are registered
+
+- `thenRunOffloaded(effect)` schedules blocking work on the worker's offload
+  executor after the result is accepted
 
 `AwaitCondition` currently supports `event(Type.class)` and
 `deadlineIn(millis)`. Event awaits can also include a predicate for correlation

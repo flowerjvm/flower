@@ -126,6 +126,30 @@ public final class EventStepResult {
     }
 
     /**
+     * Offload an effect after the worker has accepted this result.
+     *
+     * <p>For {@link Type#AWAIT}, the offload is scheduled after awaits are
+     * registered and checkpointed. The offloaded task may block, but it should
+     * publish completion/failure events back to {@link EventStepContext#eventBus()}.
+     */
+    public EventStepResult thenRunOffloaded(final EventEffect effect) {
+        if (effect == null) {
+            throw new IllegalArgumentException("effect must not be null");
+        }
+        return thenRun(new EventEffect() {
+            @Override
+            public void apply(final EventStepContext ctx) {
+                ctx.offload(new Runnable() {
+                    @Override
+                    public void run() {
+                        effect.apply(ctx);
+                    }
+                });
+            }
+        });
+    }
+
+    /**
      * Publish an event after the worker has accepted this result.
      *
      * <p>Use this with {@link #await(AwaitCondition...)} for request/response

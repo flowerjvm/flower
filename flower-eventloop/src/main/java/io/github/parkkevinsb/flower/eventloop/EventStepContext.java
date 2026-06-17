@@ -29,6 +29,19 @@ public interface EventStepContext {
      */
     EventBus eventBus();
 
+    /**
+     * Submit blocking or long-running work to the worker's offload executor.
+     *
+     * <p>The event-loop thread must stay non-blocking. LLM, MCP, HTTP,
+     * database, tool, sleep, or long CPU work should be started through this
+     * method and should publish only completion/failure events back through
+     * {@link #eventBus()}.
+     *
+     * <p>If the {@link EventWorker} was not constructed with an offload
+     * executor, this method fails fast.
+     */
+    void offload(Runnable task);
+
     Clock clock();
 
     /** Convenience for {@code clock().currentTimeMillis()}. */
