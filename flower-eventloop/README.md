@@ -190,6 +190,11 @@ definition id, attach its checkpoint, then submit it.
 `flower-eventloop-persistence-jdbc` provides `JdbcEventFlowCheckpointStore`
 and dialect-specific schema SQL for the standard event-flow checkpoint table.
 
+`EventWorker` can also be constructed with core `FlowerListener`s. The
+event-loop runtime emits submitted, step-entered, step-exited, terminal,
+listener-error, and worker-error callbacks using core `FlowSnapshot`, so the
+existing observability listeners can be reused.
+
 ## Status
 
 Experimental runtime. The contract (`EventStep` / `EventStepResult` /
@@ -200,6 +205,6 @@ implemented yet:
 - signal and external-callback await conditions
 - specialized workers (`LlmEventWorker`, `AgentEventWorker`, `McpEventWorker`)
 - coexistence under one shared `Engine` with tick-driven flows
-- duplicate-submit policies and lifecycle listeners
+- duplicate-submit policies
 
 Do not depend on the API surface staying stable yet.

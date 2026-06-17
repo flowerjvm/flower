@@ -3,7 +3,9 @@ package io.github.parkkevinsb.flower.eventloop;
 import io.github.parkkevinsb.flower.core.context.ExecutionContext;
 import io.github.parkkevinsb.flower.core.flow.FlowId;
 import io.github.parkkevinsb.flower.core.flow.FlowPersistence;
+import io.github.parkkevinsb.flower.core.flow.FlowSnapshot;
 import io.github.parkkevinsb.flower.core.flow.FlowState;
+import io.github.parkkevinsb.flower.core.flow.FlowStepSnapshot;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -82,6 +84,18 @@ public final class EventFlow {
         return failureCause;
     }
 
+    public FlowSnapshot snapshot() {
+        return new FlowSnapshot(
+                flowId,
+                state,
+                currentStepId(),
+                state.isTerminal() ? -1 : currentIndex,
+                0,
+                stepSnapshots(),
+                failureCause,
+                executionContext);
+    }
+
     /**
      * Prepare this freshly-built durable flow to resume from a saved checkpoint.
      *
@@ -134,6 +148,22 @@ public final class EventFlow {
             return null;
         }
         return steps.get(currentIndex).stepId();
+    }
+
+    private List<FlowStepSnapshot> stepSnapshots() {
+        List<FlowStepSnapshot> out = new ArrayList<>();
+        boolean recoverable = persistence == FlowPersistence.DURABLE;
+        for (int i = 0; i < steps.size(); i++) {
+            EventStepDefinition def = steps.get(i);
+            out.add(new FlowStepSnapshot(
+                    i,
+                    def.stepId(),
+                    def.step().getClass().getName(),
+                    false,
+                    recoverable,
+                    null));
+        }
+        return Collections.unmodifiableList(out);
     }
 
     // ------------------------------------------------------------------

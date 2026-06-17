@@ -5,7 +5,9 @@ import io.github.parkkevinsb.flower.core.event.EventBus;
 import io.github.parkkevinsb.flower.core.event.Subscription;
 import io.github.parkkevinsb.flower.core.flow.FlowId;
 import io.github.parkkevinsb.flower.core.flow.FlowPersistence;
+import io.github.parkkevinsb.flower.core.flow.FlowSnapshot;
 import io.github.parkkevinsb.flower.core.flow.FlowState;
+import io.github.parkkevinsb.flower.core.listener.FlowerListener;
 import io.github.parkkevinsb.flower.core.time.Clock;
 
 import java.util.ArrayList;
@@ -60,6 +62,7 @@ public final class EventWorker {
     private final Clock clock;
     private final EventBus eventBus;
     private final EventFlowCheckpointStore checkpointStore;
+    private final List<FlowerListener> listeners;
 
     private final Object stateLock = new Object();
     private final Map<FlowId, FlowRuntime> active = new LinkedHashMap<>();
@@ -79,7 +82,24 @@ public final class EventWorker {
             String name,
             Clock clock,
             EventBus eventBus,
+            List<FlowerListener> listeners) {
+        this(name, clock, eventBus, EventFlowCheckpointStore.NOOP, listeners);
+    }
+
+    public EventWorker(
+            String name,
+            Clock clock,
+            EventBus eventBus,
             EventFlowCheckpointStore checkpointStore) {
+        this(name, clock, eventBus, checkpointStore, Collections.<FlowerListener>emptyList());
+    }
+
+    public EventWorker(
+            String name,
+            Clock clock,
+            EventBus eventBus,
+            EventFlowCheckpointStore checkpointStore,
+            List<FlowerListener> listeners) {
         if (name == null || name.isEmpty()) {
             throw new IllegalArgumentException("name must not be null or empty");
         }
@@ -96,10 +116,22 @@ public final class EventWorker {
         this.clock = clock;
         this.eventBus = eventBus;
         this.checkpointStore = checkpointStore;
+        this.listeners = listeners == null
+                ? Collections.<FlowerListener>emptyList()
+                : Collections.unmodifiableList(new ArrayList<>(listeners));
+        for (FlowerListener listener : this.listeners) {
+            if (listener == null) {
+                throw new IllegalArgumentException("listeners must not contain null");
+            }
+        }
     }
 
     public String name() {
         return name;
+    }
+
+    public List<FlowerListener> listeners() {
+        return listeners;
     }
 
     // ------------------------------------------------------------------
@@ -127,6 +159,7 @@ public final class EventWorker {
             }
             active.put(flow.flowId(), rt);
         }
+        fireFlowSubmitted(flow);
         enqueue(new Command() {
             @Override
             public void execute() {
@@ -289,6 +322,7 @@ public final class EventWorker {
         } catch (Throwable t) {
             System.err.println("[flower] eventloop " + name + " command failed: " + t);
             t.printStackTrace(System.err);
+            notifyWorkerError(t);
         }
     }
 
@@ -325,17 +359,21 @@ public final class EventWorker {
         if (def == null) {
             rt.flow.finish();
             deleteCheckpoint(rt);
+            fireFlowTerminated(rt.flow);
             remove(rt);
             return;
         }
-        rt.entered = true;
         EventStepResult result;
+        boolean entered = false;
         try {
             if (rt.recoveryCheckpoint == null) {
                 result = def.step().onEnter(rt.ctx);
             } else {
                 result = def.step().onRecover(rt.ctx, new EventRecoveryContext(rt.recoveryCheckpoint));
             }
+            rt.entered = true;
+            entered = true;
+            fireStepEntered(rt.flow, def.stepId());
         } catch (Throwable t) {
             result = EventStepResult.fail(t);
         } finally {
@@ -345,6 +383,10 @@ public final class EventWorker {
         if (result == null) {
             result = EventStepResult.fail(new IllegalStateException(
                     "onEnter returned null for step '" + def.stepId() + "'"));
+            if (!entered) {
+                rt.entered = true;
+                fireStepEntered(rt.flow, def.stepId());
+            }
         }
         applyResult(rt, result);
     }
@@ -427,6 +469,7 @@ public final class EventWorker {
                 if (next >= rt.flow.steps().size()) {
                     rt.flow.finish();
                     deleteCheckpoint(rt);
+                    fireFlowTerminated(rt.flow);
                     remove(rt);
                     return;
                 }
@@ -462,6 +505,7 @@ public final class EventWorker {
                 clearAwaits(rt);
                 rt.flow.finish();
                 deleteCheckpoint(rt);
+                fireFlowTerminated(rt.flow);
                 remove(rt);
                 return;
 
@@ -506,6 +550,7 @@ public final class EventWorker {
         clearAwaits(rt);
         rt.flow.fail(cause);
         deleteCheckpoint(rt);
+        fireFlowTerminated(rt.flow);
         remove(rt);
     }
 
@@ -665,6 +710,7 @@ public final class EventWorker {
         } catch (Throwable ignored) {
             // best-effort cleanup
         }
+        fireStepExited(rt.flow, def.stepId());
     }
 
     private void remove(FlowRuntime rt) {
@@ -687,6 +733,7 @@ public final class EventWorker {
         safeExit(rt);
         rt.flow.cancel();
         deleteCheckpoint(rt);
+        fireFlowTerminated(rt.flow);
         remove(rt);
     }
 
@@ -727,12 +774,14 @@ public final class EventWorker {
             } catch (Throwable t) {
                 System.err.println("[flower] eventloop " + name + " checkpoint save failed for "
                         + rt.flow.flowId() + ": " + t);
+                notifyWorkerError(t);
             }
             clearAwaits(rt);
             safeExit(rt);
             if (!rt.flow.state().isTerminal() && rt.flow.persistence() != FlowPersistence.DURABLE) {
                 rt.flow.cancel();
                 deleteCheckpoint(rt);
+                fireFlowTerminated(rt.flow);
             }
         }
         deadlines.clear();
@@ -766,6 +815,98 @@ public final class EventWorker {
         } catch (Throwable t) {
             System.err.println("[flower] eventloop " + name + " checkpoint delete failed for "
                     + rt.flow.flowId() + ": " + t);
+            notifyWorkerError(t);
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // Listener fanout
+    // ------------------------------------------------------------------
+
+    private void fireFlowSubmitted(EventFlow flow) {
+        FlowSnapshot snap = flow.snapshot();
+        for (FlowerListener listener : listeners) {
+            try {
+                listener.onFlowSubmitted(snap);
+            } catch (Throwable t) {
+                notifyListenerError(snap, "onFlowSubmitted", t);
+            }
+        }
+    }
+
+    private void fireStepEntered(EventFlow flow, String stepId) {
+        FlowSnapshot snap = flow.snapshot();
+        for (FlowerListener listener : listeners) {
+            try {
+                listener.onStepEntered(snap, stepId);
+            } catch (Throwable t) {
+                notifyListenerError(snap, "onStepEntered", t);
+            }
+        }
+    }
+
+    private void fireStepExited(EventFlow flow, String stepId) {
+        FlowSnapshot snap = flow.snapshot();
+        for (FlowerListener listener : listeners) {
+            try {
+                listener.onStepExited(snap, stepId);
+            } catch (Throwable t) {
+                notifyListenerError(snap, "onStepExited", t);
+            }
+        }
+    }
+
+    private void fireFlowTerminated(EventFlow flow) {
+        FlowSnapshot snap = flow.snapshot();
+        switch (flow.state()) {
+            case FINISHED:
+                for (FlowerListener listener : listeners) {
+                    try {
+                        listener.onFlowFinished(snap);
+                    } catch (Throwable t) {
+                        notifyListenerError(snap, "onFlowFinished", t);
+                    }
+                }
+                break;
+            case FAILED:
+                Throwable cause = flow.failureCause();
+                for (FlowerListener listener : listeners) {
+                    try {
+                        listener.onFlowFailed(snap, cause);
+                    } catch (Throwable t) {
+                        notifyListenerError(snap, "onFlowFailed", t);
+                    }
+                }
+                break;
+            case CANCELLED:
+                for (FlowerListener listener : listeners) {
+                    try {
+                        listener.onFlowCancelled(snap);
+                    } catch (Throwable t) {
+                        notifyListenerError(snap, "onFlowCancelled", t);
+                    }
+                }
+                break;
+            default:
+                // not terminal
+        }
+    }
+
+    private void notifyListenerError(FlowSnapshot flow, String callbackName, Throwable cause) {
+        for (FlowerListener listener : listeners) {
+            try {
+                listener.onListenerError(flow, callbackName, cause);
+            } catch (Throwable ignored) {
+            }
+        }
+    }
+
+    private void notifyWorkerError(Throwable cause) {
+        for (FlowerListener listener : listeners) {
+            try {
+                listener.onWorkerError(name, cause);
+            } catch (Throwable ignored) {
+            }
         }
     }
 
