@@ -12,19 +12,19 @@
         <relativePath>../pom.xml</relativePath>
     </parent>
 
-    <artifactId>flower-persistence-jdbc</artifactId>
+    <artifactId>flower-eventloop-persistence-jdbc</artifactId>
     <packaging>jar</packaging>
 
-    <name>Flower Persistence JDBC</name>
+    <name>Flower EventLoop Persistence JDBC</name>
     <description>
-        JDBC checkpoint store for Flower durable checkpoint/resume flows.
+        JDBC checkpoint store for Flower event-loop durable checkpoint/resume flows.
         Java 8 compatible. No connection pool or migration tool dependency.
     </description>
 
     <dependencies>
         <dependency>
             <groupId>io.github.parkkevinsb.flower</groupId>
-            <artifactId>flower-core</artifactId>
+            <artifactId>flower-eventloop</artifactId>
         </dependency>
         <dependency>
             <groupId>org.junit.jupiter</groupId>

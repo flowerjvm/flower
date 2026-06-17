@@ -1,4 +1,4 @@
-package io.github.parkkevinsb.flower.persistence.jdbc;
+package io.github.parkkevinsb.flower.eventloop.persistence.jdbc;
 
 import io.github.parkkevinsb.flower.core.context.ExecutionContext;
 import io.github.parkkevinsb.flower.core.flow.FlowId;
@@ -30,13 +30,15 @@ import java.util.Optional;
 public final class JdbcEventFlowCheckpointStore implements EventFlowCheckpointStore {
 
     private final DataSource dataSource;
-    private final JdbcCheckpointDialect dialect;
+    private final JdbcEventFlowCheckpointDialect dialect;
 
-    public static JdbcEventFlowCheckpointStore create(DataSource dataSource, JdbcCheckpointDialect dialect) {
+    public static JdbcEventFlowCheckpointStore create(
+            DataSource dataSource,
+            JdbcEventFlowCheckpointDialect dialect) {
         return new JdbcEventFlowCheckpointStore(dataSource, dialect);
     }
 
-    public JdbcEventFlowCheckpointStore(DataSource dataSource, JdbcCheckpointDialect dialect) {
+    public JdbcEventFlowCheckpointStore(DataSource dataSource, JdbcEventFlowCheckpointDialect dialect) {
         if (dataSource == null) {
             throw new IllegalArgumentException("dataSource must not be null");
         }

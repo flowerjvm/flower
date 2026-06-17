@@ -186,9 +186,9 @@ The default `onRecover` fails fast to avoid silently resuming an unsafe step.
 
 `EventFlowFactoryRegistry` and `EventFlowRecoveryService` provide the worker
 startup path: load active checkpoints for a worker, rebuild each flow by
-definition id, attach its checkpoint, then submit it. `flower-persistence-jdbc`
-provides `JdbcEventFlowCheckpointStore` and dialect-specific schema SQL for the
-standard event-flow checkpoint table.
+definition id, attach its checkpoint, then submit it.
+`flower-eventloop-persistence-jdbc` provides `JdbcEventFlowCheckpointStore`
+and dialect-specific schema SQL for the standard event-flow checkpoint table.
 
 ## Status
 

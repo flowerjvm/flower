@@ -21,22 +21,6 @@ class JdbcCheckpointDialectsTest {
     }
 
     @Test
-    void event_flow_dialects_use_event_checkpoint_table() {
-        assertThat(JdbcEventFlowCheckpointDialects.postgresql().upsertSql())
-                .contains("flower_event_flow_checkpoint")
-                .contains("ON CONFLICT")
-                .contains("awaits_payload");
-        assertThat(JdbcEventFlowCheckpointDialects.mysql().upsertSql())
-                .contains("ON DUPLICATE KEY UPDATE");
-        assertThat(JdbcEventFlowCheckpointDialects.oracle().upsertSql())
-                .contains("MERGE INTO")
-                .contains("FROM dual");
-        assertThat(JdbcEventFlowCheckpointDialects.h2().upsertSql())
-                .contains("MERGE INTO")
-                .contains("KEY(flow_type, flow_key)");
-    }
-
-    @Test
     void active_queries_select_ready_and_running_checkpoints() {
         assertThat(JdbcCheckpointDialects.postgresql().findActiveSql())
                 .contains("state IN ('READY', 'RUNNING')");

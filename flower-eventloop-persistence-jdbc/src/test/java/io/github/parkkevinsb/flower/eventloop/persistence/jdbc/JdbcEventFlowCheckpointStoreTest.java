@@ -1,4 +1,4 @@
-package io.github.parkkevinsb.flower.persistence.jdbc;
+package io.github.parkkevinsb.flower.eventloop.persistence.jdbc;
 
 import io.github.parkkevinsb.flower.core.context.ExecutionContext;
 import io.github.parkkevinsb.flower.core.flow.FlowId;

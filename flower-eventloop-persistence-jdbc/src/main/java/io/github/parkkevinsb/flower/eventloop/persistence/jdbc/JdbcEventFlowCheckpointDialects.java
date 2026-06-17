@@ -1,4 +1,4 @@
-package io.github.parkkevinsb.flower.persistence.jdbc;
+package io.github.parkkevinsb.flower.eventloop.persistence.jdbc;
 
 /**
  * Built-in JDBC dialects for the standard event-flow checkpoint table.
@@ -25,7 +25,7 @@ public final class JdbcEventFlowCheckpointDialects {
     private JdbcEventFlowCheckpointDialects() {
     }
 
-    public static JdbcCheckpointDialect postgresql() {
+    public static JdbcEventFlowCheckpointDialect postgresql() {
         return new StandardDialect(
                 "INSERT INTO " + TABLE + " (" + COLUMNS + ") "
                         + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
@@ -47,7 +47,7 @@ public final class JdbcEventFlowCheckpointDialects {
                         + "awaits_payload = EXCLUDED.awaits_payload");
     }
 
-    public static JdbcCheckpointDialect mysql() {
+    public static JdbcEventFlowCheckpointDialect mysql() {
         return new StandardDialect(
                 "INSERT INTO " + TABLE + " (" + COLUMNS + ") "
                         + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
@@ -69,13 +69,13 @@ public final class JdbcEventFlowCheckpointDialects {
                         + "awaits_payload = VALUES(awaits_payload)");
     }
 
-    public static JdbcCheckpointDialect h2() {
+    public static JdbcEventFlowCheckpointDialect h2() {
         return new StandardDialect(
                 "MERGE INTO " + TABLE + " (" + COLUMNS + ") "
                         + "KEY(flow_type, flow_key) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
     }
 
-    public static JdbcCheckpointDialect oracle() {
+    public static JdbcEventFlowCheckpointDialect oracle() {
         return new OracleEventDialect(
                 "MERGE INTO " + TABLE + " t "
                         + "USING (SELECT ? AS flow_type, ? AS flow_key, ? AS state, ? AS current_step_id, "
@@ -107,7 +107,7 @@ public final class JdbcEventFlowCheckpointDialects {
                         + "s.await_generation, s.awaits_payload)");
     }
 
-    private static class StandardDialect implements JdbcCheckpointDialect {
+    private static class StandardDialect implements JdbcEventFlowCheckpointDialect {
         private final String upsertSql;
 
         StandardDialect(String upsertSql) {
