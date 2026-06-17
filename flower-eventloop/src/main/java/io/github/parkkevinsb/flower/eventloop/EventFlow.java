@@ -2,6 +2,7 @@ package io.github.parkkevinsb.flower.eventloop;
 
 import io.github.parkkevinsb.flower.core.context.ExecutionContext;
 import io.github.parkkevinsb.flower.core.flow.FlowId;
+import io.github.parkkevinsb.flower.core.flow.FlowPersistence;
 import io.github.parkkevinsb.flower.core.flow.FlowState;
 
 import java.util.ArrayList;
@@ -24,18 +25,28 @@ import java.util.Map;
 public final class EventFlow {
 
     private final FlowId flowId;
-    private final ExecutionContext executionContext;
+    private ExecutionContext executionContext;
     private final List<EventStepDefinition> steps;
     private final Map<String, Integer> indexById;
+    private final FlowPersistence persistence;
+    private final String definitionVersion;
 
     private volatile FlowState state = FlowState.CREATED;
     private volatile int currentIndex = -1;
     private volatile Throwable failureCause;
+    private EventFlowCheckpoint recoveryCheckpoint;
 
-    EventFlow(FlowId flowId, ExecutionContext executionContext, List<EventStepDefinition> steps) {
+    EventFlow(
+            FlowId flowId,
+            ExecutionContext executionContext,
+            List<EventStepDefinition> steps,
+            FlowPersistence persistence,
+            String definitionVersion) {
         this.flowId = flowId;
         this.executionContext = executionContext == null ? ExecutionContext.empty() : executionContext;
         this.steps = Collections.unmodifiableList(new ArrayList<>(steps));
+        this.persistence = persistence == null ? FlowPersistence.TRANSIENT : persistence;
+        this.definitionVersion = definitionVersion;
         Map<String, Integer> idx = new HashMap<>();
         for (int i = 0; i < this.steps.size(); i++) {
             idx.put(this.steps.get(i).stepId(), i);
@@ -55,12 +66,67 @@ public final class EventFlow {
         return executionContext;
     }
 
+    public FlowPersistence persistence() {
+        return persistence;
+    }
+
+    public String definitionVersion() {
+        return definitionVersion;
+    }
+
     public FlowState state() {
         return state;
     }
 
     public Throwable failureCause() {
         return failureCause;
+    }
+
+    /**
+     * Prepare this freshly-built durable flow to resume from a saved checkpoint.
+     *
+     * <p>The flow must still be in {@link FlowState#CREATED}. The worker later
+     * activates the checkpoint and calls {@link EventStep#onRecover}.
+     */
+    public EventFlow recoverFrom(EventFlowCheckpoint checkpoint) {
+        if (checkpoint == null) {
+            throw new IllegalArgumentException("checkpoint must not be null");
+        }
+        if (state != FlowState.CREATED) {
+            throw new IllegalStateException("EventFlow can only recover before submit, state=" + state);
+        }
+        if (persistence != FlowPersistence.DURABLE) {
+            throw new IllegalStateException("Only durable event flows can recover from checkpoints: " + flowId);
+        }
+        if (checkpoint.persistence() != FlowPersistence.DURABLE) {
+            throw new IllegalArgumentException("checkpoint is not durable: " + checkpoint);
+        }
+        if (!flowId.equals(checkpoint.flowId())) {
+            throw new IllegalArgumentException(
+                    "checkpoint flowId mismatch. expected=" + flowId + ", actual=" + checkpoint.flowId());
+        }
+        if (checkpoint.state().isTerminal()) {
+            throw new IllegalArgumentException("terminal checkpoints cannot be recovered: " + checkpoint);
+        }
+        if (checkpoint.state() != FlowState.RUNNING) {
+            throw new IllegalArgumentException("event-flow checkpoint must be RUNNING: " + checkpoint);
+        }
+        if (!indexById.containsKey(checkpoint.currentStepId())) {
+            throw new IllegalArgumentException(
+                    "checkpoint stepId not found in flow: " + checkpoint.currentStepId());
+        }
+        if (definitionVersion != null
+                && checkpoint.definitionVersion() != null
+                && !definitionVersion.equals(checkpoint.definitionVersion())) {
+            throw new IllegalArgumentException(
+                    "checkpoint definitionVersion mismatch. expected=" + definitionVersion
+                            + ", actual=" + checkpoint.definitionVersion());
+        }
+        if (!checkpoint.executionContext().isEmpty()) {
+            this.executionContext = checkpoint.executionContext();
+        }
+        this.recoveryCheckpoint = checkpoint;
+        return this;
     }
 
     public String currentStepId() {
@@ -91,6 +157,24 @@ public final class EventFlow {
 
     Integer indexOf(String stepId) {
         return indexById.get(stepId);
+    }
+
+    EventFlowCheckpoint recoveryCheckpoint() {
+        return recoveryCheckpoint;
+    }
+
+    void clearRecoveryCheckpoint() {
+        recoveryCheckpoint = null;
+    }
+
+    void activateRecoveryCheckpoint(EventFlowCheckpoint checkpoint) {
+        Integer index = indexById.get(checkpoint.currentStepId());
+        if (index == null) {
+            throw new IllegalStateException(
+                    "checkpoint stepId not found in flow: " + checkpoint.currentStepId());
+        }
+        this.state = checkpoint.state();
+        this.currentIndex = index;
     }
 
     void markRunningAt(int index) {

@@ -69,6 +69,10 @@ public abstract class AwaitCondition {
             return eventType;
         }
 
+        boolean hasPredicate() {
+            return predicate != null;
+        }
+
         boolean matches(Object event) {
             if (event == null || event.getClass() != eventType) {
                 return false;

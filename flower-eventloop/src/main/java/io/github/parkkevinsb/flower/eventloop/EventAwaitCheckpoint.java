@@ -1,0 +1,59 @@
+package io.github.parkkevinsb.flower.eventloop;
+
+/**
+ * Durable description of one await condition registered by an {@link EventFlow}.
+ *
+ * <p>This stores data that can be written to a checkpoint. Runtime artifacts
+ * such as {@code Subscription}, predicate lambdas, or Java object instances are
+ * intentionally not stored here.
+ */
+public final class EventAwaitCheckpoint {
+
+    public enum Type { EVENT, DEADLINE }
+
+    private static final long NO_DEADLINE = Long.MIN_VALUE;
+
+    private final Type type;
+    private final String eventTypeName;
+    private final long deadlineAtMillis;
+
+    private EventAwaitCheckpoint(Type type, String eventTypeName, long deadlineAtMillis) {
+        this.type = type;
+        this.eventTypeName = eventTypeName;
+        this.deadlineAtMillis = deadlineAtMillis;
+    }
+
+    public static EventAwaitCheckpoint event(String eventTypeName) {
+        if (eventTypeName == null || eventTypeName.isEmpty()) {
+            throw new IllegalArgumentException("eventTypeName must not be null or empty");
+        }
+        return new EventAwaitCheckpoint(Type.EVENT, eventTypeName, NO_DEADLINE);
+    }
+
+    public static EventAwaitCheckpoint deadline(long deadlineAtMillis) {
+        if (deadlineAtMillis < 0L) {
+            throw new IllegalArgumentException("deadlineAtMillis must not be negative: " + deadlineAtMillis);
+        }
+        return new EventAwaitCheckpoint(Type.DEADLINE, null, deadlineAtMillis);
+    }
+
+    public Type type() {
+        return type;
+    }
+
+    public String eventTypeName() {
+        return eventTypeName;
+    }
+
+    public long deadlineAtMillis() {
+        return deadlineAtMillis;
+    }
+
+    @Override
+    public String toString() {
+        if (type == Type.EVENT) {
+            return "EventAwaitCheckpoint{event=" + eventTypeName + "}";
+        }
+        return "EventAwaitCheckpoint{deadlineAtMillis=" + deadlineAtMillis + "}";
+    }
+}

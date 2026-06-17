@@ -12,6 +12,10 @@ package io.github.parkkevinsb.flower.eventloop;
  *                         Return null to ignore and keep waiting.
  * onTimeout(ctx)          called when an awaited deadline is reached.
  *                         Default fails the flow with a timeout.
+ * onRecover(ctx, recovery)
+ *                         called when a durable step is restored from a
+ *                         checkpoint. Re-register awaits; do not repeat
+ *                         one-shot request effects.
  * onExit(ctx)             called when the step leaves by next/goTo/finish/fail.
  * </pre>
  *
@@ -52,6 +56,18 @@ public abstract class EventStep {
     protected EventStepResult onTimeout(EventStepContext ctx) {
         return EventStepResult.fail(
                 new EventTimeoutException("step '" + ctx.currentStepId() + "' timed out"));
+    }
+
+    /**
+     * Called when this step is restored from a durable event-flow checkpoint.
+     *
+     * <p>The default fails fast so one-shot effects such as LLM/tool request
+     * publication are not accidentally repeated by delegating to
+     * {@link #onEnter(EventStepContext)}.
+     */
+    protected EventStepResult onRecover(EventStepContext ctx, EventRecoveryContext recovery) {
+        return EventStepResult.fail(new IllegalStateException(
+                "step '" + ctx.currentStepId() + "' does not implement onRecover"));
     }
 
     /** Called when the step leaves. Default does nothing. */

@@ -2,6 +2,7 @@ package io.github.parkkevinsb.flower.eventloop;
 
 import io.github.parkkevinsb.flower.core.context.ExecutionContext;
 import io.github.parkkevinsb.flower.core.flow.FlowId;
+import io.github.parkkevinsb.flower.core.flow.FlowPersistence;
 
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -15,6 +16,8 @@ public final class EventFlowBuilder {
     private final List<EventStepDefinition> steps = new ArrayList<>();
     private final Set<String> stepIds = new HashSet<>();
     private ExecutionContext executionContext = ExecutionContext.empty();
+    private FlowPersistence persistence = FlowPersistence.TRANSIENT;
+    private String definitionVersion;
 
     EventFlowBuilder(String flowType, String flowKey) {
         this.flowId = FlowId.of(flowType, flowKey);
@@ -22,6 +25,26 @@ public final class EventFlowBuilder {
 
     public EventFlowBuilder executionContext(ExecutionContext executionContext) {
         this.executionContext = executionContext == null ? ExecutionContext.empty() : executionContext;
+        return this;
+    }
+
+    public EventFlowBuilder durable() {
+        return persistence(FlowPersistence.DURABLE);
+    }
+
+    public EventFlowBuilder persistence(FlowPersistence persistence) {
+        if (persistence == null) {
+            throw new IllegalArgumentException("persistence must not be null");
+        }
+        this.persistence = persistence;
+        return this;
+    }
+
+    public EventFlowBuilder definitionVersion(String definitionVersion) {
+        if (definitionVersion != null && definitionVersion.isEmpty()) {
+            throw new IllegalArgumentException("definitionVersion must not be empty");
+        }
+        this.definitionVersion = definitionVersion;
         return this;
     }
 
@@ -38,6 +61,6 @@ public final class EventFlowBuilder {
         if (steps.isEmpty()) {
             throw new IllegalStateException("an EventFlow needs at least one step");
         }
-        return new EventFlow(flowId, executionContext, steps);
+        return new EventFlow(flowId, executionContext, steps, persistence, definitionVersion);
     }
 }

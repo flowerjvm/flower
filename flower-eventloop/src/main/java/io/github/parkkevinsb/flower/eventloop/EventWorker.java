@@ -4,6 +4,7 @@ import io.github.parkkevinsb.flower.core.context.ExecutionContext;
 import io.github.parkkevinsb.flower.core.event.EventBus;
 import io.github.parkkevinsb.flower.core.event.Subscription;
 import io.github.parkkevinsb.flower.core.flow.FlowId;
+import io.github.parkkevinsb.flower.core.flow.FlowPersistence;
 import io.github.parkkevinsb.flower.core.flow.FlowState;
 import io.github.parkkevinsb.flower.core.time.Clock;
 
@@ -58,6 +59,7 @@ public final class EventWorker {
     private final String name;
     private final Clock clock;
     private final EventBus eventBus;
+    private final EventFlowCheckpointStore checkpointStore;
 
     private final Object stateLock = new Object();
     private final Map<FlowId, FlowRuntime> active = new LinkedHashMap<>();
@@ -70,6 +72,14 @@ public final class EventWorker {
     private long deadlineSeq;
 
     public EventWorker(String name, Clock clock, EventBus eventBus) {
+        this(name, clock, eventBus, EventFlowCheckpointStore.NOOP);
+    }
+
+    public EventWorker(
+            String name,
+            Clock clock,
+            EventBus eventBus,
+            EventFlowCheckpointStore checkpointStore) {
         if (name == null || name.isEmpty()) {
             throw new IllegalArgumentException("name must not be null or empty");
         }
@@ -79,9 +89,13 @@ public final class EventWorker {
         if (eventBus == null) {
             throw new IllegalArgumentException("eventBus must not be null");
         }
+        if (checkpointStore == null) {
+            throw new IllegalArgumentException("checkpointStore must not be null");
+        }
         this.name = name;
         this.clock = clock;
         this.eventBus = eventBus;
+        this.checkpointStore = checkpointStore;
     }
 
     public String name() {
@@ -297,20 +311,36 @@ public final class EventWorker {
             return;
         }
         if (rt.flow.state() == FlowState.CREATED) {
-            rt.flow.markRunningAt(0);
+            EventFlowCheckpoint checkpoint = rt.flow.recoveryCheckpoint();
+            if (checkpoint == null) {
+                rt.flow.markRunningAt(0);
+            } else {
+                rt.flow.activateRecoveryCheckpoint(checkpoint);
+                rt.awaitGeneration = checkpoint.awaitGeneration();
+                rt.awaitCheckpoints = checkpoint.awaits();
+                rt.recoveryCheckpoint = checkpoint;
+            }
         }
         EventStepDefinition def = rt.flow.currentStep();
         if (def == null) {
             rt.flow.finish();
+            deleteCheckpoint(rt);
             remove(rt);
             return;
         }
         rt.entered = true;
         EventStepResult result;
         try {
-            result = def.step().onEnter(rt.ctx);
+            if (rt.recoveryCheckpoint == null) {
+                result = def.step().onEnter(rt.ctx);
+            } else {
+                result = def.step().onRecover(rt.ctx, new EventRecoveryContext(rt.recoveryCheckpoint));
+            }
         } catch (Throwable t) {
             result = EventStepResult.fail(t);
+        } finally {
+            rt.flow.clearRecoveryCheckpoint();
+            rt.recoveryCheckpoint = null;
         }
         if (result == null) {
             result = EventStepResult.fail(new IllegalStateException(
@@ -350,6 +380,7 @@ public final class EventWorker {
             return;
         }
         rt.deadlineMillis = NO_DEADLINE;
+        rt.awaitCheckpoints = withoutDeadlines(rt.awaitCheckpoints);
         EventStepDefinition def = rt.flow.currentStep();
         if (def == null) {
             return;
@@ -361,6 +392,11 @@ public final class EventWorker {
             result = EventStepResult.fail(t);
         }
         if (result == null) {
+            try {
+                saveCheckpoint(rt);
+            } catch (Throwable t) {
+                failFlow(rt, t);
+            }
             return; // keep waiting on remaining (event) conditions
         }
         applyResult(rt, result);
@@ -372,7 +408,12 @@ public final class EventWorker {
         }
         switch (result.type()) {
             case AWAIT:
-                registerAwaits(rt, result.awaits());
+                try {
+                    registerAwaits(rt, result.awaits());
+                } catch (Throwable t) {
+                    failFlow(rt, t);
+                    return;
+                }
                 runEffects(rt, result);
                 return;
 
@@ -385,6 +426,7 @@ public final class EventWorker {
                 int next = rt.flow.currentIndex() + 1;
                 if (next >= rt.flow.steps().size()) {
                     rt.flow.finish();
+                    deleteCheckpoint(rt);
                     remove(rt);
                     return;
                 }
@@ -419,6 +461,7 @@ public final class EventWorker {
                 safeExit(rt);
                 clearAwaits(rt);
                 rt.flow.finish();
+                deleteCheckpoint(rt);
                 remove(rt);
                 return;
 
@@ -462,6 +505,7 @@ public final class EventWorker {
         safeExit(rt);
         clearAwaits(rt);
         rt.flow.fail(cause);
+        deleteCheckpoint(rt);
         remove(rt);
     }
 
@@ -470,8 +514,9 @@ public final class EventWorker {
     // ------------------------------------------------------------------
 
     private void registerAwaits(FlowRuntime rt, List<AwaitCondition> conditions) {
-        clearAwaits(rt);
         long now = clock.currentTimeMillis();
+        List<EventAwaitCheckpoint> checkpointAwaits = checkpointAwaitsFor(rt, conditions, now);
+        clearAwaits(rt);
         long generation = rt.awaitGeneration;
         long earliestDeadline = NO_DEADLINE;
         for (AwaitCondition cond : conditions) {
@@ -488,6 +533,8 @@ public final class EventWorker {
             rt.deadlineMillis = earliestDeadline;
             deadlines.add(new DeadlineEntry(rt, generation, earliestDeadline, ++deadlineSeq));
         }
+        rt.awaitCheckpoints = checkpointAwaits;
+        saveCheckpoint(rt);
     }
 
     private long deadlineAt(long now, long millisFromNow) {
@@ -495,6 +542,50 @@ public final class EventWorker {
             return Long.MAX_VALUE;
         }
         return now + millisFromNow;
+    }
+
+    private List<EventAwaitCheckpoint> checkpointAwaitsFor(
+            FlowRuntime rt,
+            List<AwaitCondition> conditions,
+            long now) {
+        if (rt.flow.persistence() != FlowPersistence.DURABLE) {
+            return Collections.emptyList();
+        }
+        List<EventAwaitCheckpoint> out = new ArrayList<>();
+        long earliestDeadline = NO_DEADLINE;
+        for (AwaitCondition cond : conditions) {
+            if (cond instanceof AwaitCondition.Event) {
+                AwaitCondition.Event event = (AwaitCondition.Event) cond;
+                if (event.hasPredicate()) {
+                    throw new IllegalStateException(
+                            "Durable EventFlow cannot checkpoint predicate-based event await yet: "
+                                    + event.eventType().getName());
+                }
+                out.add(EventAwaitCheckpoint.event(event.eventType().getName()));
+            } else if (cond instanceof AwaitCondition.Deadline) {
+                long deadline = deadlineAt(now, ((AwaitCondition.Deadline) cond).millisFromNow());
+                earliestDeadline = (earliestDeadline == NO_DEADLINE)
+                        ? deadline
+                        : Math.min(earliestDeadline, deadline);
+            }
+        }
+        if (earliestDeadline != NO_DEADLINE) {
+            out.add(EventAwaitCheckpoint.deadline(earliestDeadline));
+        }
+        return Collections.unmodifiableList(out);
+    }
+
+    private List<EventAwaitCheckpoint> withoutDeadlines(List<EventAwaitCheckpoint> awaits) {
+        if (awaits.isEmpty()) {
+            return awaits;
+        }
+        List<EventAwaitCheckpoint> out = new ArrayList<>();
+        for (EventAwaitCheckpoint await : awaits) {
+            if (await.type() != EventAwaitCheckpoint.Type.DEADLINE) {
+                out.add(await);
+            }
+        }
+        return Collections.unmodifiableList(out);
     }
 
     private <E> Subscription subscribeEvent(
@@ -540,6 +631,7 @@ public final class EventWorker {
         }
         rt.subscriptions.clear();
         rt.deadlineMillis = NO_DEADLINE;
+        rt.awaitCheckpoints = Collections.emptyList();
         rt.awaitGeneration++;
     }
 
@@ -594,6 +686,7 @@ public final class EventWorker {
         clearAwaits(rt);
         safeExit(rt);
         rt.flow.cancel();
+        deleteCheckpoint(rt);
         remove(rt);
     }
 
@@ -629,14 +722,51 @@ public final class EventWorker {
             }
         }
         for (FlowRuntime rt : runtimes) {
+            try {
+                saveCheckpoint(rt);
+            } catch (Throwable t) {
+                System.err.println("[flower] eventloop " + name + " checkpoint save failed for "
+                        + rt.flow.flowId() + ": " + t);
+            }
             clearAwaits(rt);
             safeExit(rt);
-            if (!rt.flow.state().isTerminal()) {
+            if (!rt.flow.state().isTerminal() && rt.flow.persistence() != FlowPersistence.DURABLE) {
                 rt.flow.cancel();
+                deleteCheckpoint(rt);
             }
         }
         deadlines.clear();
         inbox.clear();
+    }
+
+    private void saveCheckpoint(FlowRuntime rt) {
+        if (rt.flow.persistence() != FlowPersistence.DURABLE || rt.flow.state().isTerminal()) {
+            return;
+        }
+        checkpointStore.save(new EventFlowCheckpoint(
+                rt.flow.flowId(),
+                rt.flow.state(),
+                rt.flow.currentStepId(),
+                rt.entered,
+                rt.flow.persistence(),
+                name,
+                clock.currentTimeMillis(),
+                rt.flow.definitionVersion(),
+                rt.flow.executionContext(),
+                rt.awaitGeneration,
+                rt.awaitCheckpoints));
+    }
+
+    private void deleteCheckpoint(FlowRuntime rt) {
+        if (rt.flow.persistence() != FlowPersistence.DURABLE) {
+            return;
+        }
+        try {
+            checkpointStore.delete(rt.flow.flowId());
+        } catch (Throwable t) {
+            System.err.println("[flower] eventloop " + name + " checkpoint delete failed for "
+                    + rt.flow.flowId() + ": " + t);
+        }
     }
 
     // ------------------------------------------------------------------
@@ -647,6 +777,8 @@ public final class EventWorker {
         final EventFlow flow;
         final EventStepContext ctx;
         final List<Subscription> subscriptions = new ArrayList<>();
+        List<EventAwaitCheckpoint> awaitCheckpoints = Collections.emptyList();
+        EventFlowCheckpoint recoveryCheckpoint;
         long deadlineMillis = NO_DEADLINE;
         long awaitGeneration;
         boolean entered;

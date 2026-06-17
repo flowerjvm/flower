@@ -158,6 +158,38 @@ worker.drain();                 // flow reaches "complete" and finishes
   until the next command. Use with `SystemClock`. Do not mix the two modes on
   one worker.
 
+## Durable Checkpoints
+
+`EventFlow.builder(...).durable()` marks an event flow as durable. A durable
+flow writes an `EventFlowCheckpoint` when it enters `await(...)`, and deletes
+that checkpoint when the flow finishes, fails, or is cancelled.
+
+The checkpoint records the current step, execution context, definition version,
+await generation, and durable await descriptors:
+
+```text
+event type name
+absolute deadline millis
+```
+
+Runtime objects such as subscriptions, event instances, and predicate lambdas
+are not checkpointed. Durable flows may use `event(Type.class)` and
+`deadlineIn(millis)`. Predicate-based awaits are still runtime-only and fail
+fast if used by a durable flow.
+
+To resume a durable flow, rebuild the flow definition, call
+`recoverFrom(checkpoint)`, and submit it to a worker that uses the same
+`EventFlowCheckpointStore`. During recovery the worker calls
+`EventStep.onRecover(ctx, recovery)` instead of `onEnter(ctx)`, so steps can
+re-register their durable awaits without replaying one-shot request effects.
+The default `onRecover` fails fast to avoid silently resuming an unsafe step.
+
+`EventFlowFactoryRegistry` and `EventFlowRecoveryService` provide the worker
+startup path: load active checkpoints for a worker, rebuild each flow by
+definition id, attach its checkpoint, then submit it. JDBC persistence is not
+implemented yet; the current checkpoint store SPI is the storage boundary that
+a real adapter should implement.
+
 ## Status
 
 Experimental runtime. The contract (`EventStep` / `EventStepResult` /
@@ -166,7 +198,7 @@ the synchronous response case, but the following are intentionally not
 implemented yet:
 
 - signal and external-callback await conditions
-- checkpoint / resume of pending awaits (reusing core `FlowCheckpointStore`)
+- JDBC persistence for event-flow checkpoints
 - specialized workers (`LlmEventWorker`, `AgentEventWorker`, `McpEventWorker`)
 - coexistence under one shared `Engine` with tick-driven flows
 - duplicate-submit policies and lifecycle listeners

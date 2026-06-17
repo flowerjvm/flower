@@ -22,6 +22,7 @@ class EventWorkerBackgroundTest {
         InMemoryEventBus bus = InMemoryEventBus.create();
         EventWorker worker = new EventWorker("bg-event", SystemClock.INSTANCE, bus);
         CountDownLatch entered = new CountDownLatch(1);
+        CountDownLatch awaiting = new CountDownLatch(1);
         CountDownLatch finished = new CountDownLatch(1);
 
         EventFlow flow = EventFlow.builder("bg", "event")
@@ -29,7 +30,8 @@ class EventWorkerBackgroundTest {
                     @Override
                     protected EventStepResult onEnter(EventStepContext ctx) {
                         entered.countDown();
-                        return EventStepResult.await(AwaitCondition.event(Wake.class));
+                        return EventStepResult.await(AwaitCondition.event(Wake.class))
+                                .thenRun(c -> awaiting.countDown());
                     }
 
                     @Override
@@ -45,6 +47,7 @@ class EventWorkerBackgroundTest {
             worker.submit(flow);
 
             assertThat(entered.await(1, TimeUnit.SECONDS)).isTrue();
+            assertThat(awaiting.await(1, TimeUnit.SECONDS)).isTrue();
             assertThat(worker.stateOf(flow.flowId())).isEqualTo(FlowState.RUNNING);
 
             bus.publish(new Wake());
