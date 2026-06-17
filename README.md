@@ -363,6 +363,44 @@ final class WaitDockStep extends Step {
 - Make terminal outcomes explicit. Return `done()` for success and
   `fail(cause)` for failure.
 
+## Future Worker Scheduling Direction
+
+Today, each `Worker` is driven by a `ScheduledExecutorService` and wakes up at
+its configured `intervalMillis` to run one short tick. This is not a busy loop:
+an idle worker does not spin in a manual `while` loop, and user code must still
+avoid blocking inside `onTick`.
+
+This model is intentionally simple and deterministic. It is a good default for
+small and medium in-JVM orchestration because it keeps Worker behavior easy to
+test with `tickOnce()` and `ManualClock`.
+
+For deployments with many mostly-idle Workers, Flower may later add an
+event-driven Worker scheduler. The goal would be similar to a selector-style
+runtime, but not based on Java NIO `Selector` directly because Flower is not
+waiting on socket file descriptors. Instead, a future scheduler could wake a
+Worker only when useful work is possible:
+
+```text
+submit/cancel queued
+event or signal delivered
+timeout/deadline reached
+runnable flow available
+```
+
+That direction should preserve the current programming model:
+
+```text
+onEnter starts or subscribes
+onTick checks state quickly
+stay means "not ready yet"
+done/goTo/fail drive the Flow transition
+```
+
+An event-driven scheduler is therefore a future optimization, not a change in
+the Step contract. It should be considered only after measuring that idle
+Worker wakeups are a real cost. Until then, prefer tuning `intervalMillis` per
+Worker and keeping each tick cheap.
+
 ## Flow Submission
 
 ```java

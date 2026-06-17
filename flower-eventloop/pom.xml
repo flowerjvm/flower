@@ -12,28 +12,22 @@
         <relativePath>../pom.xml</relativePath>
     </parent>
 
-    <artifactId>flower-bloom-adapter</artifactId>
+    <artifactId>flower-eventloop</artifactId>
     <packaging>jar</packaging>
 
-    <name>Flower Bloom Adapter</name>
+    <name>Flower EventLoop</name>
     <description>
-        Bridges Flower core EventBus SPI to the Bloom event bus.
-        Java 8 compatible. Keeps flower-core free of any Bloom dependency.
+        Event-driven Flower runtime. EventWorker -> EventFlow -> EventStep.
+        A reactor-pattern event loop where steps declare what should wake them
+        (events, deadlines) instead of being re-ticked. Reuses flower-core
+        primitives (EventBus, Clock, FlowId, ExecutionContext, FlowState).
+        Java 8 compatible. No reactive-streams (Mono/Flux) API.
     </description>
 
     <dependencies>
         <dependency>
             <groupId>io.github.parkkevinsb.flower</groupId>
             <artifactId>flower-core</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>io.github.parkkevinsb.flower</groupId>
-            <artifactId>flower-eventloop</artifactId>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>io.github.parkkevinsb</groupId>
-            <artifactId>bloom-core</artifactId>
         </dependency>
 
         <dependency>
