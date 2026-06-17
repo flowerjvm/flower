@@ -27,6 +27,11 @@
             <artifactId>flower-core</artifactId>
         </dependency>
         <dependency>
+            <groupId>io.github.parkkevinsb.flower</groupId>
+            <artifactId>flower-eventloop</artifactId>
+            <optional>true</optional>
+        </dependency>
+        <dependency>
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter</artifactId>
             <scope>test</scope>

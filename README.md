@@ -52,8 +52,8 @@ Engine
 
 - `flower-core`: core Engine, Worker, Flow, Step, event bus, clock, and listener
   APIs.
-- `flower-persistence-jdbc`: JDBC `FlowCheckpointStore` implementation plus
-  schema SQL for PostgreSQL, MySQL, Oracle, and H2.
+- `flower-persistence-jdbc`: JDBC checkpoint stores for core flows and
+  event-loop flows, plus schema SQL for PostgreSQL, MySQL, Oracle, and H2.
 - `flower-bloom-adapter`: adapts Bloom's event bus to Flower's `EventBus` SPI.
 - `flower-spring-boot-starter`: Spring Boot auto-configuration for an `Engine`
   and optional checkpoint store wiring.
@@ -674,6 +674,20 @@ Engine engine = Engine.builder()
         .build();
 ```
 
+The same module also provides an event-loop checkpoint store:
+
+```java
+EventFlowCheckpointStore eventStore = JdbcEventFlowCheckpointStore.create(
+        dataSource,
+        JdbcEventFlowCheckpointDialects.postgresql());
+
+EventWorker worker = new EventWorker(
+        "agents",
+        SystemClock.INSTANCE,
+        InMemoryEventBus.create(),
+        eventStore);
+```
+
 Schema SQL is packaged under:
 
 ```text
@@ -683,8 +697,8 @@ flower/persistence/jdbc/oracle/schema.sql
 flower/persistence/jdbc/h2/schema.sql
 ```
 
-Apply that SQL yourself, or copy it into Flyway/Liquibase. The JDBC store does
-not create tables automatically. The standard checkpoint table includes
+Apply that SQL yourself, or copy it into Flyway/Liquibase. The JDBC stores do
+not create tables automatically. The standard checkpoint tables include
 nullable execution-context columns:
 
 ```text

@@ -186,9 +186,9 @@ The default `onRecover` fails fast to avoid silently resuming an unsafe step.
 
 `EventFlowFactoryRegistry` and `EventFlowRecoveryService` provide the worker
 startup path: load active checkpoints for a worker, rebuild each flow by
-definition id, attach its checkpoint, then submit it. JDBC persistence is not
-implemented yet; the current checkpoint store SPI is the storage boundary that
-a real adapter should implement.
+definition id, attach its checkpoint, then submit it. `flower-persistence-jdbc`
+provides `JdbcEventFlowCheckpointStore` and dialect-specific schema SQL for the
+standard event-flow checkpoint table.
 
 ## Status
 
@@ -198,7 +198,6 @@ the synchronous response case, but the following are intentionally not
 implemented yet:
 
 - signal and external-callback await conditions
-- JDBC persistence for event-flow checkpoints
 - specialized workers (`LlmEventWorker`, `AgentEventWorker`, `McpEventWorker`)
 - coexistence under one shared `Engine` with tick-driven flows
 - duplicate-submit policies and lifecycle listeners
