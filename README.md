@@ -162,19 +162,26 @@ stays in one JVM on purpose.
 
 ## Why Not Just Enum Or Spring StateMachine?
 
-For small flows, an enum and a switch can be enough. Flower becomes useful when
-the workflow needs event waits, timeouts, retry/fail transitions, cleanup,
-checkpoint/resume, listeners, dumps, and deterministic tests.
+For small flows, an enum and a switch are genuinely enough. Use them.
 
-Small flows are often fine as enum state machines. Flower appears when that
-enum starts growing timeouts, retries, listeners, schedulers, checkpoints,
-traces, dumps, and resume logic.
+The cost of "just build it yourself" appears when the flow starts needing the
+things below. None of them is hard alone. Together, they become a runtime you
+did not mean to write.
 
-You can build all of that yourself around an enum, but then you are slowly
-rebuilding a runtime. Or you can adopt a full state machine framework such as
-Spring StateMachine. Flower takes the middle path: it gives you a small runtime
-for long-running internal application flows while keeping your domain model in
-your Spring Boot application.
+| What the flow eventually needs | Hand-rolled around an enum | With Flower |
+| --- | --- | --- |
+| Wait for an event, then clean up the subscription | Register/deregister listeners by hand; leaks are easy to miss. | `ctx.subscribe(...)` in `onEnter`, released automatically on exit/reset/finish. |
+| Timeout on a wait | Deadline field plus a scheduler that checks it. | `ctx.startTimeout(30_000)` and `ctx.timedOut()`. |
+| Retry or explicit failure transition | Extra state, counters, and branches in the switch. | `StepResult.repeat()` / `StepResult.fail(cause)`. |
+| Checkpoint and resume after restart | Serialize position, persist it, rebuild, and resume. | `durable()` plus a `FlowCheckpointStore`. |
+| Deterministic tests | Abstract the clock, bypass the scheduler, and fake the bus yourself. | `ManualClock` plus `worker.tickOnce()`. |
+| Inspect what is running right now | Build your own dump/admin view. | `Engine.dump()` plus optional console. |
+
+You can build every row yourself. The question is whether you want to write,
+test, and maintain that runtime instead of your product code. Or you can adopt
+a full state machine framework such as Spring StateMachine. Flower takes the
+middle path: it gives you a small runtime for long-running internal application
+flows while keeping your domain model in your Spring Boot application.
 
 ## Operational Boundaries
 
