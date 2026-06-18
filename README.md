@@ -93,26 +93,14 @@ that remains understandable as systems grow.
 
 ## Industrial Control Influence
 
-Flower's model is influenced by patterns that are common in industrial and
-equipment-control software:
+Flower's execution model is inspired by proven patterns from industrial and
+equipment-control software, where long-running work is modeled as explicit
+states, guarded transitions, timeouts, retries, operator intervention, and
+observable execution logs.
 
-```text
-Equipment / unit      -> Worker or domain actor
-Command sequence      -> Flow
-Control phase         -> Step
-Interlock             -> Guard
-ACK / result          -> StepResult
-Timeout               -> StepContext timeout
-Retry / fallback      -> explicit transition logic
-Manual mode           -> approval or operator intervention
-Operation log         -> listener, dump, checkpoint, audit layer
-State machine         -> Flow state + current Step
-```
-
-These patterns are useful because hidden control flow is dangerous in
-operational systems. Flower brings that style to Java application code: make
-the current state visible, make transitions explicit, keep each unit small, and
-leave a trace that humans can inspect.
+Flower brings that style to Java application code: make the current state
+visible, make transitions explicit, keep each unit small, and leave a trace
+that humans can inspect.
 
 ## Why Flower Is Useful
 
