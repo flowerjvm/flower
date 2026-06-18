@@ -1,7 +1,7 @@
 # 🌸 Flower
 
-Flower is a lightweight Java workflow framework for explicit, testable,
-human-operable orchestration inside one JVM.
+Flower is a **Flow-er**: a lightweight Java workflow framework for explicit,
+testable, human-operable orchestration inside one JVM.
 
 It helps you model long-running application behavior as a `Flow` made of small
 `Step` objects. A `Worker` ticks active flows, each step returns an explicit
