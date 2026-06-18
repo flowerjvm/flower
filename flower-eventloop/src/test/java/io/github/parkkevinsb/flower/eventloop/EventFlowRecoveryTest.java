@@ -130,6 +130,61 @@ class EventFlowRecoveryTest {
     }
 
     @Test
+    void recoveryReRegistersSignalAwait() {
+        ManualClock clock = new ManualClock(2_000L);
+        InMemoryEventBus bus = InMemoryEventBus.create();
+        FakeEventFlowCheckpointStore store = new FakeEventFlowCheckpointStore();
+        EventWorker worker = new EventWorker("worker-a", clock, bus, store);
+        FlowId flowId = FlowId.of("recover", "signal");
+
+        store.save(checkpoint(flowId, "worker-a",
+                Collections.singletonList(EventAwaitCheckpoint.signal("tool-call", "call-1"))));
+
+        EventFlowRecoveryService recovery = EventFlowRecoveryService.create(
+                store,
+                EventFlowFactoryRegistry.builder()
+                        .register("recover", id -> EventFlow.builder(id.flowType(), id.flowKey())
+                                .durable()
+                                .definitionVersion("v1")
+                                .step("wait", new EventStep() {
+                                    @Override
+                                    protected EventStepResult onEnter(EventStepContext ctx) {
+                                        return EventStepResult.await(AwaitCondition.signal("tool-call", "call-1"));
+                                    }
+
+                                    @Override
+                                    protected EventStepResult onRecover(
+                                            EventStepContext ctx,
+                                            EventRecoveryContext recovery) {
+                                        EventAwaitCheckpoint await = recovery.awaits().get(0);
+                                        assertThat(await.signalName()).isEqualTo("tool-call");
+                                        assertThat(await.signalKey()).isEqualTo("call-1");
+                                        return EventStepResult.await(
+                                                AwaitCondition.signal(await.signalName(), await.signalKey()));
+                                    }
+
+                                    @Override
+                                    protected EventStepResult onEvent(EventStepContext ctx, Object event) {
+                                        EventSignal signal = (EventSignal) event;
+                                        assertThat(signal.payload(String.class)).isEqualTo("ok");
+                                        return EventStepResult.finish();
+                                    }
+                                })
+                                .build())
+                        .build());
+
+        EventFlow flow = recovery.recover(store.find(flowId).orElseThrow(AssertionError::new), worker);
+        worker.drain();
+        assertThat(flow.state()).isEqualTo(FlowState.RUNNING);
+
+        worker.signal("tool-call", "call-1", "ok");
+        worker.drain();
+
+        assertThat(flow.state()).isEqualTo(FlowState.FINISHED);
+        assertThat(store.find(flowId)).isEmpty();
+    }
+
+    @Test
     void defaultOnRecoverFailsFast() {
         ManualClock clock = new ManualClock();
         InMemoryEventBus bus = InMemoryEventBus.create();

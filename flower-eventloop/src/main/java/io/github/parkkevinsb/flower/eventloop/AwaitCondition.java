@@ -11,11 +11,13 @@ import java.util.function.Predicate;
  * returns {@link EventStepResult#await(AwaitCondition...)} to say
  * "wake me when one of these conditions fires".
  *
- * <p>Two condition kinds are supported in this experimental runtime:
+ * <p>Three condition kinds are supported in this experimental runtime:
  *
  * <ul>
  *   <li>{@link Event}: wake when an event of the given runtime type is
  *   published on the {@code EventBus} (exact-type match, same as core).</li>
+ *   <li>{@link Signal}: wake when an external callback publishes a named
+ *   signal with a matching correlation key.</li>
  *   <li>{@link Deadline}: wake when the {@code Clock} reaches a deadline
  *   relative to the moment the await is registered.</li>
  * </ul>
@@ -45,6 +47,11 @@ public abstract class AwaitCondition {
                 return predicate.test(type.cast(event));
             }
         });
+    }
+
+    /** Wake when a named external signal with the given key is published. */
+    public static AwaitCondition signal(String name, String key) {
+        return new Signal(name, key);
     }
 
     /** Wake when {@code millisFromNow} have elapsed on the worker's clock. */
@@ -81,6 +88,33 @@ public abstract class AwaitCondition {
         }
     }
 
+    /** Wake on a durable-friendly named signal and correlation key. */
+    public static final class Signal extends AwaitCondition {
+        private final String name;
+        private final String key;
+
+        Signal(String name, String key) {
+            validateSignalPart("signal name", name);
+            validateSignalPart("signal key", key);
+            this.name = name;
+            this.key = key;
+        }
+
+        public String name() {
+            return name;
+        }
+
+        public String key() {
+            return key;
+        }
+
+        boolean matches(EventSignal signal) {
+            return signal != null
+                    && name.equals(signal.name())
+                    && key.equals(signal.key());
+        }
+    }
+
     /** Wake when a deadline relative to registration time is reached. */
     public static final class Deadline extends AwaitCondition {
         private final long millisFromNow;
@@ -94,6 +128,12 @@ public abstract class AwaitCondition {
 
         public long millisFromNow() {
             return millisFromNow;
+        }
+    }
+
+    static void validateSignalPart(String label, String value) {
+        if (value == null || value.isEmpty()) {
+            throw new IllegalArgumentException(label + " must not be null or empty");
         }
     }
 }

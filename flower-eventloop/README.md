@@ -118,9 +118,10 @@ event bus.
 - `thenRunOffloaded(effect)` schedules blocking work on the worker's offload
   executor after the result is accepted
 
-`AwaitCondition` currently supports `event(Type.class)` and
-`deadlineIn(millis)`. Event awaits can also include a predicate for correlation
-keys such as request id or tool call id.
+`AwaitCondition` currently supports `event(Type.class)`,
+`signal(name, key)`, and `deadlineIn(millis)`. Event awaits can also include a
+predicate for runtime-only correlation. For durable external callbacks, prefer
+`signal(name, key)` because the name/key pair can be written to a checkpoint.
 
 ## Wake-up sources
 
@@ -129,6 +130,7 @@ The worker makes a flow progress only when something useful happens:
 ```text
 flow submitted        -> enter first step
 awaited event arrives -> deliver to current step (onEvent)
+awaited signal arrives -> deliver EventSignal to current step (onEvent)
 deadline reached      -> time out current step (onTimeout)
 flow cancelled        -> exit current step, terminate
 ```
@@ -168,6 +170,21 @@ bus.publish(new LlmResponded("hi"));
 worker.drain();                 // flow reaches "complete" and finishes
 ```
 
+For external callbacks such as MCP/tool completion or human approval, use a
+named signal with a correlation key:
+
+```java
+return EventStepResult.await(
+        AwaitCondition.signal("tool-call", callId),
+        AwaitCondition.deadlineIn(30_000));
+
+// Later, from the callback endpoint or another worker step:
+worker.signal("tool-call", callId, resultPayload);
+```
+
+The delivered event is an `EventSignal`, so the step can inspect
+`signal.name()`, `signal.key()`, and `signal.payload(...)`.
+
 ## Drive modes
 
 - **Manual / test**: `submit(flow)` then `drain()`. With `ManualClock`,
@@ -191,13 +208,14 @@ await generation, and durable await descriptors:
 
 ```text
 event type name
+signal name + signal key
 absolute deadline millis
 ```
 
 Runtime objects such as subscriptions, event instances, and predicate lambdas
-are not checkpointed. Durable flows may use `event(Type.class)` and
-`deadlineIn(millis)`. Predicate-based awaits are still runtime-only and fail
-fast if used by a durable flow.
+are not checkpointed. Durable flows may use `event(Type.class)`,
+`signal(name, key)`, and `deadlineIn(millis)`. Predicate-based awaits are still
+runtime-only and fail fast if used by a durable flow.
 
 To resume a durable flow, rebuild the flow definition, call
 `recoverFrom(checkpoint)`, and submit it to a worker that uses the same
@@ -224,7 +242,6 @@ Experimental runtime. The contract (`EventStep` / `EventStepResult` /
 the synchronous response case, but the following are intentionally not
 implemented yet:
 
-- signal and external-callback await conditions
 - specialized workers (`LlmEventWorker`, `AgentEventWorker`, `McpEventWorker`)
 - coexistence under one shared `Engine` with tick-driven flows
 

@@ -43,6 +43,7 @@ class BloomEventWorkerIntegrationTest {
         LocalEventBus bloom = LocalEventBus.create();
         EventWorker worker = new EventWorker("bloom-eventloop", SystemClock.INSTANCE, BloomEventBus.wrap(bloom));
         CountDownLatch entered = new CountDownLatch(1);
+        CountDownLatch awaiting = new CountDownLatch(1);
         CountDownLatch finished = new CountDownLatch(1);
 
         EventFlow flow = EventFlow.builder("bloom", "req-1")
@@ -51,7 +52,8 @@ class BloomEventWorkerIntegrationTest {
                     protected EventStepResult onEnter(EventStepContext ctx) {
                         entered.countDown();
                         return EventStepResult.await(
-                                AwaitCondition.event(Response.class, response -> "req-1".equals(response.id)));
+                                AwaitCondition.event(Response.class, response -> "req-1".equals(response.id)))
+                                .thenRun(context -> awaiting.countDown());
                     }
 
                     @Override
@@ -67,6 +69,7 @@ class BloomEventWorkerIntegrationTest {
             worker.submit(flow);
 
             assertThat(entered.await(1, TimeUnit.SECONDS)).isTrue();
+            assertThat(awaiting.await(1, TimeUnit.SECONDS)).isTrue();
 
             bloom.publish(new Response("other"));
             assertThat(worker.stateOf(flow.flowId())).isEqualTo(FlowState.RUNNING);

@@ -29,6 +29,16 @@ public interface EventStepContext {
      */
     EventBus eventBus();
 
+    /** Publish a named external signal through the shared event bus. */
+    default void signal(String name, String key) {
+        eventBus().publish(EventSignal.of(name, key));
+    }
+
+    /** Publish a named external signal with a payload through the shared event bus. */
+    default void signal(String name, String key, Object payload) {
+        eventBus().publish(EventSignal.of(name, key, payload));
+    }
+
     /**
      * Submit blocking or long-running work to the worker's offload executor.
      *

@@ -208,6 +208,12 @@ public final class JdbcEventFlowCheckpointStore implements EventFlowCheckpointSt
         for (EventAwaitCheckpoint await : awaits) {
             if (await.type() == EventAwaitCheckpoint.Type.EVENT) {
                 out.append("EVENT\t").append(encodeString(await.eventTypeName())).append('\n');
+            } else if (await.type() == EventAwaitCheckpoint.Type.SIGNAL) {
+                out.append("SIGNAL\t")
+                        .append(encodeString(await.signalName()))
+                        .append('\t')
+                        .append(encodeString(await.signalKey()))
+                        .append('\n');
             } else if (await.type() == EventAwaitCheckpoint.Type.DEADLINE) {
                 out.append("DEADLINE\t").append(await.deadlineAtMillis()).append('\n');
             } else {
@@ -235,6 +241,14 @@ public final class JdbcEventFlowCheckpointStore implements EventFlowCheckpointSt
             String value = line.substring(sep + 1);
             if ("EVENT".equals(type)) {
                 out.add(EventAwaitCheckpoint.event(decodeString(value)));
+            } else if ("SIGNAL".equals(type)) {
+                int secondSep = value.indexOf('\t');
+                if (secondSep < 0) {
+                    throw new IllegalArgumentException("invalid signal await checkpoint payload line: " + line);
+                }
+                out.add(EventAwaitCheckpoint.signal(
+                        decodeString(value.substring(0, secondSep)),
+                        decodeString(value.substring(secondSep + 1))));
             } else if ("DEADLINE".equals(type)) {
                 out.add(EventAwaitCheckpoint.deadline(Long.parseLong(value)));
             } else {

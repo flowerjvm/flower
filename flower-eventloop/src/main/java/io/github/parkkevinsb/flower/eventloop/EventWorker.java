@@ -267,6 +267,16 @@ public final class EventWorker {
         }
     }
 
+    /** Publish a named external callback signal to this worker's event bus. */
+    public void signal(String signalName, String signalKey) {
+        eventBus.publish(EventSignal.of(signalName, signalKey));
+    }
+
+    /** Publish a named external callback signal with a payload to this worker's event bus. */
+    public void signal(String signalName, String signalKey, Object payload) {
+        eventBus.publish(EventSignal.of(signalName, signalKey, payload));
+    }
+
     // ------------------------------------------------------------------
     // Manual drive (deterministic tests)
     // ------------------------------------------------------------------
@@ -648,6 +658,8 @@ public final class EventWorker {
         for (AwaitCondition cond : conditions) {
             if (cond instanceof AwaitCondition.Event) {
                 rt.subscriptions.add(subscribeEvent(rt, (AwaitCondition.Event) cond, generation));
+            } else if (cond instanceof AwaitCondition.Signal) {
+                rt.subscriptions.add(subscribeSignal(rt, (AwaitCondition.Signal) cond, generation));
             } else if (cond instanceof AwaitCondition.Deadline) {
                 long deadline = deadlineAt(now, ((AwaitCondition.Deadline) cond).millisFromNow());
                 earliestDeadline = (earliestDeadline == NO_DEADLINE)
@@ -688,6 +700,9 @@ public final class EventWorker {
                                     + event.eventType().getName());
                 }
                 out.add(EventAwaitCheckpoint.event(event.eventType().getName()));
+            } else if (cond instanceof AwaitCondition.Signal) {
+                AwaitCondition.Signal signal = (AwaitCondition.Signal) cond;
+                out.add(EventAwaitCheckpoint.signal(signal.name(), signal.key()));
             } else if (cond instanceof AwaitCondition.Deadline) {
                 long deadline = deadlineAt(now, ((AwaitCondition.Deadline) cond).millisFromNow());
                 earliestDeadline = (earliestDeadline == NO_DEADLINE)
@@ -745,6 +760,26 @@ public final class EventWorker {
                 }
             }
         });
+    }
+
+    private Subscription subscribeSignal(
+            final FlowRuntime rt,
+            final AwaitCondition.Signal condition,
+            final long generation) {
+        return eventBus.subscribe(EventSignal.class,
+                new io.github.parkkevinsb.flower.core.event.EventHandler<EventSignal>() {
+                    @Override
+                    public void handle(final EventSignal signal) {
+                        if (condition.matches(signal)) {
+                            enqueue(new Command() {
+                                @Override
+                                public void execute() {
+                                    deliverEvent(rt, signal, generation);
+                                }
+                            });
+                        }
+                    }
+                });
     }
 
     private void clearAwaits(FlowRuntime rt) {
@@ -1048,6 +1083,16 @@ public final class EventWorker {
         @Override
         public EventBus eventBus() {
             return eventBus;
+        }
+
+        @Override
+        public void signal(String signalName, String signalKey) {
+            EventWorker.this.signal(signalName, signalKey);
+        }
+
+        @Override
+        public void signal(String signalName, String signalKey, Object payload) {
+            EventWorker.this.signal(signalName, signalKey, payload);
         }
 
         @Override

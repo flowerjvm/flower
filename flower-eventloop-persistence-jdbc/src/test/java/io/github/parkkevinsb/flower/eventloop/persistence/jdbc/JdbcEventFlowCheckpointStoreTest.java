@@ -58,6 +58,7 @@ class JdbcEventFlowCheckpointStoreTest {
                 9L,
                 Arrays.asList(
                         EventAwaitCheckpoint.event(String.class.getName()),
+                        EventAwaitCheckpoint.signal("tool-call", "call-1"),
                         EventAwaitCheckpoint.deadline(5_000L))));
 
         assertThat(ds.sql).contains("flower_event_flow_checkpoint").contains("ON CONFLICT");
@@ -79,6 +80,7 @@ class JdbcEventFlowCheckpointStoreTest {
         assertThat(ds.params).containsEntry(16, 9L);
         assertThat((String) ds.params.get(17))
                 .contains("EVENT\t")
+                .contains("SIGNAL\t")
                 .contains("DEADLINE\t5000");
         assertThat(ds.updateCount).isEqualTo(1);
     }
@@ -90,7 +92,9 @@ class JdbcEventFlowCheckpointStoreTest {
                 true, "DURABLE", "event-worker-a", 4321L, "v2",
                 "tenant-a", "user-1", "session-1", "run-1", "trace-1", "corr-1",
                 11L,
-                "EVENT\t" + encode(String.class.getName()) + "\nDEADLINE\t7000\n"));
+                "EVENT\t" + encode(String.class.getName()) + "\n"
+                        + "SIGNAL\t" + encode("tool-call") + "\t" + encode("call-1") + "\n"
+                        + "DEADLINE\t7000\n"));
         JdbcEventFlowCheckpointStore store = JdbcEventFlowCheckpointStore.create(
                 ds, JdbcEventFlowCheckpointDialects.postgresql());
 
@@ -115,11 +119,14 @@ class JdbcEventFlowCheckpointStoreTest {
         assertThat(found.get().executionContext().traceId()).contains("trace-1");
         assertThat(found.get().executionContext().correlationId()).contains("corr-1");
         assertThat(found.get().awaitGeneration()).isEqualTo(11L);
-        assertThat(found.get().awaits()).hasSize(2);
+        assertThat(found.get().awaits()).hasSize(3);
         assertThat(found.get().awaits().get(0).type()).isEqualTo(EventAwaitCheckpoint.Type.EVENT);
         assertThat(found.get().awaits().get(0).eventTypeName()).isEqualTo(String.class.getName());
-        assertThat(found.get().awaits().get(1).type()).isEqualTo(EventAwaitCheckpoint.Type.DEADLINE);
-        assertThat(found.get().awaits().get(1).deadlineAtMillis()).isEqualTo(7_000L);
+        assertThat(found.get().awaits().get(1).type()).isEqualTo(EventAwaitCheckpoint.Type.SIGNAL);
+        assertThat(found.get().awaits().get(1).signalName()).isEqualTo("tool-call");
+        assertThat(found.get().awaits().get(1).signalKey()).isEqualTo("call-1");
+        assertThat(found.get().awaits().get(2).type()).isEqualTo(EventAwaitCheckpoint.Type.DEADLINE);
+        assertThat(found.get().awaits().get(2).deadlineAtMillis()).isEqualTo(7_000L);
     }
 
     @Test

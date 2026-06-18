@@ -60,6 +60,36 @@ class EventFlowCheckpointTest {
     }
 
     @Test
+    void durableSignalAwaitIsCheckpointedAsData() {
+        ManualClock clock = new ManualClock(1_000L);
+        InMemoryEventBus bus = InMemoryEventBus.create();
+        FakeEventFlowCheckpointStore store = new FakeEventFlowCheckpointStore();
+        EventWorker worker = new EventWorker("durable", clock, bus, store);
+
+        EventFlow flow = EventFlow.builder("durable", "signal")
+                .durable()
+                .step("wait", new EventStep() {
+                    @Override
+                    protected EventStepResult onEnter(EventStepContext ctx) {
+                        return EventStepResult.await(
+                                AwaitCondition.signal("tool-call", "call-1"),
+                                AwaitCondition.deadlineIn(500));
+                    }
+                })
+                .build();
+
+        worker.submit(flow);
+        worker.drain();
+
+        EventFlowCheckpoint checkpoint = store.find(flow.flowId()).orElseThrow(AssertionError::new);
+        assertThat(checkpoint.awaits()).hasSize(2);
+        assertThat(checkpoint.awaits().get(0).type()).isEqualTo(EventAwaitCheckpoint.Type.SIGNAL);
+        assertThat(checkpoint.awaits().get(0).signalName()).isEqualTo("tool-call");
+        assertThat(checkpoint.awaits().get(0).signalKey()).isEqualTo("call-1");
+        assertThat(checkpoint.awaits().get(1).type()).isEqualTo(EventAwaitCheckpoint.Type.DEADLINE);
+    }
+
+    @Test
     void finishingDurableFlowDeletesCheckpoint() {
         ManualClock clock = new ManualClock();
         InMemoryEventBus bus = InMemoryEventBus.create();
