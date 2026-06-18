@@ -1,4 +1,4 @@
-# 🌼 Flower
+# 🌸 Flower
 
 Flower -- the one that flows. A lightweight Java workflow runtime for
 explicit, testable, human-operable orchestration inside one JVM.
