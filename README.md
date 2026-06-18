@@ -77,6 +77,43 @@ future flower-mcp-proxy
 Those layers should guide and govern AI usage without making `flower-core`
 itself a model framework.
 
+## Used In Real Projects
+
+Flower is being validated through real application code, not only toy
+examples. Current usage includes:
+
+- architecture-office SaaS document workflows
+- Terminal Operating System execution-layer orchestration
+- game server workflow and turn/state coordination
+- AI harness runtime experiments for controlled AI execution
+
+These projects keep Flower focused on practical orchestration needs: explicit
+flow structure, small steps, recoverable execution, observable state, and code
+that remains understandable as systems grow.
+
+## Industrial Control Influence
+
+Flower's model is influenced by patterns that are common in industrial and
+equipment-control software:
+
+```text
+Equipment / unit      -> Worker or domain actor
+Command sequence      -> Flow
+Control phase         -> Step
+Interlock             -> Guard
+ACK / result          -> StepResult
+Timeout               -> StepContext timeout
+Retry / fallback      -> explicit transition logic
+Manual mode           -> approval or operator intervention
+Operation log         -> listener, dump, checkpoint, audit layer
+State machine         -> Flow state + current Step
+```
+
+These patterns are useful because hidden control flow is dangerous in
+operational systems. Flower brings that style to Java application code: make
+the current state visible, make transitions explicit, keep each unit small, and
+leave a trace that humans can inspect.
+
 ## Why Flower Is Useful
 
 Use Flower when application work has multiple phases and should progress over
