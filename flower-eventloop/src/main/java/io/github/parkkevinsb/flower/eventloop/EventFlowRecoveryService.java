@@ -1,5 +1,7 @@
 package io.github.parkkevinsb.flower.eventloop;
 
+import io.github.parkkevinsb.flower.core.worker.DuplicatePolicy;
+
 import java.util.List;
 
 /**
@@ -33,11 +35,18 @@ public final class EventFlowRecoveryService {
     }
 
     public EventFlow recover(EventFlowCheckpoint checkpoint, EventWorker worker) {
+        return recover(checkpoint, worker, DuplicatePolicy.REJECT);
+    }
+
+    public EventFlow recover(EventFlowCheckpoint checkpoint, EventWorker worker, DuplicatePolicy policy) {
         if (worker == null) {
             throw new IllegalArgumentException("worker must not be null");
         }
+        if (policy == null) {
+            throw new IllegalArgumentException("policy must not be null");
+        }
         EventFlow flow = registry.recover(checkpoint);
-        worker.submit(flow);
+        worker.submit(flow, policy);
         return flow;
     }
 
@@ -45,20 +54,32 @@ public final class EventFlowRecoveryService {
         return recoverAll(checkpointStore.findActive(), worker);
     }
 
+    public int recoverActive(EventWorker worker, DuplicatePolicy policy) {
+        return recoverAll(checkpointStore.findActive(), worker, policy);
+    }
+
     public int recoverActiveForWorker(EventWorker worker) {
+        return recoverActiveForWorker(worker, DuplicatePolicy.REJECT);
+    }
+
+    public int recoverActiveForWorker(EventWorker worker, DuplicatePolicy policy) {
         if (worker == null) {
             throw new IllegalArgumentException("worker must not be null");
         }
-        return recoverAll(checkpointStore.findActiveByWorker(worker.name()), worker);
+        return recoverAll(checkpointStore.findActiveByWorker(worker.name()), worker, policy);
     }
 
     private int recoverAll(List<EventFlowCheckpoint> checkpoints, EventWorker worker) {
+        return recoverAll(checkpoints, worker, DuplicatePolicy.REJECT);
+    }
+
+    private int recoverAll(List<EventFlowCheckpoint> checkpoints, EventWorker worker, DuplicatePolicy policy) {
         if (checkpoints == null || checkpoints.isEmpty()) {
             return 0;
         }
         int recovered = 0;
         for (EventFlowCheckpoint checkpoint : checkpoints) {
-            recover(checkpoint, worker);
+            recover(checkpoint, worker, policy);
             recovered++;
         }
         return recovered;

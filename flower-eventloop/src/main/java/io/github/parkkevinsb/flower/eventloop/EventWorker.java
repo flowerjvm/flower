@@ -9,6 +9,7 @@ import io.github.parkkevinsb.flower.core.flow.FlowSnapshot;
 import io.github.parkkevinsb.flower.core.flow.FlowState;
 import io.github.parkkevinsb.flower.core.listener.FlowerListener;
 import io.github.parkkevinsb.flower.core.time.Clock;
+import io.github.parkkevinsb.flower.core.worker.DuplicatePolicy;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -172,8 +173,16 @@ public final class EventWorker {
 
     /** Submit a flow. It enters its first step on the next {@link #drain()} or loop pass. */
     public void submit(EventFlow flow) {
+        submit(flow, DuplicatePolicy.REJECT);
+    }
+
+    /** Submit a flow with an explicit duplicate-id policy. */
+    public void submit(EventFlow flow, DuplicatePolicy policy) {
         if (flow == null) {
             throw new IllegalArgumentException("flow must not be null");
+        }
+        if (policy == null) {
+            throw new IllegalArgumentException("policy must not be null");
         }
         if (flow.state() != FlowState.CREATED) {
             throw new IllegalStateException("flow must be CREATED before submit: " + flow.flowId());
@@ -182,16 +191,37 @@ public final class EventWorker {
             throw new IllegalStateException("EventWorker " + name + " is stopped");
         }
         final FlowRuntime rt = new FlowRuntime(flow);
+        final FlowRuntime replaced;
         synchronized (stateLock) {
             if (stopped) {
                 throw new IllegalStateException("EventWorker " + name + " is stopped");
             }
-            if (active.containsKey(flow.flowId())) {
-                throw new IllegalStateException("flow already submitted: " + flow.flowId());
+            replaced = active.get(flow.flowId());
+            if (replaced != null) {
+                switch (policy) {
+                    case REJECT:
+                        throw new IllegalStateException(
+                                "Flow already submitted to event worker " + name + ": " + flow.flowId());
+                    case IGNORE:
+                        return;
+                    case REPLACE:
+                        replaced.cancelRequested = true;
+                        break;
+                    default:
+                        throw new IllegalStateException("Unknown DuplicatePolicy: " + policy);
+                }
             }
             active.put(flow.flowId(), rt);
         }
         fireFlowSubmitted(flow);
+        if (replaced != null) {
+            enqueue(new Command() {
+                @Override
+                public void execute() {
+                    cancelReplacedRuntime(replaced);
+                }
+            });
+        }
         enqueue(new Command() {
             @Override
             public void execute() {
@@ -786,6 +816,17 @@ public final class EventWorker {
         deleteCheckpoint(rt);
         fireFlowTerminated(rt.flow);
         remove(rt);
+    }
+
+    private void cancelReplacedRuntime(FlowRuntime rt) {
+        if (rt.flow.state().isTerminal()) {
+            return;
+        }
+        clearAwaits(rt);
+        safeExit(rt);
+        rt.flow.cancel();
+        deleteCheckpoint(rt);
+        fireFlowTerminated(rt.flow);
     }
 
     private DeadlineEntry peekLiveDeadline() {

@@ -227,6 +227,5 @@ implemented yet:
 - signal and external-callback await conditions
 - specialized workers (`LlmEventWorker`, `AgentEventWorker`, `McpEventWorker`)
 - coexistence under one shared `Engine` with tick-driven flows
-- duplicate-submit policies
 
 Do not depend on the API surface staying stable yet.
