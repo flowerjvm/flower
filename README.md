@@ -8,9 +8,9 @@ It helps you model long-running application behavior as a `Flow` made of small
 transition, and an `Engine` owns the shared clock, event bus, workers, and
 lifecycle listeners.
 
-In typical Java services, Flower runs inside the host application, often
-alongside Spring Boot, giving application workflows an explicit runtime shape
-without replacing the application's framework or domain model.
+Flower fits naturally in Spring Boot applications: Spring provides the
+application framework, and Flower gives long-running business flows an explicit
+runtime shape without replacing the application's framework or domain model.
 
 Flower is intentionally smaller than a workflow platform. It is not BPMN,
 Temporal, Camunda, a distributed scheduler, or a durable saga engine. It is a
