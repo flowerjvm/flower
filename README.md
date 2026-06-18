@@ -194,7 +194,9 @@ Engine
   `FlowId(flowType, flowKey)`.
 - `Step`: a small stateful orchestration unit. It receives a `StepContext` and
   returns `StepResult`.
-- `stepNo`: optional step-local cursor for sub-state inside one step.
+- `stepId`: a stable flow-level string id used by `goTo`, dumps, checkpoints,
+  and admin views.
+- `stepNo`: optional step-local cursor for tiny sub-state inside one step.
 
 ## Quick Start
 
@@ -342,6 +344,86 @@ onReset(ctx)       called for StepResult.repeat(), then the step re-enters
 - `StepResult.finish()`: finish the flow successfully without running later steps.
 - `StepResult.fail(Throwable)`: fail the flow.
 
+## Step IDs, stepNo, And Shared State
+
+Flower already has step ids. They are flow-level string ids:
+
+```java
+Flow flow = Flow.builder("order", orderId)
+        .step("accept", new AcceptOrderStep(orderService))
+        .step("payment", new WaitForPaymentStep())
+        .step("fulfill", new FulfillOrderStep(warehouseService))
+        .build();
+
+return StepResult.goTo("payment");
+```
+
+The core keeps step ids as strings because the same ids must be readable in
+logs, dumps, checkpoints, admin screens, and external configuration. If you
+want type safety in application code, wrap them with an enum:
+
+```java
+enum OrderStep {
+    ACCEPT("accept"),
+    PAYMENT("payment"),
+    FULFILL("fulfill");
+
+    private final String id;
+
+    OrderStep(String id) {
+        this.id = id;
+    }
+
+    String id() {
+        return id;
+    }
+}
+```
+
+```java
+Flow flow = Flow.builder("order", orderId)
+        .step(OrderStep.ACCEPT.id(), new AcceptOrderStep(orderService))
+        .step(OrderStep.PAYMENT.id(), new WaitForPaymentStep())
+        .step(OrderStep.FULFILL.id(),
+                new FulfillOrderStep(warehouseService))
+        .build();
+```
+
+Use `stepNo` only as a small cursor inside one Step. If it starts representing
+business states such as `WAITING_PAYMENT`, `RETRYING`, `FULFILLING`, or
+`FAILED`, split the behavior into explicit Steps.
+
+When multiple Steps need shared values, do not hide them in `stepNo` or
+step-local signals. Use domain state, or pass a small run context object while
+building the Flow:
+
+```java
+final class OrderFlowRun {
+    final String orderId;
+    PaymentResult paymentResult;
+    FulfillmentPlan fulfillmentPlan;
+
+    OrderFlowRun(String orderId) {
+        this.orderId = orderId;
+    }
+}
+```
+
+```java
+OrderFlowRun run = new OrderFlowRun(orderId);
+
+Flow flow = Flow.builder("order", orderId)
+        .step(OrderStep.ACCEPT.id(), new AcceptOrderStep(run, orderService))
+        .step(OrderStep.PAYMENT.id(), new WaitForPaymentStep(run, paymentService))
+        .step(OrderStep.FULFILL.id(),
+                new FulfillOrderStep(run, warehouseService))
+        .build();
+```
+
+For durable flows, keep recoverable business state in your domain storage. A
+run context object is convenient for transient coordination, but it is not a
+durable source of truth after process restart.
+
 ## Event-Driven Steps
 
 Steps should be asynchronous in shape. Do not block a worker thread while
@@ -404,12 +486,17 @@ machine, split the behavior into multiple explicit Steps instead.
   can release them automatically.
 - Use `StepContext.eventBus().publish(...)` when a step needs to emit an event.
 - Use `stepNo` for small internal cursors, not for large hidden state machines.
+  If the cursor turns into business state, split the Step.
 - Put heavy domain logic in services. A step should orchestrate, not become the
   domain model.
 - Pass dependencies through step constructors. Flower does not instantiate steps
   by reflection and does not provide a DI container in core.
 - Give every step a stable, meaningful flow-level id. `goTo(...)` targets that
-  id, not the Java class name.
+  id, not the Java class name. Wrap ids in an enum when application code needs
+  type safety.
+- Keep shared values in domain state or an explicit run context object. Durable
+  flows must be recoverable from domain state and checkpoints, not from
+  transient Step fields alone.
 - Prefer immutable events and exact event classes. The default event buses match
   by exact runtime type.
 - Treat a `Step` instance as owned by one `Flow`. Create fresh step instances
