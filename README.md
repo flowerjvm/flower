@@ -166,10 +166,15 @@ For small flows, an enum and a switch can be enough. Flower becomes useful when
 the workflow needs event waits, timeouts, retry/fail transitions, cleanup,
 checkpoint/resume, listeners, dumps, and deterministic tests.
 
-You can build all of that yourself around an enum, or adopt a full state
-machine framework such as Spring StateMachine. Flower takes the middle path: it
-gives you a small runtime for long-running internal application flows while
-keeping your domain model in your Spring Boot application.
+Small flows are often fine as enum state machines. Flower appears when that
+enum starts growing timeouts, retries, listeners, schedulers, checkpoints,
+traces, dumps, and resume logic.
+
+You can build all of that yourself around an enum, but then you are slowly
+rebuilding a runtime. Or you can adopt a full state machine framework such as
+Spring StateMachine. Flower takes the middle path: it gives you a small runtime
+for long-running internal application flows while keeping your domain model in
+your Spring Boot application.
 
 ## Mental Model
 
