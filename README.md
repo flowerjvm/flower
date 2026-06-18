@@ -1,17 +1,81 @@
-# Flower
+# 🌸 Flower
 
-Flower is a lightweight Java orchestration toolkit for event-driven,
-tick-driven workflows inside one JVM.
+Flower is a lightweight Java workflow framework for explicit, testable,
+human-operable orchestration inside one JVM.
 
-It helps you model a long-running piece of application behavior as a `Flow`
-made of small `Step` objects. A `Worker` ticks active flows, each step decides
-whether to stay, move to the next step, repeat, jump, finish, or fail, and an `Engine` owns
-the shared clock, event bus, workers, and lifecycle listeners.
+It helps you model long-running application behavior as a `Flow` made of small
+`Step` objects. A `Worker` ticks active flows, each step returns an explicit
+transition, and an `Engine` owns the shared clock, event bus, workers, and
+lifecycle listeners.
 
 Flower is intentionally smaller than a workflow platform. It is not BPMN,
 Temporal, Camunda, a distributed scheduler, or a durable saga engine. It is a
 plain Java toolkit for applications that need controlled internal
 orchestration without surrendering their domain model to a large runtime.
+
+## AI-Era Positioning
+
+Flower core is not an AI framework, and it does not depend on an LLM. Its value
+in the AI coding era is structure.
+
+AI can generate more application code than humans can comfortably review when
+that code becomes scattered callbacks, service methods, scheduled jobs, and
+background threads. Flower gives business behavior a small execution shape:
+
+```text
+Engine
+  -> Worker
+      -> Flow
+          -> Step
+              -> StepResult
+```
+
+That shape makes generated and hand-written orchestration easier to inspect,
+test, recover, observe, and change. A flow has a current step. A step returns
+an explicit result. Waiting is modeled through events, signals, timeouts, or
+durable domain state instead of hidden sleeps and ad-hoc polling loops.
+
+The intended core positioning is:
+
+```text
+Flower is AI-era friendly, but not AI-specific.
+```
+
+The broader Flower ecosystem is meant to bound AI in two places:
+
+```text
+1. When AI writes code
+   Flower gives generated code an explicit Flow / Step structure.
+   flower-check can reject known bad patterns.
+   A future flower-dev-mcp can guide coding agents before code is written.
+
+2. When AI runs inside an application
+   Higher-level modules can keep AI actions behind harnesses, policies,
+   approvals, audits, state machines, and MCP/tool boundaries.
+```
+
+In other words, Flower does not try to make AI smarter. It tries to make
+AI-generated and AI-driven behavior explicit, bounded, testable, and operable.
+
+The broader ecosystem may include AI-facing support around the core:
+
+```text
+flower-check
+  build-time checks that detect known Flower anti-patterns
+
+future flower-dev-mcp
+  developer MCP tools that teach AI coding agents Flower concepts, templates,
+  and design rules
+
+future flower-ai-harness / flower-agent-runtime
+  higher-level AI execution and controlled agent/action runtime layers
+
+future flower-mcp-proxy
+  secure tool/MCP gateway for controlled business actions
+```
+
+Those layers should guide and govern AI usage without making `flower-core`
+itself a model framework.
 
 ## Why Flower Is Useful
 
@@ -760,3 +824,27 @@ When generating Flower code, prefer this pattern:
 That shape keeps Flower flows easy for humans and AI tools to inspect: the
 current step is visible, transitions are explicit, and waiting behavior is
 encoded as small repeatable decisions.
+
+AI coding agents should treat Flower as a structure provider, not just another
+library call. The goal is not to generate more code faster. The goal is to make
+generated orchestration small enough that a human can read it, test it, and
+repair it later.
+
+`flower-check` is the first enforcement tool for this direction. It can fail a
+build when generated code uses known bad patterns, such as blocking a worker
+tick or hiding orchestration outside Flower's Flow/Step boundary.
+
+A future developer MCP can make the same rules available before code is
+written:
+
+```text
+AI coding agent
+-> asks Flower developer MCP for the right pattern
+-> generates Flow / Step code
+-> flower-check verifies the result
+-> tests prove the behavior
+```
+
+This is the AI-era framework loop Flower should aim for: guidance before
+generation, explicit structure in code, checks during build, and deterministic
+tests for behavior.
