@@ -33,6 +33,7 @@ import java.util.concurrent.atomic.AtomicLong;
  * <pre>
  * flow submitted        -> enter first step
  * awaited event arrives -> deliver to current step
+ * awaited signal arrives -> deliver to current step
  * deadline reached      -> time out current step
  * </pre>
  *
@@ -50,7 +51,7 @@ import java.util.concurrent.atomic.AtomicLong;
  *
  * <p>Do not mix the two modes on the same worker instance.
  */
-public final class EventWorker {
+public final class EventWorker implements EventWorkerHandle {
 
     private static final long NO_DEADLINE = Long.MIN_VALUE;
     private static final AtomicLong THREAD_SEQ = new AtomicLong();
@@ -163,8 +164,14 @@ public final class EventWorker {
         return name;
     }
 
+    @Override
     public List<FlowerListener> listeners() {
         return listeners;
+    }
+
+    @Override
+    public EventWorker delegate() {
+        return this;
     }
 
     // ------------------------------------------------------------------

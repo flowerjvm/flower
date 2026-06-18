@@ -17,9 +17,10 @@
 
     <name>Flower EventLoop</name>
     <description>
-        Event-driven Flower runtime. EventWorker -> EventFlow -> EventStep.
-        A reactor-pattern event loop where steps declare what should wake them
-        (events, external signals, deadlines) instead of being re-ticked. Reuses flower-core
+        Event-driven Flower runtime. EventWorker -> EventFlow -> EventStep,
+        with LLM/agent/MCP worker facades. A reactor-pattern event loop where
+        steps declare what should wake them (events, external signals,
+        deadlines) instead of being re-ticked. Reuses flower-core
         primitives (EventBus, Clock, FlowId, ExecutionContext, FlowState).
         Java 8 compatible. No reactive-streams (Mono/Flux) API.
     </description>

@@ -7,6 +7,11 @@ declare **what should wake them** instead of being re-ticked.
 EventWorker
   -> EventFlow
       -> EventStep
+
+Specialized facades:
+  -> LlmEventWorker
+  -> AgentEventWorker
+  -> McpEventWorker
 ```
 
 This module does not replace tick-driven `flower-core`. It is a separate
@@ -197,6 +202,37 @@ The delivered event is an `EventSignal`, so the step can inspect
   until the next command. Use with `SystemClock`. Do not mix the two modes on
   one worker.
 
+## Specialized Workers
+
+`LlmEventWorker`, `AgentEventWorker`, and `McpEventWorker` are thin facades over
+`EventWorker`. They do not introduce a second runtime or different scheduling
+semantics. Their job is to make role-specific wiring explicit:
+
+```java
+AgentEventWorker worker = AgentEventWorker.builder("runtime")
+        .clock(SystemClock.INSTANCE)
+        .eventBus(bus)
+        .checkpointStore(checkpoints)
+        .offloadExecutor(blockingIoExecutor)
+        .build();
+```
+
+The default worker names are role-prefixed: `llm-primary`, `agent-runtime`,
+`mcp-tools`. Use `workerName(...)` when a deployed worker must keep an existing
+checkpoint identity.
+
+All specialized workers expose the same control surface as `EventWorker`:
+`submit`, `cancel`, `signal`, `drain`, `start`, `stop`, `activeCount`, and
+`stateOf`. They also expose recovery helpers backed by their configured
+`EventFlowCheckpointStore`:
+
+```java
+int recovered = worker.recoverActive(registry);
+```
+
+This keeps agent/LLM/MCP code on the event-loop model without coupling the core
+runtime to any specific provider protocol.
+
 ## Durable Checkpoints
 
 `EventFlow.builder(...).durable()` marks an event flow as durable. A durable
@@ -242,7 +278,6 @@ Experimental runtime. The contract (`EventStep` / `EventStepResult` /
 the synchronous response case, but the following are intentionally not
 implemented yet:
 
-- specialized workers (`LlmEventWorker`, `AgentEventWorker`, `McpEventWorker`)
 - coexistence under one shared `Engine` with tick-driven flows
 
 Do not depend on the API surface staying stable yet.
