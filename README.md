@@ -990,3 +990,7 @@ mvn install
 ```
 
 Then use the modules you need from your application.
+
+## License
+
+Flower is licensed under the Apache License 2.0.
