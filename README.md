@@ -198,6 +198,7 @@ Engine
   -> Worker
       -> Flow
           -> Step
+              -> StepResult
               -> stepNo
 ```
 
@@ -209,6 +210,7 @@ Engine
   `FlowId(flowType, flowKey)`.
 - `Step`: a small stateful orchestration unit. It receives a `StepContext` and
   returns `StepResult`.
+- `StepResult`: the explicit transition returned by a Step.
 - `stepId`: a stable flow-level string id used by `goTo`, dumps, checkpoints,
   and admin views.
 - `stepNo`: optional step-local cursor for tiny sub-state inside one step.
@@ -303,9 +305,7 @@ Generated and hand-written orchestration both become easier to inspect, test,
 recover, observe, and change. A step starts work, checks state, and returns an
 explicit result, so a reviewer, tool, or coding agent can follow it.
 
-```text
-Flower is AI-era friendly, but not AI-specific.
-```
+> Flower is AI-era friendly, but not AI-specific.
 
 The broader Flower ecosystem is meant to bound AI in two places:
 
@@ -352,12 +352,14 @@ onReset(ctx)       called for StepResult.repeat(), then the step re-enters
 
 `onTick` returns one of:
 
-- `StepResult.stay()`: keep this step and tick again later.
-- `StepResult.done()`: finish this step; the flow moves to the next declared step, or finishes if this was the last step.
-- `StepResult.repeat()`: reset this step and run it from the beginning.
-- `StepResult.goTo("stepId")`: jump to another flow-level step id.
-- `StepResult.finish()`: finish the flow successfully without running later steps.
-- `StepResult.fail(Throwable)`: fail the flow.
+| Result | Meaning |
+| --- | --- |
+| `StepResult.stay()` | Keep this step and tick again later. |
+| `StepResult.done()` | Finish this step and move to the next declared step, or finish the flow if this was the last step. |
+| `StepResult.repeat()` | Reset this step and run it from the beginning. |
+| `StepResult.goTo("stepId")` | Jump to another flow-level step id. |
+| `StepResult.finish()` | Finish the flow successfully without running later steps. |
+| `StepResult.fail(Throwable)` | Fail the flow. |
 
 ## Step IDs, stepNo, And Shared State
 
@@ -729,61 +731,12 @@ Engine engine = Engine.builder()
 ```
 
 `flower-eventloop-persistence-jdbc` provides a separate JDBC implementation for
-event-loop checkpoints:
+event-loop checkpoints. Schema SQL is packaged for PostgreSQL, MySQL, Oracle,
+and H2. Apply the SQL yourself, or copy it into Flyway/Liquibase. The JDBC
+stores do not create tables automatically.
 
-```java
-EventFlowCheckpointStore eventStore = JdbcEventFlowCheckpointStore.create(
-        dataSource,
-        JdbcEventFlowCheckpointDialects.postgresql());
-
-EventWorker worker = new EventWorker(
-        "agents",
-        SystemClock.INSTANCE,
-        InMemoryEventBus.create(),
-        eventStore);
-```
-
-Schema SQL is packaged under:
-
-```text
-flower/persistence/jdbc/postgresql/schema.sql
-flower/persistence/jdbc/mysql/schema.sql
-flower/persistence/jdbc/oracle/schema.sql
-flower/persistence/jdbc/h2/schema.sql
-```
-
-Event-loop checkpoint schema SQL is packaged separately under:
-
-```text
-flower/eventloop/persistence/jdbc/postgresql/schema.sql
-flower/eventloop/persistence/jdbc/mysql/schema.sql
-flower/eventloop/persistence/jdbc/oracle/schema.sql
-flower/eventloop/persistence/jdbc/h2/schema.sql
-```
-
-Apply the SQL yourself, or copy it into Flyway/Liquibase. The JDBC stores do
-not create tables automatically. The standard checkpoint schemas include
-nullable execution-context columns:
-
-```text
-tenant_id
-user_id
-session_id
-run_id
-trace_id
-correlation_id
-```
-
-If you already created the checkpoint table from an older schema, add those
-nullable columns before upgrading the JDBC store. Migration SQL is packaged
-next to each dialect schema:
-
-```text
-flower/persistence/jdbc/postgresql/execution-context-migration.sql
-flower/persistence/jdbc/mysql/execution-context-migration.sql
-flower/persistence/jdbc/oracle/execution-context-migration.sql
-flower/persistence/jdbc/h2/execution-context-migration.sql
-```
+For dialect paths, execution-context columns, and migration notes, see
+[Persistence](docs/persistence.md).
 
 Signals are still in-memory wake-up hints. Durable step decisions should be
 based on domain state that can be checked again after restart, not on signal
@@ -913,10 +866,8 @@ small and medium in-JVM orchestration because it keeps Worker behavior easy to
 test with `tickOnce()` and `ManualClock`.
 
 For deployments with many mostly-idle Workers, Flower may later add an
-event-driven Worker scheduler. The goal would be similar to a selector-style
-runtime, but not based on Java NIO `Selector` directly because Flower is not
-waiting on socket file descriptors. Instead, a future scheduler could wake a
-Worker only when useful work is possible:
+event-driven Worker scheduler. A future scheduler could wake a Worker only
+when useful work is possible:
 
 ```text
 submit/cancel queued
