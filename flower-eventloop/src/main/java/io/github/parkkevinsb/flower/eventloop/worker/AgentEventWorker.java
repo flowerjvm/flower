@@ -1,28 +1,30 @@
-package io.github.parkkevinsb.flower.eventloop;
+package io.github.parkkevinsb.flower.eventloop.worker;
 
 import io.github.parkkevinsb.flower.core.event.EventBus;
 import io.github.parkkevinsb.flower.core.time.Clock;
+import io.github.parkkevinsb.flower.eventloop.EventWorker;
+import io.github.parkkevinsb.flower.eventloop.checkpoint.EventFlowCheckpointStore;
 
 import java.util.concurrent.Executor;
 
 /**
- * Event-loop worker facade for MCP and tool-callback flows.
+ * Event-loop worker facade for agent runtime flows.
  */
-public final class McpEventWorker extends SpecializedEventWorker {
+public final class AgentEventWorker extends SpecializedEventWorker {
 
-    private McpEventWorker(EventWorker delegate, EventFlowCheckpointStore checkpointStore) {
-        super("mcp", delegate, checkpointStore);
+    private AgentEventWorker(EventWorker delegate, EventFlowCheckpointStore checkpointStore) {
+        super("agent", delegate, checkpointStore);
     }
 
     public static Builder builder(String name) {
         return new Builder(name);
     }
 
-    public static McpEventWorker create(String name, Clock clock, EventBus eventBus) {
+    public static AgentEventWorker create(String name, Clock clock, EventBus eventBus) {
         return builder(name).clock(clock).eventBus(eventBus).build();
     }
 
-    public static McpEventWorker create(
+    public static AgentEventWorker create(
             String name,
             Clock clock,
             EventBus eventBus,
@@ -36,7 +38,7 @@ public final class McpEventWorker extends SpecializedEventWorker {
 
     public static final class Builder extends SpecializedEventWorkerBuilder<Builder> {
         private Builder(String name) {
-            super("mcp", name);
+            super("agent", name);
         }
 
         @Override
@@ -44,8 +46,8 @@ public final class McpEventWorker extends SpecializedEventWorker {
             return this;
         }
 
-        public McpEventWorker build() {
-            return new McpEventWorker(buildDelegate(), checkpointStore());
+        public AgentEventWorker build() {
+            return new AgentEventWorker(buildDelegate(), checkpointStore());
         }
     }
 }

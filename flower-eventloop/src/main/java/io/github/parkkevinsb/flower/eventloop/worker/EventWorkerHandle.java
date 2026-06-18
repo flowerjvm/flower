@@ -1,9 +1,11 @@
-package io.github.parkkevinsb.flower.eventloop;
+package io.github.parkkevinsb.flower.eventloop.worker;
 
 import io.github.parkkevinsb.flower.core.flow.FlowId;
 import io.github.parkkevinsb.flower.core.flow.FlowState;
 import io.github.parkkevinsb.flower.core.listener.FlowerListener;
 import io.github.parkkevinsb.flower.core.worker.DuplicatePolicy;
+import io.github.parkkevinsb.flower.eventloop.EventFlow;
+import io.github.parkkevinsb.flower.eventloop.EventWorker;
 
 import java.util.List;
 

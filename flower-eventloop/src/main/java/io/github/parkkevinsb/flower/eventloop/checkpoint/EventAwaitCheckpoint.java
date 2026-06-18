@@ -1,4 +1,6 @@
-package io.github.parkkevinsb.flower.eventloop;
+package io.github.parkkevinsb.flower.eventloop.checkpoint;
+
+import io.github.parkkevinsb.flower.eventloop.EventFlow;
 
 /**
  * Durable description of one await condition registered by an {@link EventFlow}.
@@ -40,8 +42,8 @@ public final class EventAwaitCheckpoint {
     }
 
     public static EventAwaitCheckpoint signal(String signalName, String signalKey) {
-        AwaitCondition.validateSignalPart("signalName", signalName);
-        AwaitCondition.validateSignalPart("signalKey", signalKey);
+        validateSignalPart("signalName", signalName);
+        validateSignalPart("signalKey", signalKey);
         return new EventAwaitCheckpoint(Type.SIGNAL, null, signalName, signalKey, NO_DEADLINE);
     }
 
@@ -81,5 +83,11 @@ public final class EventAwaitCheckpoint {
             return "EventAwaitCheckpoint{signal=" + signalName + ", key=" + signalKey + "}";
         }
         return "EventAwaitCheckpoint{deadlineAtMillis=" + deadlineAtMillis + "}";
+    }
+
+    private static void validateSignalPart(String label, String value) {
+        if (value == null || value.isEmpty()) {
+            throw new IllegalArgumentException(label + " must not be null or empty");
+        }
     }
 }

@@ -1,4 +1,8 @@
-package io.github.parkkevinsb.flower.eventloop;
+package io.github.parkkevinsb.flower.eventloop.recovery;
+
+import io.github.parkkevinsb.flower.eventloop.EventStep;
+import io.github.parkkevinsb.flower.eventloop.checkpoint.EventAwaitCheckpoint;
+import io.github.parkkevinsb.flower.eventloop.checkpoint.EventFlowCheckpoint;
 
 import java.util.List;
 
@@ -13,7 +17,7 @@ public final class EventRecoveryContext {
 
     private final EventFlowCheckpoint checkpoint;
 
-    EventRecoveryContext(EventFlowCheckpoint checkpoint) {
+    public EventRecoveryContext(EventFlowCheckpoint checkpoint) {
         if (checkpoint == null) {
             throw new IllegalArgumentException("checkpoint must not be null");
         }

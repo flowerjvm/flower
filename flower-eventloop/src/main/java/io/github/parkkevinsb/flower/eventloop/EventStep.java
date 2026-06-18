@@ -1,5 +1,7 @@
 package io.github.parkkevinsb.flower.eventloop;
 
+import io.github.parkkevinsb.flower.eventloop.recovery.EventRecoveryContext;
+
 /**
  * A single orchestration unit in the event-driven runtime.
  *

@@ -4,9 +4,9 @@ import io.github.parkkevinsb.flower.core.context.ExecutionContext;
 import io.github.parkkevinsb.flower.core.flow.FlowId;
 import io.github.parkkevinsb.flower.core.flow.FlowPersistence;
 import io.github.parkkevinsb.flower.core.flow.FlowState;
-import io.github.parkkevinsb.flower.eventloop.EventAwaitCheckpoint;
-import io.github.parkkevinsb.flower.eventloop.EventFlowCheckpoint;
-import io.github.parkkevinsb.flower.eventloop.EventFlowCheckpointStore;
+import io.github.parkkevinsb.flower.eventloop.checkpoint.EventAwaitCheckpoint;
+import io.github.parkkevinsb.flower.eventloop.checkpoint.EventFlowCheckpoint;
+import io.github.parkkevinsb.flower.eventloop.checkpoint.EventFlowCheckpointStore;
 
 import javax.sql.DataSource;
 import java.nio.charset.StandardCharsets;

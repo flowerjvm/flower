@@ -6,6 +6,7 @@ import io.github.parkkevinsb.flower.core.flow.FlowPersistence;
 import io.github.parkkevinsb.flower.core.flow.FlowSnapshot;
 import io.github.parkkevinsb.flower.core.flow.FlowState;
 import io.github.parkkevinsb.flower.core.flow.FlowStepSnapshot;
+import io.github.parkkevinsb.flower.eventloop.checkpoint.EventFlowCheckpoint;
 
 import java.util.ArrayList;
 import java.util.Collections;

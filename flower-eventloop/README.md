@@ -43,6 +43,21 @@ It does **not** reuse `Worker`, `Flow`, `Step`, or `StepResult`: those encode
 the tick contract (`stay()` = "tick me again"). The event-driven model has its
 own contract and its own classes.
 
+## Package Layout
+
+The root `io.github.parkkevinsb.flower.eventloop` package contains the small
+core loop API: `EventWorker`, `EventFlow`, `EventStep`, `EventStepResult`,
+`AwaitCondition`, `EventSignal`, and closely related step/flow types.
+
+Supporting areas live under focused subpackages:
+
+- `eventloop.checkpoint`: durable await/checkpoint model and store SPI
+- `eventloop.recovery`: durable flow factories and recovery service
+- `eventloop.worker`: LLM/agent/MCP worker facades
+
+The split is intentionally shallow. The core loop classes remain together
+because they share package-level runtime internals.
+
 ## Runtime model
 
 `EventWorker` owns one inbox queue and one deadline queue.

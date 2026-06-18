@@ -1,28 +1,30 @@
-package io.github.parkkevinsb.flower.eventloop;
+package io.github.parkkevinsb.flower.eventloop.worker;
 
 import io.github.parkkevinsb.flower.core.event.EventBus;
 import io.github.parkkevinsb.flower.core.time.Clock;
+import io.github.parkkevinsb.flower.eventloop.EventWorker;
+import io.github.parkkevinsb.flower.eventloop.checkpoint.EventFlowCheckpointStore;
 
 import java.util.concurrent.Executor;
 
 /**
- * Event-loop worker facade for agent runtime flows.
+ * Event-loop worker facade for LLM request/response flows.
  */
-public final class AgentEventWorker extends SpecializedEventWorker {
+public final class LlmEventWorker extends SpecializedEventWorker {
 
-    private AgentEventWorker(EventWorker delegate, EventFlowCheckpointStore checkpointStore) {
-        super("agent", delegate, checkpointStore);
+    private LlmEventWorker(EventWorker delegate, EventFlowCheckpointStore checkpointStore) {
+        super("llm", delegate, checkpointStore);
     }
 
     public static Builder builder(String name) {
         return new Builder(name);
     }
 
-    public static AgentEventWorker create(String name, Clock clock, EventBus eventBus) {
+    public static LlmEventWorker create(String name, Clock clock, EventBus eventBus) {
         return builder(name).clock(clock).eventBus(eventBus).build();
     }
 
-    public static AgentEventWorker create(
+    public static LlmEventWorker create(
             String name,
             Clock clock,
             EventBus eventBus,
@@ -36,7 +38,7 @@ public final class AgentEventWorker extends SpecializedEventWorker {
 
     public static final class Builder extends SpecializedEventWorkerBuilder<Builder> {
         private Builder(String name) {
-            super("agent", name);
+            super("llm", name);
         }
 
         @Override
@@ -44,8 +46,8 @@ public final class AgentEventWorker extends SpecializedEventWorker {
             return this;
         }
 
-        public AgentEventWorker build() {
-            return new AgentEventWorker(buildDelegate(), checkpointStore());
+        public LlmEventWorker build() {
+            return new LlmEventWorker(buildDelegate(), checkpointStore());
         }
     }
 }

@@ -1,28 +1,30 @@
-package io.github.parkkevinsb.flower.eventloop;
+package io.github.parkkevinsb.flower.eventloop.worker;
 
 import io.github.parkkevinsb.flower.core.event.EventBus;
 import io.github.parkkevinsb.flower.core.time.Clock;
+import io.github.parkkevinsb.flower.eventloop.EventWorker;
+import io.github.parkkevinsb.flower.eventloop.checkpoint.EventFlowCheckpointStore;
 
 import java.util.concurrent.Executor;
 
 /**
- * Event-loop worker facade for LLM request/response flows.
+ * Event-loop worker facade for MCP and tool-callback flows.
  */
-public final class LlmEventWorker extends SpecializedEventWorker {
+public final class McpEventWorker extends SpecializedEventWorker {
 
-    private LlmEventWorker(EventWorker delegate, EventFlowCheckpointStore checkpointStore) {
-        super("llm", delegate, checkpointStore);
+    private McpEventWorker(EventWorker delegate, EventFlowCheckpointStore checkpointStore) {
+        super("mcp", delegate, checkpointStore);
     }
 
     public static Builder builder(String name) {
         return new Builder(name);
     }
 
-    public static LlmEventWorker create(String name, Clock clock, EventBus eventBus) {
+    public static McpEventWorker create(String name, Clock clock, EventBus eventBus) {
         return builder(name).clock(clock).eventBus(eventBus).build();
     }
 
-    public static LlmEventWorker create(
+    public static McpEventWorker create(
             String name,
             Clock clock,
             EventBus eventBus,
@@ -36,7 +38,7 @@ public final class LlmEventWorker extends SpecializedEventWorker {
 
     public static final class Builder extends SpecializedEventWorkerBuilder<Builder> {
         private Builder(String name) {
-            super("llm", name);
+            super("mcp", name);
         }
 
         @Override
@@ -44,8 +46,8 @@ public final class LlmEventWorker extends SpecializedEventWorker {
             return this;
         }
 
-        public LlmEventWorker build() {
-            return new LlmEventWorker(buildDelegate(), checkpointStore());
+        public McpEventWorker build() {
+            return new McpEventWorker(buildDelegate(), checkpointStore());
         }
     }
 }
