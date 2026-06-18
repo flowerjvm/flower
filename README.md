@@ -118,6 +118,9 @@ Engine
   APIs.
 - `flower-persistence-jdbc`: JDBC `FlowCheckpointStore` implementation plus
   schema SQL for PostgreSQL, MySQL, Oracle, and H2.
+- `flower-eventloop`: MVP event-driven execution line for workloads that wait
+  on explicit events, callbacks, signals, or deadlines instead of periodic
+  ticks.
 - `flower-eventloop-persistence-jdbc`: JDBC `EventFlowCheckpointStore`
   implementation plus event-loop schema SQL for PostgreSQL, MySQL, Oracle,
   and H2.
@@ -126,12 +129,36 @@ Engine
   and optional checkpoint store wiring.
 - `flower-observability`: listeners and helpers for logging, dumps, metrics,
   tracing, and awaiting flow completion.
-- `flower-testkit`: optional test helpers for deterministic Flow tests.
-- `flower-check`: build-time Flower usage checker for host applications.
+- `flower-testkit`: MVP test helpers for deterministic Flow tests.
+- `flower-check`: MVP build-time Flower usage checker for host applications.
 - `flower-check-annotations`: SOURCE-retained approval markers consumed by
   `flower-check`.
 - `flower-check-maven-plugin`: Maven `verify` integration for `flower-check`.
 - `flower-check-gradle-plugin`: Gradle `check` integration for `flower-check`.
+
+## Module Maturity
+
+The main stable center is `flower-core`.
+
+Some modules are intentionally early and should be treated as MVPs:
+
+```text
+flower-eventloop
+  MVP. A separate event-driven execution line for explicit waits such as
+  callbacks, signals, approvals, LLM responses, MCP/tool responses, and
+  deadlines. It does not replace the tick-driven Worker / Flow / Step model.
+
+flower-testkit
+  MVP. Useful deterministic testing helpers around Flower, but intentionally
+  small and not a large assertion framework.
+
+flower-check
+  MVP. Early build-time checks for known Flower anti-patterns. It is meant to
+  grow with real project usage.
+```
+
+These modules are useful enough to try, but their APIs may still change more
+than `flower-core`.
 
 ## Build
 
