@@ -177,11 +177,13 @@ did not mean to write.
 | Deterministic tests | Abstract the clock, bypass the scheduler, and fake the bus yourself. | `ManualClock` plus `worker.tickOnce()`. |
 | Inspect what is running right now | Build your own dump/admin view. | `Engine.dump()` plus optional console. |
 
-You can build every row yourself. The question is whether you want to write,
-test, and maintain that runtime instead of your product code. Or you can adopt
-a full state machine framework such as Spring StateMachine. Flower takes the
-middle path: it gives you a small runtime for long-running internal application
-flows while keeping your domain model in your Spring Boot application.
+You can build every row yourself, but then you are slowly rebuilding a runtime.
+Or you can adopt a full state machine framework such as Spring StateMachine,
+and take on a larger model than the problem may need.
+
+Flower takes the middle path: a small runtime for long-running internal
+application flows, while your domain model stays in your Spring Boot
+application.
 
 ## Operational Boundaries
 
