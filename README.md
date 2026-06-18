@@ -160,61 +160,16 @@ transactions, durable execution replay, a BPMN designer, or a multi-node
 scheduler. Reach for Temporal, Camunda, or a saga framework there. Flower
 stays in one JVM on purpose.
 
-## AI-Era Positioning
+## Why Not Just Enum Or Spring StateMachine?
 
-Flower core is not an AI framework, and it does not depend on an LLM. Its
-relevance in the AI coding era is structure.
+For small flows, an enum and a switch can be enough. Flower becomes useful when
+the workflow needs event waits, timeouts, retry/fail transitions, cleanup,
+checkpoint/resume, listeners, dumps, and deterministic tests.
 
-AI can generate more orchestration code than humans can comfortably review
-when that code becomes scattered callbacks, service methods, scheduled jobs,
-and background threads. Flower's contribution is to force that behavior into a
-small, inspectable shape:
-
-```text
-Engine -> Worker -> Flow -> Step -> StepResult
-```
-
-Generated and hand-written orchestration both become easier to inspect, test,
-recover, observe, and change. A step starts work, checks state, and returns an
-explicit result, so a reviewer, tool, or coding agent can follow it.
-
-```text
-Flower is AI-era friendly, but not AI-specific.
-```
-
-The broader Flower ecosystem is meant to bound AI in two places:
-
-- When AI writes code, Flower gives generated code an explicit Flow / Step
-  structure. `flower-check` can reject known bad patterns, and a future
-  developer MCP can guide coding agents before code is written.
-- When AI runs inside an application, higher-level modules can keep AI actions
-  behind harnesses, policies, approvals, audits, state machines, and MCP/tool
-  boundaries.
-
-Available now:
-
-- `flower-core`: the stable center. Explicit Flow / Step structure for
-  generated and hand-written orchestration.
-- `flower-check` (MVP): build-time checks that reject known Flower
-  anti-patterns, such as blocking a worker tick or hiding orchestration outside
-  the Flow / Step boundary.
-- `flower-ai-harness`: a separate higher-level AI execution harness, early but
-  already being tested with real application usage.
-
-Taking shape / in validation:
-
-- `flower-agent-runtime`: a controlled agent/action execution layer. The shape
-  exists and is being validated against real usage; APIs may still move.
-
-Roadmap:
-
-- `flower-dev-mcp`: developer MCP tools that teach coding agents Flower
-  concepts, templates, and design rules before code is written.
-- `flower-mcp-proxy`: a secure MCP/tool gateway for controlled business
-  actions.
-
-None of these layers turn `flower-core` itself into a model framework. The
-separation is deliberate.
+You can build all of that yourself around an enum, or adopt a full state
+machine framework such as Spring StateMachine. Flower takes the middle path: it
+gives you a small runtime for long-running internal application flows while
+keeping your domain model in your Spring Boot application.
 
 ## Mental Model
 
@@ -308,6 +263,62 @@ worker.tickOnce();
 worker.tickOnce();
 ```
 
+## AI-Era Positioning
+
+Flower core is not an AI framework, and it does not depend on an LLM. Its
+relevance in the AI coding era is structure.
+
+AI can generate more orchestration code than humans can comfortably review
+when that code becomes scattered callbacks, service methods, scheduled jobs,
+and background threads. Flower's contribution is to force that behavior into a
+small, inspectable shape:
+
+```text
+Engine -> Worker -> Flow -> Step -> StepResult
+```
+
+Generated and hand-written orchestration both become easier to inspect, test,
+recover, observe, and change. A step starts work, checks state, and returns an
+explicit result, so a reviewer, tool, or coding agent can follow it.
+
+```text
+Flower is AI-era friendly, but not AI-specific.
+```
+
+The broader Flower ecosystem is meant to bound AI in two places:
+
+- When AI writes code, Flower gives generated code an explicit Flow / Step
+  structure. `flower-check` can reject known bad patterns, and a future
+  developer MCP can guide coding agents before code is written.
+- When AI runs inside an application, higher-level modules can keep AI actions
+  behind harnesses, policies, approvals, audits, state machines, and MCP/tool
+  boundaries.
+
+Available now:
+
+- `flower-core`: the stable center. Explicit Flow / Step structure for
+  generated and hand-written orchestration.
+- `flower-check` (MVP): build-time checks that reject known Flower
+  anti-patterns, such as blocking a worker tick or hiding orchestration outside
+  the Flow / Step boundary.
+- `flower-ai-harness`: a separate higher-level AI execution harness, early but
+  already being tested with real application usage.
+
+Taking shape / in validation:
+
+- `flower-agent-runtime`: a controlled agent/action execution layer. The shape
+  exists and is being validated against real usage; APIs may still move.
+
+Roadmap:
+
+- `flower-dev-mcp`: developer MCP tools that teach coding agents Flower
+  concepts, templates, and design rules before code is written.
+- `flower-mcp-proxy`: a secure MCP/tool gateway for controlled business
+  actions.
+
+None of these layers turn `flower-core` itself into a model framework. The
+separation is deliberate.
+
 ## Step Lifecycle
 
 ```text
@@ -374,64 +385,9 @@ if (approved != null) {
 Subscriptions made through `StepContext.subscribe(...)` are cleaned up
 automatically when the step exits, resets, or the flow terminates.
 
-You may also unsubscribe a specific event while the step is still running.
-Keep each returned `Subscription` separately when the step listens to multiple
-event types:
-
-```java
-final class WaitDockStep extends Step {
-    private volatile StepContext current;
-    private Subscription ackSub;
-    private Subscription arrivalSub;
-
-    @Override
-    protected void onEnter(StepContext ctx) {
-        current = ctx;
-        ackSub = ctx.subscribe(AckEvent.class, this::onAck);
-        arrivalSub = ctx.subscribe(ArrivalEvent.class, this::onArrival);
-    }
-
-    @Override
-    protected StepResult onTick(StepContext ctx) {
-        if (ctx.stepNo() == 0 && shouldStopArrival(ctx)) {
-            arrivalSub.unsubscribe(); // ack subscription remains active
-            arrivalSub = null;
-            ctx.setStepNo(10);
-            return StepResult.stay();
-        }
-
-        if (ctx.stepNo() == 10 && shouldListenArrivalAgain(ctx)) {
-            arrivalSub = ctx.subscribe(ArrivalEvent.class, this::onArrival);
-            ctx.setStepNo(20);
-            return StepResult.stay();
-        }
-
-        return ctx.hasSignal("arrived") ? StepResult.done() : StepResult.stay();
-    }
-
-    private void onAck(AckEvent event) {
-        current.signal("ack");
-    }
-
-    private void onArrival(ArrivalEvent event) {
-        current.signal("arrived");
-    }
-
-    @Override
-    protected void onExit(StepContext ctx) {
-        ackSub = null;
-        arrivalSub = null;
-        current = null;
-    }
-
-    @Override
-    protected void onReset(StepContext ctx) {
-        ackSub = null;
-        arrivalSub = null;
-        current = null;
-    }
-}
-```
+You may also unsubscribe a specific event while a step is still running. Keep
+that pattern small. If the step starts to need its own large internal state
+machine, split the behavior into multiple explicit Steps instead.
 
 ## Step Design Rules
 
@@ -532,7 +488,8 @@ the host application, for example `office-a:DOC-1`.
 ## Event Bus Choices
 
 `flower-core` includes `InMemoryEventBus` for simple setups and deterministic
-tests. To share events with Bloom:
+tests. To share events with Bloom, a small in-memory event library in the
+Flower ecosystem, add `flower-bloom-adapter`:
 
 ```java
 io.github.parkkevinsb.bloom.EventBus bloom =
@@ -796,25 +753,46 @@ directly to the internet.
 
 The main stable center is `flower-core`. Everything else orbits it.
 
-| Module | Maturity | Purpose |
-| --- | --- | --- |
-| `flower-core` | stable center | Engine, Worker, Flow, Step, event bus, clock, and listener APIs |
-| `flower-persistence-jdbc` | usable | JDBC `FlowCheckpointStore` plus schema SQL for PostgreSQL, MySQL, Oracle, and H2 |
-| `flower-eventloop` | MVP | Separate event-driven execution line for explicit waits such as callbacks, signals, approvals, LLM/tool responses, and deadlines |
-| `flower-eventloop-persistence-jdbc` | MVP | JDBC `EventFlowCheckpointStore` plus event-loop schema SQL |
-| `flower-bloom-adapter` | usable | Adapts Bloom's event bus to Flower's `EventBus` SPI |
-| `flower-spring-boot-starter` | usable | Spring Boot auto-configuration for an `Engine` and optional checkpoint store wiring |
-| `flower-observability` | usable | Listeners and helpers for logging, dumps, metrics, tracing, and awaiting flow completion |
-| `flower-testkit` | MVP | Deterministic Flow test helpers |
-| `flower-check` | MVP | Build-time Flower usage checker for host applications |
-| `flower-check-annotations` | MVP | SOURCE-retained approval markers consumed by `flower-check` |
-| `flower-check-maven-plugin` | MVP | Maven `verify` integration for `flower-check` |
-| `flower-check-gradle-plugin` | MVP | Gradle `check` integration for `flower-check` |
+Core:
 
-Read the MVP labels literally. `flower-eventloop`, `flower-testkit`, and
-`flower-check` are useful enough to try, but their APIs may move more than
-`flower-core`. The event loop is a separate execution line, not a replacement
-for the tick-driven Worker / Flow / Step model.
+- `flower-core`: stable center. Engine, Worker, Flow, Step, event bus, clock,
+  and listener APIs.
+
+Persistence / integration:
+
+- `flower-persistence-jdbc`: JDBC `FlowCheckpointStore` plus schema SQL for
+  PostgreSQL, MySQL, Oracle, and H2.
+- `flower-spring-boot-starter`: Spring Boot auto-configuration for an `Engine`
+  and optional checkpoint store wiring.
+- `flower-bloom-adapter`: adapts Bloom's event bus to Flower's `EventBus` SPI.
+
+Observability / testing:
+
+- `flower-observability`: listeners and helpers for logging, dumps, metrics,
+  tracing, and awaiting flow completion.
+- `flower-testkit` (MVP): deterministic Flow test helpers.
+
+Developer tooling:
+
+- `flower-check` (MVP): build-time Flower usage checker for host applications.
+- `flower-check-annotations` (MVP): SOURCE-retained approval markers consumed
+  by `flower-check`.
+- `flower-check-maven-plugin` (MVP): Maven `verify` integration for
+  `flower-check`.
+- `flower-check-gradle-plugin` (MVP): companion Gradle plugin project for
+  running `flower-check` from Gradle `check`.
+
+Early execution line:
+
+- `flower-eventloop` (MVP): separate event-driven runtime for explicit waits
+  such as callbacks, signals, approvals, LLM/tool responses, and deadlines.
+- `flower-eventloop-persistence-jdbc` (MVP): JDBC `EventFlowCheckpointStore`
+  plus event-loop schema SQL.
+
+Read the MVP labels literally. These modules are useful enough to try, but
+their APIs may move more than `flower-core`. The event loop is a separate
+execution line, not a replacement for the tick-driven Worker / Flow / Step
+model.
 
 ## Future Worker Scheduling Direction
 
