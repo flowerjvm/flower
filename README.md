@@ -176,6 +176,21 @@ Spring StateMachine. Flower takes the middle path: it gives you a small runtime
 for long-running internal application flows while keeping your domain model in
 your Spring Boot application.
 
+## Operational Boundaries
+
+Flower core is deliberately small, so its runtime contract is also explicit:
+
+- Concurrency: a Worker ticks its Flows on one scheduler thread. Submit/cancel
+  requests are queued. Event callbacks may call `ctx.signal(...)`; do not mutate
+  Step fields directly from callback threads.
+- Recovery: durable Flows checkpoint the current step id, `stepNo`, execution
+  context, and definition version. Recovery rebuilds a fresh Flow and resumes
+  from that checkpoint. It is not deterministic replay or exactly-once side
+  effect execution, so external writes and API calls should be idempotent.
+- Scale: the default Worker is tick-based and simple to test. It is a good fit
+  for small to medium in-process workloads. Very large numbers of idle Flows may
+  need application-level sharding or a future event-loop scheduler.
+
 ## Mental Model
 
 ```text
