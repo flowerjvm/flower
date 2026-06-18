@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-labelledby="title desc">
+  <title id="title">Flower JVM avatar</title>
+  <desc id="desc">A simple white flower with a pink center on a soft rose circular background.</desc>
+  <defs>
+    <radialGradient id="background" cx="50%" cy="42%" r="62%">
+      <stop offset="0%" stop-color="#fff7fb"/>
+      <stop offset="100%" stop-color="#fce7f3"/>
+    </radialGradient>
+    <radialGradient id="petal" cx="50%" cy="32%" r="68%">
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="74%" stop-color="#fffefe"/>
+      <stop offset="100%" stop-color="#ffe4f1"/>
+    </radialGradient>
+    <radialGradient id="center" cx="42%" cy="32%" r="70%">
+      <stop offset="0%" stop-color="#f9a8d4"/>
+      <stop offset="52%" stop-color="#ec4899"/>
+      <stop offset="100%" stop-color="#be185d"/>
+    </radialGradient>
+    <filter id="soft-shadow" x="-20%" y="-20%" width="140%" height="145%">
+      <feDropShadow dx="0" dy="18" stdDeviation="18" flood-color="#be185d" flood-opacity="0.16"/>
+    </filter>
+  </defs>
+
+  <circle cx="512" cy="512" r="472" fill="url(#background)"/>
+  <circle cx="512" cy="512" r="472" fill="none" stroke="#fbcfe8" stroke-width="18"/>
+
+  <g filter="url(#soft-shadow)">
+    <ellipse cx="512" cy="283" rx="125" ry="218" fill="url(#petal)" stroke="#f9a8d4" stroke-width="14"/>
+    <ellipse cx="512" cy="741" rx="125" ry="218" fill="url(#petal)" stroke="#f9a8d4" stroke-width="14"/>
+    <ellipse cx="314" cy="397" rx="125" ry="218" fill="url(#petal)" stroke="#f9a8d4" stroke-width="14" transform="rotate(-60 314 397)"/>
+    <ellipse cx="710" cy="397" rx="125" ry="218" fill="url(#petal)" stroke="#f9a8d4" stroke-width="14" transform="rotate(60 710 397)"/>
+    <ellipse cx="314" cy="627" rx="125" ry="218" fill="url(#petal)" stroke="#f9a8d4" stroke-width="14" transform="rotate(60 314 627)"/>
+    <ellipse cx="710" cy="627" rx="125" ry="218" fill="url(#petal)" stroke="#f9a8d4" stroke-width="14" transform="rotate(-60 710 627)"/>
+  </g>
+
+  <circle cx="512" cy="512" r="132" fill="url(#center)" stroke="#fff1f7" stroke-width="16"/>
+  <circle cx="469" cy="464" r="28" fill="#ffe4f1" opacity="0.9"/>
+</svg>
