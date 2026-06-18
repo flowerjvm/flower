@@ -1,6 +1,6 @@
 # 🌸 Flower
 
-Flower -- the one that flows. A lightweight Java workflow framework for
+Flower -- the one that flows. A lightweight Java workflow runtime for
 explicit, testable, human-operable orchestration inside one JVM.
 
 It helps you model long-running application behavior as a `Flow` made of small
@@ -17,14 +17,9 @@ Temporal, Camunda, a distributed scheduler, or a durable saga engine. It is a
 plain Java toolkit for applications that need controlled internal
 orchestration without surrendering their domain model to a large runtime.
 
-## AI-Era Positioning
+## The Shape, In One Screen
 
-Flower core is not an AI framework, and it does not depend on an LLM. Its value
-in the AI coding era is structure.
-
-AI can generate more application code than humans can comfortably review when
-that code becomes scattered callbacks, service methods, scheduled jobs, and
-background threads. Flower gives business behavior a small execution shape:
+The reason Flower exists is one small execution shape:
 
 ```text
 Engine
@@ -34,79 +29,118 @@ Engine
               -> StepResult
 ```
 
-That shape makes generated and hand-written orchestration easier to inspect,
-test, recover, observe, and change. A flow has a current step. A step returns
-an explicit result. Waiting is modeled through events, signals, timeouts, or
-durable domain state instead of hidden sleeps and ad-hoc polling loops.
+A flow has a current step. A step returns an explicit result. Waiting is
+modeled through events, signals, timeouts, or durable domain state instead of
+hidden sleeps and ad-hoc polling loops. That is the core idea.
 
-The intended core positioning is:
+## Before / After
 
-```text
-Flower is AI-era friendly, but not AI-specific.
+Most orchestration inside real applications does not start as a workflow
+engine. It starts as a status column, a scheduled poller, an event listener,
+and a few shared flags that drift apart over time.
+
+Before: orchestration scattered across status strings, scheduled scans, and
+side channels:
+
+```java
+@Entity
+class Order {
+    String id;
+    String status; // "NEW", "WAITING_PAYMENT", "PAID", "FULFILLED", "FAILED"
+    Instant paymentDeadline;
+}
+
+@Component
+class OrderPoller {
+    @Scheduled(fixedDelay = 1000)
+    void tick() {
+        for (Order order : orders.findActive()) {
+            switch (order.status) {
+                case "NEW" -> {
+                    prepare(order);
+                    order.status = "WAITING_PAYMENT";
+                    order.paymentDeadline = now().plusSeconds(30);
+                }
+                case "WAITING_PAYMENT" -> {
+                    if (paidFlags.contains(order.id)) {
+                        order.status = "PAID";
+                    } else if (now().isAfter(order.paymentDeadline)) {
+                        order.status = "FAILED";
+                    }
+                }
+                case "PAID" -> {
+                    fulfill(order);
+                    order.status = "FULFILLED";
+                }
+            }
+            orders.save(order);
+        }
+    }
+}
+
+@EventListener
+void onPaid(PaymentApproved event) {
+    paidFlags.add(event.orderId());
+}
 ```
 
-The broader Flower ecosystem is meant to bound AI in two places:
+The state machine is implicit in strings and a switch. Waiting is hidden in a
+shared flag. Recovery means "whatever the status column happened to be."
 
-```text
-1. When AI writes code
-   Flower gives generated code an explicit Flow / Step structure.
-   flower-check can reject known bad patterns.
-   A future flower-dev-mcp can guide coding agents before code is written.
+After: the same behavior as an explicit Flow of Steps:
 
-2. When AI runs inside an application
-   Higher-level modules can keep AI actions behind harnesses, policies,
-   approvals, audits, state machines, and MCP/tool boundaries.
+```java
+Flow flow = Flow.builder("order", orderId)
+        .step("accept", new AcceptOrderStep(orderService))
+        .step("payment", new WaitForPaymentStep())
+        .step("fulfill", new FulfillOrderStep(warehouseService))
+        .build();
+
+worker.submit(flow);
 ```
 
-In other words, Flower does not try to make AI smarter. It tries to make
-AI-generated and AI-driven behavior explicit, bounded, testable, and operable.
+```java
+final class WaitForPaymentStep extends Step {
+    @Override
+    protected void onEnter(StepContext ctx) {
+        ctx.startTimeout(30_000);
+        ctx.subscribe(PaymentApproved.class, event -> {
+            if (event.orderId().equals(ctx.flowId().flowKey())) {
+                ctx.signal("paid");
+            }
+        });
+    }
 
-The broader ecosystem may include AI-facing support around the core:
-
-```text
-flower-check
-  build-time checks that detect known Flower anti-patterns
-
-future flower-dev-mcp
-  developer MCP tools that teach AI coding agents Flower concepts, templates,
-  and design rules
-
-future flower-ai-harness / flower-agent-runtime
-  higher-level AI execution and controlled agent/action runtime layers
-
-future flower-mcp-proxy
-  secure tool/MCP gateway for controlled business actions
+    @Override
+    protected StepResult onTick(StepContext ctx) {
+        if (ctx.hasSignal("paid")) {
+            return StepResult.done();
+        }
+        if (ctx.timedOut()) {
+            return StepResult.fail(new IllegalStateException("payment timeout"));
+        }
+        return StepResult.stay();
+    }
+}
 ```
 
-Those layers should guide and govern AI usage without making `flower-core`
-itself a model framework.
+Now the current step is visible. The transition is the return value. The wait
+is a subscription plus a timeout that Flower cleans up for you. The same flow
+can be tested with a manual clock and `tickOnce()`, without starting a
+scheduler or database.
 
-## Used In Real Projects
-
-Flower is being validated through real application code, not only toy
-examples. Current usage includes:
-
-- architecture-office SaaS document workflows
-- Terminal Operating System execution-layer orchestration
-- game server workflow and turn/state coordination
-- AI harness runtime experiments for controlled AI execution
-
-These projects keep Flower focused on practical orchestration needs: explicit
-flow structure, small steps, recoverable execution, observable state, and code
-that remains understandable as systems grow.
-
-## Industrial Control Influence
+## Where It Comes From
 
 Flower's execution model is inspired by proven patterns from industrial and
 equipment-control software, where long-running work is modeled as explicit
 states, guarded transitions, timeouts, retries, operator intervention, and
 observable execution logs.
 
-Flower brings that style to Java application code: make the current state
-visible, make transitions explicit, keep each unit small, and leave a trace
-that humans can inspect.
+Flower brings that discipline to ordinary Java application code: make the
+current state visible, make transitions explicit, keep each unit small, and
+leave a trace a human can inspect.
 
-## Why Flower Is Useful
+## Why And When To Use It
 
 Use Flower when application work has multiple phases and should progress over
 time or in response to events:
@@ -120,6 +154,11 @@ time or in response to events:
 Flower makes this kind of logic easier to reason about because every flow has a
 current step, every step returns an explicit result, and time/event waiting is
 represented by `StepContext` instead of ad-hoc threads and sleeps.
+
+Flower is not the right tool when you need cross-service distributed
+transactions, durable execution replay, a BPMN designer, or a multi-node
+scheduler. Reach for Temporal, Camunda, or a saga framework there. Flower
+stays in one JVM on purpose.
 
 ## Mental Model
 
@@ -857,6 +896,74 @@ flower/persistence/jdbc/h2/execution-context-migration.sql
 Signals are still in-memory wake-up hints. Durable step decisions should be
 based on domain state that can be checked again after restart, not on signal
 payloads alone.
+
+## Where Flower Is Being Hardened
+
+Flower is being dogfooded against real application code, not only toy
+examples. It is currently being run and hardened in:
+
+- architecture-office SaaS document workflows
+- a Terminal Operating System execution layer
+- game server workflow and turn/state coordination
+- AI harness runtime experiments for controlled AI execution
+
+These projects keep Flower honest about practical needs: explicit flow
+structure, small steps, recoverable execution, observable state, and code that
+stays understandable as systems grow. This is not a claim of broad external
+adoption; it is a statement about the real projects driving Flower's design.
+
+## AI-Era Positioning
+
+Flower core is not an AI framework, and it does not depend on an LLM. Its
+relevance in the AI coding era is structure.
+
+AI can generate more orchestration code than humans can comfortably review
+when that code becomes scattered callbacks, service methods, scheduled jobs,
+and background threads. Flower's contribution is to force that behavior into a
+small, inspectable shape:
+
+```text
+Engine -> Worker -> Flow -> Step -> StepResult
+```
+
+Generated and hand-written orchestration both become easier to inspect, test,
+recover, observe, and change. A step starts work, checks state, and returns an
+explicit result, so a reviewer, tool, or coding agent can follow it.
+
+```text
+Flower is AI-era friendly, but not AI-specific.
+```
+
+The broader Flower ecosystem is meant to bound AI in two places:
+
+- When AI writes code, Flower gives generated code an explicit Flow / Step
+  structure. `flower-check` can reject known bad patterns, and a future
+  developer MCP can guide coding agents before code is written.
+- When AI runs inside an application, higher-level modules can keep AI actions
+  behind harnesses, policies, approvals, audits, state machines, and MCP/tool
+  boundaries.
+
+Available or emerging layers around Flower include:
+
+```text
+flower-check
+  MVP build-time checks for known Flower anti-patterns
+
+flower-ai-harness
+  separate higher-level AI execution harness, early but already being tested
+
+future flower-agent-runtime
+  controlled agent/action execution layer
+
+future flower-dev-mcp
+  developer MCP tools for Flower concepts, templates, and design rules
+
+future flower-mcp-proxy
+  secure tool/MCP gateway for controlled business actions
+```
+
+None of these layers turn `flower-core` itself into a model framework. The
+separation is deliberate.
 
 ## Notes For AI Agents
 
