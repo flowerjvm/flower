@@ -757,6 +757,78 @@ Engine engine = Engine.builder()
 
 The adapter preserves the dispatch semantics of the wrapped Bloom bus.
 
+### Bloom Event Example
+
+When Flower is backed by Bloom, application code can publish to Bloom directly.
+Flower steps subscribed through `ctx.subscribe(...)` will receive the same
+events.
+
+```java
+io.github.parkkevinsb.bloom.EventBus bloom =
+        io.github.parkkevinsb.bloom.LocalEventBus.create();
+
+Engine engine = Engine.builder()
+        .eventBus(io.github.parkkevinsb.flower.bloom.BloomEventBus.wrap(bloom))
+        .worker(Worker.builder("orders").intervalMillis(100).build())
+        .build();
+```
+
+Application code publishes an ordinary Bloom event:
+
+```java
+final class PaymentService {
+    private final io.github.parkkevinsb.bloom.EventBus bloom;
+    private final OrderRepository orders;
+
+    PaymentService(io.github.parkkevinsb.bloom.EventBus bloom, OrderRepository orders) {
+        this.bloom = bloom;
+        this.orders = orders;
+    }
+
+    void approvePayment(String orderId) {
+        orders.markPaymentApproved(orderId); // business fact
+        bloom.publish(new PaymentApproved(orderId)); // wake waiting steps
+    }
+}
+```
+
+The waiting Flower step receives that Bloom event through the adapter:
+
+```java
+final class WaitPaymentStep extends Step {
+    private final OrderRepository orders;
+
+    WaitPaymentStep(OrderRepository orders) {
+        this.orders = orders;
+    }
+
+    @Override
+    protected void onEnter(StepContext ctx) {
+        ctx.startTimeout(30_000);
+        ctx.subscribe(PaymentApproved.class, event -> {
+            if (event.orderId().equals(ctx.flowId().flowKey())) {
+                ctx.signal("payment-approved");
+            }
+        });
+    }
+
+    @Override
+    protected StepResult onTick(StepContext ctx) {
+        if (orders.isPaymentApproved(ctx.flowId().flowKey())) {
+            return StepResult.done();
+        }
+        if (ctx.timedOut()) {
+            return StepResult.fail(new IllegalStateException("payment timeout"));
+        }
+        return StepResult.stay();
+    }
+}
+```
+
+In this setup Bloom remains the application event bus, while Flower uses the
+same events to advance the internal flow. The signal is only a wake-up hint; the
+database remains the source of truth.
+
 ## Spring Boot
 
 `flower-spring-boot-starter` auto-configures:
