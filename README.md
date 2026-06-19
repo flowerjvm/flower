@@ -199,13 +199,17 @@ Flower is for the other case: your domain model stays in your Spring Boot
 application, but a long-running internal flow needs a small runtime to execute
 it.
 
-## Typical Use With Application Events
+## Typical Use With Kafka or Spring Events
 
-Flower works well when an application receives events and needs to advance an
-internal flow.
+Flower works well when Kafka, Spring events, or another event source tells an
+application that something happened and a service needs to advance an internal
+flow.
 
 Events tell the application that something happened. Flower decides whether the
 current step can move forward. The database remembers the business fact.
+
+The example below uses Spring `@EventListener` to keep the code small. A Kafka
+listener uses the same shape at the application boundary.
 
 ```java
 @Component
@@ -283,9 +287,9 @@ final class WaitPaymentStep extends Step {
 The split is simple:
 
 ```text
-Application event = something happened
-Flower Step       = decide stay, done, or fail
-Database          = remember the business fact
+Kafka / Spring event = something happened
+Flower Step          = decide stay, done, or fail
+Database             = remember the business fact
 ```
 
 In a Spring multi-module application, Flower usually belongs in the workflow
