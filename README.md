@@ -262,7 +262,7 @@ final class WaitPaymentStep extends Step {
         ctx.startTimeout(30_000);
         ctx.subscribe(PaymentApproved.class, event -> {
             if (event.orderId().equals(ctx.flowId().flowKey())) {
-                ctx.signal("paid"); // hint only; DB remains the source of truth
+                ctx.signal("paid"); // event arrived; check the DB on the next tick
             }
         });
     }
@@ -270,9 +270,6 @@ final class WaitPaymentStep extends Step {
     @Override
     protected StepResult onTick(StepContext ctx) {
         String orderId = ctx.flowId().flowKey();
-        if (ctx.hasSignal("paid")) {
-            ctx.clearSignal("paid"); // do not treat the signal as a business fact
-        }
         if (orders.isPaymentApproved(orderId)) {
             return StepResult.done();
         }
@@ -283,6 +280,10 @@ final class WaitPaymentStep extends Step {
     }
 }
 ```
+
+The event handler does not complete the Step directly. It records a signal, and
+the next `onTick` completes the Step by returning `StepResult.done()` after the
+database says the payment is approved.
 
 The split is simple:
 
