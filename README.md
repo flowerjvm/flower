@@ -163,12 +163,15 @@ stays in one JVM on purpose.
 ## Why Not Just an Enum or Spring StateMachine?
 
 For small flows, an enum and a switch are genuinely enough. Use them.
-Spring StateMachine is a good fit when your main problem is modeling formal
-states, events, transitions, guards, and actions.
+Spring StateMachine is a good fit when your main problem is modeling
+formal states, events, transitions, and guards.
 
 Flower is different: it is an execution runtime for internal application flows.
 It focuses on running steps, waiting for events, handling timeouts,
-checkpointing, resuming, inspecting, and testing the flow inside one JVM.
+checkpointing, resuming, inspecting, and testing flows inside one JVM.
+
+State machines model state.
+Flower runs flows.
 
 The cost of "just build it yourself" appears when the flow starts needing the
 things below. None of them is hard alone. Together, they become a runtime you
