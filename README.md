@@ -742,15 +742,14 @@ the host application, for example `office-a:DOC-1`.
 ## Event Bus Choices
 
 `flower-core` includes `InMemoryEventBus` for simple setups and deterministic
-tests. To share events with Bloom, a small in-memory event library in the
-Flower ecosystem, add `flower-bloom-adapter`:
+tests. Bloom is the small in-memory event bus provided in the Flower ecosystem.
+To share events with Bloom, add `flower-bloom-adapter`:
 
 ```java
-io.github.parkkevinsb.bloom.EventBus bloom =
-        io.github.parkkevinsb.bloom.LocalEventBus.create();
+EventBus bloom = LocalEventBus.create();
 
 Engine engine = Engine.builder()
-        .eventBus(io.github.parkkevinsb.flower.bloom.BloomEventBus.wrap(bloom))
+        .eventBus(BloomEventBus.wrap(bloom))
         .worker(Worker.builder("main").build())
         .build();
 ```
@@ -764,11 +763,10 @@ Flower steps subscribed through `ctx.subscribe(...)` will receive the same
 events.
 
 ```java
-io.github.parkkevinsb.bloom.EventBus bloom =
-        io.github.parkkevinsb.bloom.LocalEventBus.create();
+EventBus bloom = LocalEventBus.create();
 
 Engine engine = Engine.builder()
-        .eventBus(io.github.parkkevinsb.flower.bloom.BloomEventBus.wrap(bloom))
+        .eventBus(BloomEventBus.wrap(bloom))
         .worker(Worker.builder("orders").intervalMillis(100).build())
         .build();
 ```
@@ -777,10 +775,10 @@ Application code publishes an ordinary Bloom event:
 
 ```java
 final class PaymentService {
-    private final io.github.parkkevinsb.bloom.EventBus bloom;
+    private final EventBus bloom;
     private final OrderRepository orders;
 
-    PaymentService(io.github.parkkevinsb.bloom.EventBus bloom, OrderRepository orders) {
+    PaymentService(EventBus bloom, OrderRepository orders) {
         this.bloom = bloom;
         this.orders = orders;
     }
