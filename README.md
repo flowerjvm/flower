@@ -1,7 +1,12 @@
 # 🌸 Flower
 
-Flower -- the one that flows. A lightweight Java workflow runtime for
-explicit, testable, human-operable orchestration inside one JVM.
+Flower -- the one that flows.
+
+Flower is not a workflow platform. It is a tiny in-JVM runtime for
+long-running Spring application flows.
+
+It gives application code an explicit, testable, human-operable execution shape
+inside one JVM.
 
 It helps you model long-running application behavior as a `Flow` made of small
 `Step` objects. A `Worker` ticks active flows, each step returns an explicit
@@ -12,10 +17,10 @@ Flower fits naturally in Spring Boot applications: Spring provides the
 application framework, and Flower gives long-running business flows an explicit
 runtime shape without replacing the application's framework or domain model.
 
-Flower is intentionally smaller than a workflow platform. It is not BPMN,
-Temporal, Camunda, a distributed scheduler, or a durable saga engine. It is a
-plain Java toolkit for applications that need controlled internal
-orchestration without surrendering their domain model to a large runtime.
+It is not BPMN, Temporal, Camunda, a distributed scheduler, or a durable saga
+engine. It is a plain Java toolkit for applications that need controlled
+internal orchestration without surrendering their domain model to a large
+runtime.
 
 ## The Shape, In One Screen
 
@@ -193,6 +198,135 @@ the center of the problem.
 Flower is for the other case: your domain model stays in your Spring Boot
 application, but a long-running internal flow needs a small runtime to execute
 it.
+
+## Typical Use With Kafka or Application Events
+
+Flower works well beside event infrastructure such as Kafka because the roles
+are different:
+
+```text
+Kafka / events = connect services and announce that something happened
+Flower        = advance the in-JVM flow that handles that work
+DB            = store business facts and recovery state
+```
+
+For example:
+
+```text
+OrderCreated event received
+-> persist the processing target / domain state
+-> submit Flower flow for orderId
+-> accept step
+-> reserve step
+-> wait for payment or material event
+-> complete step
+-> publish OrderCompleted through an outbox
+```
+
+A minimal Spring/Kafka shape looks like this:
+
+```java
+@Component
+final class OrderKafkaListener {
+    private final Engine engine;
+    private final OrderRepository orders;
+    private final OrderFlowFactory flows;
+
+    @KafkaListener(topics = "order-created")
+    void onOrderCreated(OrderCreated event) {
+        orders.markCreated(event.orderId()); // DB fact, idempotent
+
+        engine.worker("orders").submit(
+                flows.createOrderFlow(event.orderId()),
+                DuplicatePolicy.IGNORE);
+    }
+
+    @KafkaListener(topics = "payment-approved")
+    void onPaymentApproved(PaymentApproved event) {
+        orders.markPaymentApproved(event.orderId()); // DB fact, idempotent
+        engine.eventBus().publish(event);            // wake Flower steps in this JVM
+    }
+}
+
+final class OrderFlowFactory {
+    private final OrderRepository orders;
+
+    OrderFlowFactory(OrderRepository orders) {
+        this.orders = orders;
+    }
+
+    Flow createOrderFlow(String orderId) {
+        return Flow.builder("order", orderId)
+                .step("accept", new AcceptOrderStep())
+                .step("payment", new WaitPaymentStep(orders))
+                .step("complete", new CompleteOrderStep())
+                .build();
+    }
+}
+
+final class WaitPaymentStep extends Step {
+    private final OrderRepository orders;
+
+    WaitPaymentStep(OrderRepository orders) {
+        this.orders = orders;
+    }
+
+    @Override
+    protected void onEnter(StepContext ctx) {
+        ctx.startTimeout(30_000);
+        ctx.subscribe(PaymentApproved.class, event -> {
+            if (event.orderId().equals(ctx.flowId().flowKey())) {
+                ctx.signal("paid");
+            }
+        });
+    }
+
+    @Override
+    protected StepResult onTick(StepContext ctx) {
+        String orderId = ctx.flowId().flowKey();
+        if (orders.isPaymentApproved(orderId) || ctx.hasSignal("paid")) {
+            return StepResult.done();
+        }
+        if (ctx.timedOut()) {
+            return StepResult.fail(new IllegalStateException("payment timeout"));
+        }
+        return StepResult.stay();
+    }
+}
+```
+
+Without a small runtime, Kafka listeners often grow into accidental workflow
+engines: they receive an event, inspect current state, check whether earlier
+events arrived, wait for the next event, handle timeouts, retry, cancel, call
+another system, and publish the next event. Flower keeps that split explicit:
+
+```text
+Kafka listener = receive events, deduplicate, persist facts, wake the flow
+Flower Step    = decide stay/done/fail, handle timeout, request next command
+DB             = hold real business state and recovery facts
+Outbox         = publish external events reliably
+```
+
+In a Spring multi-module application, Flower usually belongs in the workflow
+module rather than the domain model itself:
+
+```text
+order-api       REST/Kafka input
+order-domain    Order, OrderStatus, repository, domain service
+order-workflow  Flower FlowFactory and Step classes
+order-events    Kafka event DTOs, publisher, listener
+order-infra     DB, Kafka, Flower engine config
+```
+
+Keep the boundaries boring on purpose: Kafka carries domain events, the DB keeps
+business facts, and Flower keeps the internal execution position. Do not expose
+Flower step ids as external event contracts. For reliable publishing, use an
+outbox or equivalent application pattern.
+
+This is a good fit when events arrive over time, intermediate waits and
+timeouts matter, duplicate events are possible, the service has several
+internal steps, and Temporal or BPMN-style workflow infrastructure would be
+heavier than the problem.
 
 ## Operational Boundaries
 
