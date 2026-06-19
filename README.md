@@ -160,9 +160,15 @@ transactions, durable execution replay, a BPMN designer, or a multi-node
 scheduler. Reach for Temporal, Camunda, or a saga framework there. Flower
 stays in one JVM on purpose.
 
-## Why Not Just Enum Or Spring StateMachine?
+## Why Not Just an Enum or Spring StateMachine?
 
 For small flows, an enum and a switch are genuinely enough. Use them.
+Spring StateMachine is a good fit when your main problem is modeling formal
+states, events, transitions, guards, and actions.
+
+Flower is different: it is an execution runtime for internal application flows.
+It focuses on running steps, waiting for events, handling timeouts,
+checkpointing, resuming, inspecting, and testing the flow inside one JVM.
 
 The cost of "just build it yourself" appears when the flow starts needing the
 things below. None of them is hard alone. Together, they become a runtime you
@@ -178,12 +184,12 @@ did not mean to write.
 | Inspect what is running right now | Build your own dump/admin view. | `Engine.dump()` plus optional console. |
 
 You can build every row yourself, but then you are slowly rebuilding a runtime.
-Or you can adopt a full state machine framework such as Spring StateMachine,
-and take on a larger model than the problem may need.
+Or you can adopt a formal state machine framework when the state model itself is
+the center of the problem.
 
-Flower takes the middle path: a small runtime for long-running internal
-application flows, while your domain model stays in your Spring Boot
-application.
+Flower is for the other case: your domain model stays in your Spring Boot
+application, but a long-running internal flow needs a small runtime to execute
+it.
 
 ## Operational Boundaries
 
