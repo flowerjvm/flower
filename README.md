@@ -199,61 +199,34 @@ Flower is for the other case: your domain model stays in your Spring Boot
 application, but a long-running internal flow needs a small runtime to execute
 it.
 
-## Typical Use With Kafka or Application Events
+## Typical Use With Application Events
 
-Flower works well beside event infrastructure such as Kafka because the roles
-are different:
+Flower works well when an application receives events and needs to advance an
+internal flow.
 
-```text
-Kafka / events = connect services and announce that something happened
-Flower        = advance the in-JVM flow that handles that work
-DB            = store business facts and recovery state
-```
-
-For example:
-
-```text
-OrderCreated event received
--> persist the processing target / domain state
--> submit Flower flow for orderId
--> accept step
--> reserve step
--> wait for payment or material event
--> complete step
--> publish OrderCompleted through an outbox
-```
-
-A minimal Spring/Kafka shape looks like this:
+Events tell the application that something happened. Flower decides whether the
+current step can move forward. The database remembers the business fact.
 
 ```java
 @Component
-final class OrderKafkaListener {
+final class OrderEvents {
     private final Engine engine;
-    private final EventInbox inbox;
     private final OrderRepository orders;
     private final OrderFlowFactory flows;
 
-    @KafkaListener(topics = "order-created")
-    void onOrderCreated(OrderCreated event) {
-        if (inbox.alreadyProcessed(event.eventId())) {
-            return;
-        }
-        orders.markCreated(event.orderId()); // DB fact, idempotent
-        inbox.markProcessed(event.eventId());
+    @EventListener
+    void on(OrderCreated event) {
+        orders.markCreated(event.orderId());
 
         engine.worker("orders").submit(
                 flows.createOrderFlow(event.orderId()),
                 DuplicatePolicy.IGNORE);
     }
 
-    @KafkaListener(topics = "payment-approved")
-    void onPaymentApproved(PaymentApproved event) {
-        if (inbox.alreadyProcessed(event.eventId())) {
-            return;
-        }
-        orders.markPaymentApproved(event.orderId()); // DB fact, idempotent
-        inbox.markProcessed(event.eventId());
-        engine.eventBus().publish(event);            // wake-up hint for Flower steps
+    @EventListener
+    void on(PaymentApproved event) {
+        orders.markPaymentApproved(event.orderId());
+        engine.eventBus().publish(event);
     }
 }
 
@@ -285,7 +258,7 @@ final class WaitPaymentStep extends Step {
         ctx.startTimeout(30_000);
         ctx.subscribe(PaymentApproved.class, event -> {
             if (event.orderId().equals(ctx.flowId().flowKey())) {
-                ctx.signal("paid");
+                ctx.signal("paid"); // hint only; DB remains the source of truth
             }
         });
     }
@@ -293,11 +266,13 @@ final class WaitPaymentStep extends Step {
     @Override
     protected StepResult onTick(StepContext ctx) {
         String orderId = ctx.flowId().flowKey();
+        if (ctx.hasSignal("paid")) {
+            ctx.clearSignal("paid"); // do not treat the signal as a business fact
+        }
         if (orders.isPaymentApproved(orderId)) {
             return StepResult.done();
         }
         if (ctx.timedOut()) {
-            orders.markPaymentTimedOut(orderId);
             return StepResult.fail(new IllegalStateException("payment timeout"));
         }
         return StepResult.stay();
@@ -305,16 +280,12 @@ final class WaitPaymentStep extends Step {
 }
 ```
 
-Without a small runtime, Kafka listeners often grow into accidental workflow
-engines: they receive an event, inspect current state, check whether earlier
-events arrived, wait for the next event, handle timeouts, retry, cancel, call
-another system, and publish the next event. Flower keeps that split explicit:
+The split is simple:
 
 ```text
-Kafka listener = receive events, deduplicate, persist facts, wake the flow
-Flower Step    = decide stay/done/fail, handle timeout, request next command
-DB             = hold real business state and recovery facts
-Outbox         = publish external events reliably
+Application event = something happened
+Flower Step       = decide stay, done, or fail
+Database          = remember the business fact
 ```
 
 In a Spring multi-module application, Flower usually belongs in the workflow
@@ -328,20 +299,23 @@ order-events    Kafka event DTOs, publisher, listener
 order-infra     DB, Kafka, Flower engine config
 ```
 
-Keep the boundaries boring on purpose: Kafka carries domain events, the DB keeps
-business facts, and Flower keeps the internal execution position. Use Flower
-signals as wake-up hints, not as business facts. Do not expose Flower step ids
-as external event contracts.
+A Kafka listener can use the same shape: persist the domain fact, publish the
+event to Flower's in-JVM event bus, and let the Step decide whether the flow can
+advance.
 
-For reliable publishing, write domain changes and outbox event/command records
-in one transaction, then let a separate publisher send the outbox records to
-Kafka. On startup, recover or submit flows for DB records that are still active
-but not currently running.
+### Production Notes For Kafka
 
-This is a good fit when events arrive over time, intermediate waits and
-timeouts matter, duplicate events are possible, the service has several
-internal steps, and Temporal or BPMN-style workflow infrastructure would be
-heavier than the problem.
+Keep the boundaries boring on purpose:
+
+- Kafka carries domain events.
+- Flower keeps the internal execution position.
+- The DB keeps business facts and recovery state.
+- Flower signals are hints, not business facts.
+- Use an inbox or event id check for duplicate Kafka events when needed.
+- Use an outbox for external events or commands that must be published
+  reliably.
+- On startup, recover or submit flows for DB records that are still active but
+  not currently running.
 
 ## Operational Boundaries
 
