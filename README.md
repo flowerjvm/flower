@@ -199,27 +199,27 @@ Flower is for the other case: your domain model stays in your Spring Boot
 application, but a long-running internal flow needs a small runtime to execute
 it.
 
-## Typical Use With Kafka or Spring Events
+## Typical Use With Kafka
 
-Flower works well when Kafka, Spring events, or another event source tells an
-application that something happened and a service needs to advance an internal
-flow.
+Flower works well when Kafka tells a Spring Boot service that something
+happened and the service needs to advance an internal flow.
 
-Events tell the application that something happened. Flower decides whether the
+Kafka tells the application that something happened. Flower decides whether the
 current step can move forward. The database remembers the business fact.
 
-The example below uses Spring `@EventListener` to keep the code small. A Kafka
-listener uses the same shape at the application boundary.
+This example keeps Kafka concerns such as duplicate handling, inbox/outbox, and
+startup recovery out of the main flow. Those belong in production code, not in
+the first shape.
 
 ```java
 @Component
-final class OrderEvents {
+final class OrderKafkaListener {
     private final Engine engine;
     private final OrderRepository orders;
     private final OrderFlowFactory flows;
 
-    @EventListener
-    void on(OrderCreated event) {
+    @KafkaListener(topics = "order-created")
+    void onOrderCreated(OrderCreated event) {
         orders.markCreated(event.orderId());
 
         engine.worker("orders").submit(
@@ -227,8 +227,8 @@ final class OrderEvents {
                 DuplicatePolicy.IGNORE);
     }
 
-    @EventListener
-    void on(PaymentApproved event) {
+    @KafkaListener(topics = "payment-approved")
+    void onPaymentApproved(PaymentApproved event) {
         orders.markPaymentApproved(event.orderId());
         engine.eventBus().publish(event);
     }
@@ -288,9 +288,9 @@ database says the payment is approved.
 The split is simple:
 
 ```text
-Kafka / Spring event = something happened
-Flower Step          = decide stay, done, or fail
-Database             = remember the business fact
+Kafka event  = something happened
+Flower Step  = decide stay, done, or fail
+Database     = remember the business fact
 ```
 
 In a Spring multi-module application, Flower usually belongs in the workflow
@@ -304,9 +304,8 @@ order-events    Kafka event DTOs, publisher, listener
 order-infra     DB, Kafka, Flower engine config
 ```
 
-A Kafka listener can use the same shape: persist the domain fact, publish the
-event to Flower's in-JVM event bus, and let the Step decide whether the flow can
-advance.
+The Kafka listener stays thin: persist the domain fact, publish the event to
+Flower's in-JVM event bus, and let the Step decide whether the flow can advance.
 
 ### Production Notes For Kafka
 
