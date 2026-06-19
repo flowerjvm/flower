@@ -229,12 +229,17 @@ A minimal Spring/Kafka shape looks like this:
 @Component
 final class OrderKafkaListener {
     private final Engine engine;
+    private final EventInbox inbox;
     private final OrderRepository orders;
     private final OrderFlowFactory flows;
 
     @KafkaListener(topics = "order-created")
     void onOrderCreated(OrderCreated event) {
+        if (inbox.alreadyProcessed(event.eventId())) {
+            return;
+        }
         orders.markCreated(event.orderId()); // DB fact, idempotent
+        inbox.markProcessed(event.eventId());
 
         engine.worker("orders").submit(
                 flows.createOrderFlow(event.orderId()),
@@ -243,8 +248,12 @@ final class OrderKafkaListener {
 
     @KafkaListener(topics = "payment-approved")
     void onPaymentApproved(PaymentApproved event) {
+        if (inbox.alreadyProcessed(event.eventId())) {
+            return;
+        }
         orders.markPaymentApproved(event.orderId()); // DB fact, idempotent
-        engine.eventBus().publish(event);            // wake Flower steps in this JVM
+        inbox.markProcessed(event.eventId());
+        engine.eventBus().publish(event);            // wake-up hint for Flower steps
     }
 }
 
@@ -284,10 +293,11 @@ final class WaitPaymentStep extends Step {
     @Override
     protected StepResult onTick(StepContext ctx) {
         String orderId = ctx.flowId().flowKey();
-        if (orders.isPaymentApproved(orderId) || ctx.hasSignal("paid")) {
+        if (orders.isPaymentApproved(orderId)) {
             return StepResult.done();
         }
         if (ctx.timedOut()) {
+            orders.markPaymentTimedOut(orderId);
             return StepResult.fail(new IllegalStateException("payment timeout"));
         }
         return StepResult.stay();
@@ -319,9 +329,14 @@ order-infra     DB, Kafka, Flower engine config
 ```
 
 Keep the boundaries boring on purpose: Kafka carries domain events, the DB keeps
-business facts, and Flower keeps the internal execution position. Do not expose
-Flower step ids as external event contracts. For reliable publishing, use an
-outbox or equivalent application pattern.
+business facts, and Flower keeps the internal execution position. Use Flower
+signals as wake-up hints, not as business facts. Do not expose Flower step ids
+as external event contracts.
+
+For reliable publishing, write domain changes and outbox event/command records
+in one transaction, then let a separate publisher send the outbox records to
+Kafka. On startup, recover or submit flows for DB records that are still active
+but not currently running.
 
 This is a good fit when events arrive over time, intermediate waits and
 timeouts matter, duplicate events are possible, the service has several
