@@ -7,8 +7,8 @@ import io.github.parkkevinsb.flower.core.time.ManualClock;
 import io.github.parkkevinsb.flower.eventloop.checkpoint.EventAwaitCheckpoint;
 import io.github.parkkevinsb.flower.eventloop.checkpoint.EventFlowCheckpoint;
 import io.github.parkkevinsb.flower.eventloop.recovery.EventFlowFactoryRegistry;
+import io.github.parkkevinsb.flower.eventloop.recovery.EventFlowRecoveryService;
 import io.github.parkkevinsb.flower.eventloop.recovery.EventRecoveryContext;
-import io.github.parkkevinsb.flower.eventloop.worker.AgentEventWorker;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
@@ -33,10 +33,7 @@ class AgentStyleEventFlowIntegrationTest {
     void agentFlowCompletesThroughFakeLlmToolAndHumanSignals() {
         ManualClock clock = new ManualClock();
         InMemoryEventBus bus = InMemoryEventBus.create();
-        AgentEventWorker worker = AgentEventWorker.builder("runtime")
-                .clock(clock)
-                .eventBus(bus)
-                .build();
+        EventWorker worker = new EventWorker("runtime", clock, bus);
         List<String> log = new ArrayList<>();
 
         bus.subscribe(LlmRequested.class, request ->
@@ -88,11 +85,7 @@ class AgentStyleEventFlowIntegrationTest {
         bus.subscribe(LlmRequested.class, request ->
                 bus.publish(new LlmResponded(request.runId, "call tool")));
 
-        AgentEventWorker firstWorker = AgentEventWorker.builder("runtime")
-                .clock(clock)
-                .eventBus(bus)
-                .checkpointStore(store)
-                .build();
+        EventWorker firstWorker = new EventWorker("runtime", clock, bus, store);
         EventFlow flow = buildAgentFlow(FLOW_KEY, log, true);
 
         firstWorker.submit(flow);
@@ -111,16 +104,13 @@ class AgentStyleEventFlowIntegrationTest {
         assertThat(firstWorker.activeCount()).isZero();
         assertThat(store.find(flow.flowId())).isPresent();
 
-        AgentEventWorker recoveredWorker = AgentEventWorker.builder("runtime")
-                .clock(clock)
-                .eventBus(bus)
-                .checkpointStore(store)
-                .build();
+        EventWorker recoveredWorker = new EventWorker("runtime", clock, bus, store);
         EventFlowFactoryRegistry registry = EventFlowFactoryRegistry.builder()
                 .register(FLOW_TYPE, id -> buildAgentFlow(id.flowKey(), log, true))
                 .build();
 
-        int recovered = recoveredWorker.recoverActive(registry);
+        int recovered = EventFlowRecoveryService.create(store, registry)
+                .recoverActiveForWorker(recoveredWorker);
         recoveredWorker.drain();
 
         assertThat(recovered).isEqualTo(1);

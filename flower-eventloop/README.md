@@ -7,11 +7,6 @@ declare **what should wake them** instead of being re-ticked.
 EventWorker
   -> EventFlow
       -> EventStep
-
-Specialized facades:
-  -> LlmEventWorker
-  -> AgentEventWorker
-  -> McpEventWorker
 ```
 
 This module does not replace tick-driven `flower-core`. It is a separate
@@ -53,7 +48,6 @@ Supporting areas live under focused subpackages:
 
 - `eventloop.checkpoint`: durable await/checkpoint model and store SPI
 - `eventloop.recovery`: durable flow factories and recovery service
-- `eventloop.worker`: LLM/agent/MCP worker facades
 
 The split is intentionally shallow. The core loop classes remain together
 because they share package-level runtime internals.
@@ -217,36 +211,12 @@ The delivered event is an `EventSignal`, so the step can inspect
   until the next command. Use with `SystemClock`. Do not mix the two modes on
   one worker.
 
-## Specialized Workers
+## Domain Workers
 
-`LlmEventWorker`, `AgentEventWorker`, and `McpEventWorker` are thin facades over
-`EventWorker`. They do not introduce a second runtime or different scheduling
-semantics. Their job is to make role-specific wiring explicit:
-
-```java
-AgentEventWorker worker = AgentEventWorker.builder("runtime")
-        .clock(SystemClock.INSTANCE)
-        .eventBus(bus)
-        .checkpointStore(checkpoints)
-        .offloadExecutor(blockingIoExecutor)
-        .build();
-```
-
-The default worker names are role-prefixed: `llm-primary`, `agent-runtime`,
-`mcp-tools`. Use `workerName(...)` when a deployed worker must keep an existing
-checkpoint identity.
-
-All specialized workers expose the same control surface as `EventWorker`:
-`submit`, `cancel`, `signal`, `drain`, `start`, `stop`, `activeCount`, and
-`stateOf`. They also expose recovery helpers backed by their configured
-`EventFlowCheckpointStore`:
-
-```java
-int recovered = worker.recoverActive(registry);
-```
-
-This keeps agent/LLM/MCP code on the event-loop model without coupling the core
-runtime to any specific provider protocol.
+This module intentionally exposes only the generic `EventWorker`. Role-specific
+wrappers such as agent, LLM, or MCP workers belong in higher-level modules that
+own those domains. They can compose `EventWorker` without coupling this core
+runtime to a provider protocol or application runtime.
 
 ## Durable Checkpoints
 

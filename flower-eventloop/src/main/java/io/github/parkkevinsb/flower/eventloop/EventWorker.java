@@ -14,7 +14,6 @@ import io.github.parkkevinsb.flower.eventloop.checkpoint.EventAwaitCheckpoint;
 import io.github.parkkevinsb.flower.eventloop.checkpoint.EventFlowCheckpoint;
 import io.github.parkkevinsb.flower.eventloop.checkpoint.EventFlowCheckpointStore;
 import io.github.parkkevinsb.flower.eventloop.recovery.EventRecoveryContext;
-import io.github.parkkevinsb.flower.eventloop.worker.EventWorkerHandle;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -56,7 +55,7 @@ import java.util.concurrent.atomic.AtomicLong;
  *
  * <p>Do not mix the two modes on the same worker instance.
  */
-public final class EventWorker implements EventWorkerHandle {
+public final class EventWorker {
 
     private static final long NO_DEADLINE = Long.MIN_VALUE;
     private static final AtomicLong THREAD_SEQ = new AtomicLong();
@@ -169,14 +168,8 @@ public final class EventWorker implements EventWorkerHandle {
         return name;
     }
 
-    @Override
     public List<FlowerListener> listeners() {
         return listeners;
-    }
-
-    @Override
-    public EventWorker delegate() {
-        return this;
     }
 
     // ------------------------------------------------------------------
