@@ -1,5 +1,12 @@
 package io.github.parkkevinsb.flower.eventloop;
 
+import io.github.parkkevinsb.flower.eventloop.event.EventSignal;
+import io.github.parkkevinsb.flower.eventloop.flow.EventFlow;
+import io.github.parkkevinsb.flower.eventloop.step.AwaitCondition;
+import io.github.parkkevinsb.flower.eventloop.step.EventStep;
+import io.github.parkkevinsb.flower.eventloop.step.EventStepContext;
+import io.github.parkkevinsb.flower.eventloop.step.EventStepResult;
+import io.github.parkkevinsb.flower.eventloop.worker.EventWorker;
 import io.github.parkkevinsb.flower.core.event.InMemoryEventBus;
 import io.github.parkkevinsb.flower.core.flow.FlowState;
 import io.github.parkkevinsb.flower.core.time.ManualClock;
@@ -15,7 +22,7 @@ class EventWorkerSignalTest {
     void signalAwaitWakesMatchingFlow() {
         ManualClock clock = new ManualClock();
         InMemoryEventBus bus = InMemoryEventBus.create();
-        EventWorker worker = new EventWorker("signal", clock, bus);
+        EventWorker worker = EventWorker.builder("signal").clock(clock).eventBus(bus).build();
         AtomicReference<EventSignal> received = new AtomicReference<>();
 
         EventFlow flow = EventFlow.builder("callback", "tool-1")
@@ -50,7 +57,7 @@ class EventWorkerSignalTest {
     void nonMatchingSignalIsIgnored() {
         ManualClock clock = new ManualClock();
         InMemoryEventBus bus = InMemoryEventBus.create();
-        EventWorker worker = new EventWorker("signal", clock, bus);
+        EventWorker worker = EventWorker.builder("signal").clock(clock).eventBus(bus).build();
 
         EventFlow flow = EventFlow.builder("callback", "tool-2")
                 .step("wait", new EventStep() {
@@ -81,7 +88,7 @@ class EventWorkerSignalTest {
     void contextCanPublishSignal() {
         ManualClock clock = new ManualClock();
         InMemoryEventBus bus = InMemoryEventBus.create();
-        EventWorker worker = new EventWorker("signal", clock, bus);
+        EventWorker worker = EventWorker.builder("signal").clock(clock).eventBus(bus).build();
 
         EventFlow waiter = EventFlow.builder("callback", "waiter")
                 .step("wait", new EventStep() {

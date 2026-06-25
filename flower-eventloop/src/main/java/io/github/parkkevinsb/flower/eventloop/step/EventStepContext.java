@@ -1,9 +1,11 @@
-package io.github.parkkevinsb.flower.eventloop;
+package io.github.parkkevinsb.flower.eventloop.step;
 
 import io.github.parkkevinsb.flower.core.context.ExecutionContext;
 import io.github.parkkevinsb.flower.core.event.EventBus;
 import io.github.parkkevinsb.flower.core.flow.FlowId;
 import io.github.parkkevinsb.flower.core.time.Clock;
+import io.github.parkkevinsb.flower.eventloop.event.EventSignal;
+import io.github.parkkevinsb.flower.eventloop.worker.EventWorker;
 
 /**
  * Handle passed into every {@link EventStep} lifecycle method.
@@ -40,17 +42,23 @@ public interface EventStepContext {
     }
 
     /**
-     * Submit blocking or long-running work to the worker's offload executor.
+     * Submit blocking or long-running work to the worker's async executor.
      *
      * <p>The event-loop thread must stay non-blocking. LLM, MCP, HTTP,
      * database, tool, sleep, or long CPU work should be started through this
      * method and should publish only completion/failure events back through
      * {@link #eventBus()}.
      *
-     * <p>If the {@link EventWorker} was not constructed with an offload
+     * <p>The submitted task runs outside the event-loop thread. Treat this
+     * context as a publishing handle there: use {@link #eventBus()} or
+     * {@link #signal(String, String, Object)} to report completion, and capture
+     * immutable values such as ids before scheduling the task. Do not read
+     * mutable flow state such as {@link #currentStepId()} from the async task.
+     *
+     * <p>If the {@link EventWorker} was not constructed with an async
      * executor, this method fails fast.
      */
-    void offload(Runnable task);
+    void runAsync(Runnable task);
 
     Clock clock();
 

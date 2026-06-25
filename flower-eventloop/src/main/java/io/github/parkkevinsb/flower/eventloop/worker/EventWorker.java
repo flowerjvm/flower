@@ -1,19 +1,25 @@
-package io.github.parkkevinsb.flower.eventloop;
+package io.github.parkkevinsb.flower.eventloop.worker;
 
 import io.github.parkkevinsb.flower.core.context.ExecutionContext;
 import io.github.parkkevinsb.flower.core.event.EventBus;
 import io.github.parkkevinsb.flower.core.event.Subscription;
 import io.github.parkkevinsb.flower.core.flow.FlowId;
 import io.github.parkkevinsb.flower.core.flow.FlowPersistence;
-import io.github.parkkevinsb.flower.core.flow.FlowSnapshot;
 import io.github.parkkevinsb.flower.core.flow.FlowState;
 import io.github.parkkevinsb.flower.core.listener.FlowerListener;
 import io.github.parkkevinsb.flower.core.time.Clock;
 import io.github.parkkevinsb.flower.core.worker.DuplicatePolicy;
-import io.github.parkkevinsb.flower.eventloop.checkpoint.EventAwaitCheckpoint;
-import io.github.parkkevinsb.flower.eventloop.checkpoint.EventFlowCheckpoint;
-import io.github.parkkevinsb.flower.eventloop.checkpoint.EventFlowCheckpointStore;
+import io.github.parkkevinsb.flower.eventloop.event.EventSignal;
+import io.github.parkkevinsb.flower.eventloop.flow.EventFlow;
+import io.github.parkkevinsb.flower.eventloop.persistence.EventAwaitCheckpoint;
+import io.github.parkkevinsb.flower.eventloop.persistence.EventFlowCheckpoint;
+import io.github.parkkevinsb.flower.eventloop.persistence.EventFlowCheckpointStore;
 import io.github.parkkevinsb.flower.eventloop.recovery.EventRecoveryContext;
+import io.github.parkkevinsb.flower.eventloop.step.AwaitCondition;
+import io.github.parkkevinsb.flower.eventloop.step.EventEffect;
+import io.github.parkkevinsb.flower.eventloop.step.EventStepContext;
+import io.github.parkkevinsb.flower.eventloop.step.EventStepDefinition;
+import io.github.parkkevinsb.flower.eventloop.step.EventStepResult;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -59,18 +65,16 @@ public final class EventWorker {
 
     private static final long NO_DEADLINE = Long.MIN_VALUE;
     private static final AtomicLong THREAD_SEQ = new AtomicLong();
-    private static final Command NOOP = new Command() {
-        @Override
-        public void execute() {
-        }
+    private static final Command NOOP = () -> {
     };
 
     private final String name;
     private final Clock clock;
     private final EventBus eventBus;
-    private final EventFlowCheckpointStore checkpointStore;
     private final List<FlowerListener> listeners;
-    private final Executor offloadExecutor;
+    private final ListenerDispatcher listenerDispatcher;
+    private final CheckpointCoordinator checkpointCoordinator;
+    private final Executor asyncExecutor;
 
     private final Object stateLock = new Object();
     private final Map<FlowId, FlowRuntime> active = new LinkedHashMap<>();
@@ -82,61 +86,17 @@ public final class EventWorker {
     private Thread loopThread;
     private long deadlineSeq;
 
-    public EventWorker(String name, Clock clock, EventBus eventBus) {
-        this(name, clock, eventBus, EventFlowCheckpointStore.NOOP);
+    public static EventWorkerBuilder builder(String name) {
+        return new EventWorkerBuilder(name);
     }
 
-    public EventWorker(
-            String name,
-            Clock clock,
-            EventBus eventBus,
-            Executor offloadExecutor) {
-        this(name, clock, eventBus, EventFlowCheckpointStore.NOOP,
-                Collections.<FlowerListener>emptyList(), offloadExecutor);
-    }
-
-    public EventWorker(
-            String name,
-            Clock clock,
-            EventBus eventBus,
-            List<FlowerListener> listeners) {
-        this(name, clock, eventBus, EventFlowCheckpointStore.NOOP, listeners);
-    }
-
-    public EventWorker(
-            String name,
-            Clock clock,
-            EventBus eventBus,
-            EventFlowCheckpointStore checkpointStore) {
-        this(name, clock, eventBus, checkpointStore, Collections.<FlowerListener>emptyList());
-    }
-
-    public EventWorker(
-            String name,
-            Clock clock,
-            EventBus eventBus,
-            EventFlowCheckpointStore checkpointStore,
-            Executor offloadExecutor) {
-        this(name, clock, eventBus, checkpointStore,
-                Collections.<FlowerListener>emptyList(), offloadExecutor);
-    }
-
-    public EventWorker(
-            String name,
-            Clock clock,
-            EventBus eventBus,
-            EventFlowCheckpointStore checkpointStore,
-            List<FlowerListener> listeners) {
-        this(name, clock, eventBus, checkpointStore, listeners, null);
-    }
-
-    public EventWorker(
+    EventWorker(
             String name,
             Clock clock,
             EventBus eventBus,
             EventFlowCheckpointStore checkpointStore,
             List<FlowerListener> listeners,
-            Executor offloadExecutor) {
+            Executor asyncExecutor) {
         if (name == null || name.isEmpty()) {
             throw new IllegalArgumentException("name must not be null or empty");
         }
@@ -152,8 +112,7 @@ public final class EventWorker {
         this.name = name;
         this.clock = clock;
         this.eventBus = eventBus;
-        this.checkpointStore = checkpointStore;
-        this.offloadExecutor = offloadExecutor;
+        this.asyncExecutor = asyncExecutor;
         this.listeners = listeners == null
                 ? Collections.<FlowerListener>emptyList()
                 : Collections.unmodifiableList(new ArrayList<>(listeners));
@@ -162,6 +121,12 @@ public final class EventWorker {
                 throw new IllegalArgumentException("listeners must not contain null");
             }
         }
+        this.listenerDispatcher = new ListenerDispatcher(name, this.listeners);
+        this.checkpointCoordinator = new CheckpointCoordinator(
+                name,
+                clock,
+                checkpointStore,
+                this.listenerDispatcher);
     }
 
     public String name() {
@@ -169,7 +134,7 @@ public final class EventWorker {
     }
 
     public List<FlowerListener> listeners() {
-        return listeners;
+        return listenerDispatcher.listeners();
     }
 
     // ------------------------------------------------------------------
@@ -218,21 +183,11 @@ public final class EventWorker {
             }
             active.put(flow.flowId(), rt);
         }
-        fireFlowSubmitted(flow);
+        listenerDispatcher.flowSubmitted(flow);
         if (replaced != null) {
-            enqueue(new Command() {
-                @Override
-                public void execute() {
-                    cancelReplacedRuntime(replaced);
-                }
-            });
+            enqueue(() -> cancelReplacedRuntime(replaced));
         }
-        enqueue(new Command() {
-            @Override
-            public void execute() {
-                enterCurrent(rt);
-            }
-        });
+        enqueue(() -> enterCurrent(rt));
     }
 
     /** Cancel a flow by id. Returns true if it was active. */
@@ -250,12 +205,7 @@ public final class EventWorker {
         if (rt == null) {
             return false;
         }
-        enqueue(new Command() {
-            @Override
-            public void execute() {
-                cancelRuntime(rt);
-            }
-        });
+        enqueue(() -> cancelRuntime(rt));
         return true;
     }
 
@@ -399,7 +349,7 @@ public final class EventWorker {
         } catch (Throwable t) {
             System.err.println("[flower] eventloop " + name + " command failed: " + t);
             t.printStackTrace(System.err);
-            notifyWorkerError(t);
+            listenerDispatcher.workerError(t);
         }
     }
 
@@ -421,36 +371,42 @@ public final class EventWorker {
             cancelRuntime(rt);
             return;
         }
-        if (rt.flow.state() == FlowState.CREATED) {
-            EventFlowCheckpoint checkpoint = rt.flow.recoveryCheckpoint();
-            if (checkpoint == null) {
-                rt.flow.markRunningAt(0);
-            } else {
-                rt.flow.activateRecoveryCheckpoint(checkpoint);
-                rt.awaitGeneration = checkpoint.awaitGeneration();
-                rt.awaitCheckpoints = checkpoint.awaits();
-                rt.recoveryCheckpoint = checkpoint;
-            }
-        }
+        activateForEntry(rt);
         EventStepDefinition def = rt.flow.currentStep();
         if (def == null) {
-            rt.flow.finish();
-            deleteCheckpoint(rt);
-            fireFlowTerminated(rt.flow);
-            remove(rt);
+            finishFlow(rt);
             return;
         }
+        applyResult(rt, enterStep(rt, def));
+    }
+
+    private void activateForEntry(FlowRuntime rt) {
+        if (rt.flow.state() != FlowState.CREATED) {
+            return;
+        }
+        EventFlowCheckpoint checkpoint = rt.flow.recoveryCheckpoint();
+        if (checkpoint == null) {
+            rt.flow.markRunningAt(0);
+            return;
+        }
+        enterRecovered(rt, checkpoint);
+    }
+
+    private void enterRecovered(FlowRuntime rt, EventFlowCheckpoint checkpoint) {
+        rt.flow.activateRecoveryCheckpoint(checkpoint);
+        rt.awaitGeneration = checkpoint.awaitGeneration();
+        rt.awaitCheckpoints = checkpoint.awaits();
+        rt.recoveryCheckpoint = checkpoint;
+    }
+
+    private EventStepResult enterStep(FlowRuntime rt, EventStepDefinition def) {
         EventStepResult result;
         boolean entered = false;
         try {
-            if (rt.recoveryCheckpoint == null) {
-                result = def.step().onEnter(rt.ctx);
-            } else {
-                result = def.step().onRecover(rt.ctx, new EventRecoveryContext(rt.recoveryCheckpoint));
-            }
+            result = invokeEnter(rt, def);
             rt.entered = true;
             entered = true;
-            fireStepEntered(rt.flow, def.stepId());
+            listenerDispatcher.stepEntered(rt.flow, def.stepId());
         } catch (Throwable t) {
             result = EventStepResult.fail(t);
         } finally {
@@ -462,10 +418,17 @@ public final class EventWorker {
                     "onEnter returned null for step '" + def.stepId() + "'"));
             if (!entered) {
                 rt.entered = true;
-                fireStepEntered(rt.flow, def.stepId());
+                listenerDispatcher.stepEntered(rt.flow, def.stepId());
             }
         }
-        applyResult(rt, result);
+        return result;
+    }
+
+    private EventStepResult invokeEnter(FlowRuntime rt, EventStepDefinition def) {
+        if (rt.recoveryCheckpoint == null) {
+            return def.enter(rt.ctx);
+        }
+        return def.recover(rt.ctx, new EventRecoveryContext(rt.recoveryCheckpoint));
     }
 
     private void deliverEvent(FlowRuntime rt, Object event, long generation) {
@@ -481,7 +444,7 @@ public final class EventWorker {
         }
         EventStepResult result;
         try {
-            result = def.step().onEvent(rt.ctx, event);
+            result = def.event(rt.ctx, event);
         } catch (Throwable t) {
             result = EventStepResult.fail(t);
         }
@@ -499,20 +462,24 @@ public final class EventWorker {
             return;
         }
         rt.deadlineMillis = NO_DEADLINE;
-        rt.awaitCheckpoints = withoutDeadlines(rt.awaitCheckpoints);
+        rt.awaitCheckpoints = checkpointCoordinator.withoutDeadlines(rt.awaitCheckpoints);
         EventStepDefinition def = rt.flow.currentStep();
         if (def == null) {
             return;
         }
         EventStepResult result;
         try {
-            result = def.step().onTimeout(rt.ctx);
+            result = def.timeout(rt.ctx);
         } catch (Throwable t) {
             result = EventStepResult.fail(t);
         }
         if (result == null) {
             try {
-                saveCheckpoint(rt);
+                checkpointCoordinator.save(
+                        rt.flow,
+                        rt.entered,
+                        rt.awaitGeneration,
+                        rt.awaitCheckpoints);
             } catch (Throwable t) {
                 failFlow(rt, t);
             }
@@ -540,16 +507,13 @@ public final class EventWorker {
                 if (!runEffects(rt, result)) {
                     return;
                 }
-                safeExit(rt);
-                clearAwaits(rt);
                 int next = rt.flow.currentIndex() + 1;
                 if (next >= rt.flow.steps().size()) {
-                    rt.flow.finish();
-                    deleteCheckpoint(rt);
-                    fireFlowTerminated(rt.flow);
-                    remove(rt);
+                    finishFlow(rt);
                     return;
                 }
+                safeExit(rt);
+                clearAwaits(rt);
                 rt.flow.setCurrentIndex(next);
                 rt.entered = false;
                 enqueueEnter(rt);
@@ -578,12 +542,7 @@ public final class EventWorker {
                 if (!runEffects(rt, result)) {
                     return;
                 }
-                safeExit(rt);
-                clearAwaits(rt);
-                rt.flow.finish();
-                deleteCheckpoint(rt);
-                fireFlowTerminated(rt.flow);
-                remove(rt);
+                finishFlow(rt);
                 return;
 
             case FAIL:
@@ -599,12 +558,7 @@ public final class EventWorker {
     }
 
     private void enqueueEnter(final FlowRuntime rt) {
-        enqueue(new Command() {
-            @Override
-            public void execute() {
-                enterCurrent(rt);
-            }
-        });
+        enqueue(() -> enterCurrent(rt));
     }
 
     private boolean runEffects(FlowRuntime rt, EventStepResult result) {
@@ -622,32 +576,62 @@ public final class EventWorker {
         return true;
     }
 
-    private void offload(final Runnable task) {
+    private void runAsync(final Runnable task) {
         if (task == null) {
             throw new IllegalArgumentException("task must not be null");
         }
-        if (offloadExecutor == null) {
-            throw new IllegalStateException("EventWorker " + name + " has no offload executor");
+        if (asyncExecutor == null) {
+            throw new IllegalStateException("EventWorker " + name + " has no async executor");
         }
-        offloadExecutor.execute(new Runnable() {
+        asyncExecutor.execute(new Runnable() {
             @Override
             public void run() {
                 try {
                     task.run();
                 } catch (Throwable t) {
-                    notifyWorkerError(t);
+                    listenerDispatcher.workerError(t);
                 }
             }
         });
     }
 
+    private void finishFlow(FlowRuntime rt) {
+        terminate(rt, TerminalTransition.FINISH, null, true);
+    }
+
     private void failFlow(FlowRuntime rt, Throwable cause) {
+        terminate(rt, TerminalTransition.FAIL, cause, true);
+    }
+
+    private void cancelFlow(FlowRuntime rt, boolean removeActive) {
+        terminate(rt, TerminalTransition.CANCEL, null, removeActive);
+    }
+
+    private void terminate(
+            FlowRuntime rt,
+            TerminalTransition transition,
+            Throwable cause,
+            boolean removeActive) {
         safeExit(rt);
         clearAwaits(rt);
-        rt.flow.fail(cause);
-        deleteCheckpoint(rt);
-        fireFlowTerminated(rt.flow);
-        remove(rt);
+        switch (transition) {
+            case FINISH:
+                rt.flow.finish();
+                break;
+            case FAIL:
+                rt.flow.fail(cause);
+                break;
+            case CANCEL:
+                rt.flow.cancel();
+                break;
+            default:
+                throw new IllegalStateException("Unknown terminal transition: " + transition);
+        }
+        checkpointCoordinator.delete(rt.flow);
+        listenerDispatcher.flowTerminated(rt.flow);
+        if (removeActive) {
+            remove(rt);
+        }
     }
 
     // ------------------------------------------------------------------
@@ -656,7 +640,8 @@ public final class EventWorker {
 
     private void registerAwaits(FlowRuntime rt, List<AwaitCondition> conditions) {
         long now = clock.currentTimeMillis();
-        List<EventAwaitCheckpoint> checkpointAwaits = checkpointAwaitsFor(rt, conditions, now);
+        List<EventAwaitCheckpoint> checkpointAwaits =
+                checkpointCoordinator.checkpointAwaitsFor(rt.flow, conditions, now);
         clearAwaits(rt);
         long generation = rt.awaitGeneration;
         long earliestDeadline = NO_DEADLINE;
@@ -677,7 +662,11 @@ public final class EventWorker {
             deadlines.add(new DeadlineEntry(rt, generation, earliestDeadline, ++deadlineSeq));
         }
         rt.awaitCheckpoints = checkpointAwaits;
-        saveCheckpoint(rt);
+        checkpointCoordinator.save(
+                rt.flow,
+                rt.entered,
+                rt.awaitGeneration,
+                rt.awaitCheckpoints);
     }
 
     private long deadlineAt(long now, long millisFromNow) {
@@ -685,53 +674,6 @@ public final class EventWorker {
             return Long.MAX_VALUE;
         }
         return now + millisFromNow;
-    }
-
-    private List<EventAwaitCheckpoint> checkpointAwaitsFor(
-            FlowRuntime rt,
-            List<AwaitCondition> conditions,
-            long now) {
-        if (rt.flow.persistence() != FlowPersistence.DURABLE) {
-            return Collections.emptyList();
-        }
-        List<EventAwaitCheckpoint> out = new ArrayList<>();
-        long earliestDeadline = NO_DEADLINE;
-        for (AwaitCondition cond : conditions) {
-            if (cond instanceof AwaitCondition.Event) {
-                AwaitCondition.Event event = (AwaitCondition.Event) cond;
-                if (event.hasPredicate()) {
-                    throw new IllegalStateException(
-                            "Durable EventFlow cannot checkpoint predicate-based event await yet: "
-                                    + event.eventType().getName());
-                }
-                out.add(EventAwaitCheckpoint.event(event.eventType().getName()));
-            } else if (cond instanceof AwaitCondition.Signal) {
-                AwaitCondition.Signal signal = (AwaitCondition.Signal) cond;
-                out.add(EventAwaitCheckpoint.signal(signal.name(), signal.key()));
-            } else if (cond instanceof AwaitCondition.Deadline) {
-                long deadline = deadlineAt(now, ((AwaitCondition.Deadline) cond).millisFromNow());
-                earliestDeadline = (earliestDeadline == NO_DEADLINE)
-                        ? deadline
-                        : Math.min(earliestDeadline, deadline);
-            }
-        }
-        if (earliestDeadline != NO_DEADLINE) {
-            out.add(EventAwaitCheckpoint.deadline(earliestDeadline));
-        }
-        return Collections.unmodifiableList(out);
-    }
-
-    private List<EventAwaitCheckpoint> withoutDeadlines(List<EventAwaitCheckpoint> awaits) {
-        if (awaits.isEmpty()) {
-            return awaits;
-        }
-        List<EventAwaitCheckpoint> out = new ArrayList<>();
-        for (EventAwaitCheckpoint await : awaits) {
-            if (await.type() != EventAwaitCheckpoint.Type.DEADLINE) {
-                out.add(await);
-            }
-        }
-        return Collections.unmodifiableList(out);
     }
 
     private <E> Subscription subscribeEvent(
@@ -747,21 +689,11 @@ public final class EventWorker {
                 try {
                     matches = condition.matches(event);
                 } catch (final Throwable t) {
-                    enqueue(new Command() {
-                        @Override
-                        public void execute() {
-                            failFlow(rt, t);
-                        }
-                    });
+                    enqueue(() -> failFlow(rt, t));
                     return;
                 }
                 if (matches) {
-                    enqueue(new Command() {
-                        @Override
-                        public void execute() {
-                            deliverEvent(rt, event, generation);
-                        }
-                    });
+                    enqueue(() -> deliverEvent(rt, event, generation));
                 }
             }
         });
@@ -776,12 +708,7 @@ public final class EventWorker {
                     @Override
                     public void handle(final EventSignal signal) {
                         if (condition.matches(signal)) {
-                            enqueue(new Command() {
-                                @Override
-                                public void execute() {
-                                    deliverEvent(rt, signal, generation);
-                                }
-                            });
+                            enqueue(() -> deliverEvent(rt, signal, generation));
                         }
                     }
                 });
@@ -827,11 +754,11 @@ public final class EventWorker {
             return;
         }
         try {
-            def.step().onExit(rt.ctx);
+            def.exit(rt.ctx);
         } catch (Throwable ignored) {
             // best-effort cleanup
         }
-        fireStepExited(rt.flow, def.stepId());
+        listenerDispatcher.stepExited(rt.flow, def.stepId());
     }
 
     private void remove(FlowRuntime rt) {
@@ -850,23 +777,14 @@ public final class EventWorker {
         if (!isActive(rt) || rt.flow.state().isTerminal()) {
             return;
         }
-        clearAwaits(rt);
-        safeExit(rt);
-        rt.flow.cancel();
-        deleteCheckpoint(rt);
-        fireFlowTerminated(rt.flow);
-        remove(rt);
+        cancelFlow(rt, true);
     }
 
     private void cancelReplacedRuntime(FlowRuntime rt) {
         if (rt.flow.state().isTerminal()) {
             return;
         }
-        clearAwaits(rt);
-        safeExit(rt);
-        rt.flow.cancel();
-        deleteCheckpoint(rt);
-        fireFlowTerminated(rt.flow);
+        cancelFlow(rt, false);
     }
 
     private DeadlineEntry peekLiveDeadline() {
@@ -902,144 +820,26 @@ public final class EventWorker {
         }
         for (FlowRuntime rt : runtimes) {
             try {
-                saveCheckpoint(rt);
+                checkpointCoordinator.save(
+                        rt.flow,
+                        rt.entered,
+                        rt.awaitGeneration,
+                        rt.awaitCheckpoints);
             } catch (Throwable t) {
                 System.err.println("[flower] eventloop " + name + " checkpoint save failed for "
                         + rt.flow.flowId() + ": " + t);
-                notifyWorkerError(t);
+                listenerDispatcher.workerError(t);
             }
             clearAwaits(rt);
             safeExit(rt);
             if (!rt.flow.state().isTerminal() && rt.flow.persistence() != FlowPersistence.DURABLE) {
                 rt.flow.cancel();
-                deleteCheckpoint(rt);
-                fireFlowTerminated(rt.flow);
+                checkpointCoordinator.delete(rt.flow);
+                listenerDispatcher.flowTerminated(rt.flow);
             }
         }
         deadlines.clear();
         inbox.clear();
-    }
-
-    private void saveCheckpoint(FlowRuntime rt) {
-        if (rt.flow.persistence() != FlowPersistence.DURABLE || rt.flow.state().isTerminal()) {
-            return;
-        }
-        checkpointStore.save(new EventFlowCheckpoint(
-                rt.flow.flowId(),
-                rt.flow.state(),
-                rt.flow.currentStepId(),
-                rt.entered,
-                rt.flow.persistence(),
-                name,
-                clock.currentTimeMillis(),
-                rt.flow.definitionVersion(),
-                rt.flow.executionContext(),
-                rt.awaitGeneration,
-                rt.awaitCheckpoints));
-    }
-
-    private void deleteCheckpoint(FlowRuntime rt) {
-        if (rt.flow.persistence() != FlowPersistence.DURABLE) {
-            return;
-        }
-        try {
-            checkpointStore.delete(rt.flow.flowId());
-        } catch (Throwable t) {
-            System.err.println("[flower] eventloop " + name + " checkpoint delete failed for "
-                    + rt.flow.flowId() + ": " + t);
-            notifyWorkerError(t);
-        }
-    }
-
-    // ------------------------------------------------------------------
-    // Listener fanout
-    // ------------------------------------------------------------------
-
-    private void fireFlowSubmitted(EventFlow flow) {
-        FlowSnapshot snap = flow.snapshot();
-        for (FlowerListener listener : listeners) {
-            try {
-                listener.onFlowSubmitted(snap);
-            } catch (Throwable t) {
-                notifyListenerError(snap, "onFlowSubmitted", t);
-            }
-        }
-    }
-
-    private void fireStepEntered(EventFlow flow, String stepId) {
-        FlowSnapshot snap = flow.snapshot();
-        for (FlowerListener listener : listeners) {
-            try {
-                listener.onStepEntered(snap, stepId);
-            } catch (Throwable t) {
-                notifyListenerError(snap, "onStepEntered", t);
-            }
-        }
-    }
-
-    private void fireStepExited(EventFlow flow, String stepId) {
-        FlowSnapshot snap = flow.snapshot();
-        for (FlowerListener listener : listeners) {
-            try {
-                listener.onStepExited(snap, stepId);
-            } catch (Throwable t) {
-                notifyListenerError(snap, "onStepExited", t);
-            }
-        }
-    }
-
-    private void fireFlowTerminated(EventFlow flow) {
-        FlowSnapshot snap = flow.snapshot();
-        switch (flow.state()) {
-            case FINISHED:
-                for (FlowerListener listener : listeners) {
-                    try {
-                        listener.onFlowFinished(snap);
-                    } catch (Throwable t) {
-                        notifyListenerError(snap, "onFlowFinished", t);
-                    }
-                }
-                break;
-            case FAILED:
-                Throwable cause = flow.failureCause();
-                for (FlowerListener listener : listeners) {
-                    try {
-                        listener.onFlowFailed(snap, cause);
-                    } catch (Throwable t) {
-                        notifyListenerError(snap, "onFlowFailed", t);
-                    }
-                }
-                break;
-            case CANCELLED:
-                for (FlowerListener listener : listeners) {
-                    try {
-                        listener.onFlowCancelled(snap);
-                    } catch (Throwable t) {
-                        notifyListenerError(snap, "onFlowCancelled", t);
-                    }
-                }
-                break;
-            default:
-                // not terminal
-        }
-    }
-
-    private void notifyListenerError(FlowSnapshot flow, String callbackName, Throwable cause) {
-        for (FlowerListener listener : listeners) {
-            try {
-                listener.onListenerError(flow, callbackName, cause);
-            } catch (Throwable ignored) {
-            }
-        }
-    }
-
-    private void notifyWorkerError(Throwable cause) {
-        for (FlowerListener listener : listeners) {
-            try {
-                listener.onWorkerError(name, cause);
-            } catch (Throwable ignored) {
-            }
-        }
     }
 
     // ------------------------------------------------------------------
@@ -1101,8 +901,8 @@ public final class EventWorker {
         }
 
         @Override
-        public void offload(Runnable task) {
-            EventWorker.this.offload(task);
+        public void runAsync(Runnable task) {
+            EventWorker.this.runAsync(task);
         }
 
         @Override
@@ -1116,8 +916,15 @@ public final class EventWorker {
         }
     }
 
+    @FunctionalInterface
     private interface Command {
         void execute();
+    }
+
+    private enum TerminalTransition {
+        FINISH,
+        FAIL,
+        CANCEL
     }
 
     private static final class DeadlineEntry implements Comparable<DeadlineEntry> {

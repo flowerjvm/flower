@@ -1,4 +1,4 @@
-package io.github.parkkevinsb.flower.eventloop;
+package io.github.parkkevinsb.flower.eventloop.event;
 
 /**
  * Built-in event type for named external callbacks.
@@ -14,8 +14,8 @@ public final class EventSignal {
     private final Object payload;
 
     private EventSignal(String name, String key, Object payload) {
-        AwaitCondition.validateSignalPart("signal name", name);
-        AwaitCondition.validateSignalPart("signal key", key);
+        validateSignalPart("signal name", name);
+        validateSignalPart("signal key", key);
         this.name = name;
         this.key = key;
         this.payload = payload;
@@ -59,5 +59,11 @@ public final class EventSignal {
     public String toString() {
         return "EventSignal{name='" + name + "', key='" + key
                 + "', hasPayload=" + (payload != null) + "}";
+    }
+
+    private static void validateSignalPart(String label, String value) {
+        if (value == null || value.isEmpty()) {
+            throw new IllegalArgumentException(label + " must not be null or empty");
+        }
     }
 }

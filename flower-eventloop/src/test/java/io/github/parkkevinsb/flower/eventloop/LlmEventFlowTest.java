@@ -1,5 +1,11 @@
 package io.github.parkkevinsb.flower.eventloop;
 
+import io.github.parkkevinsb.flower.eventloop.flow.EventFlow;
+import io.github.parkkevinsb.flower.eventloop.step.AwaitCondition;
+import io.github.parkkevinsb.flower.eventloop.step.EventStep;
+import io.github.parkkevinsb.flower.eventloop.step.EventStepContext;
+import io.github.parkkevinsb.flower.eventloop.step.EventStepResult;
+import io.github.parkkevinsb.flower.eventloop.worker.EventWorker;
 import io.github.parkkevinsb.flower.core.event.InMemoryEventBus;
 import io.github.parkkevinsb.flower.core.flow.FlowId;
 import io.github.parkkevinsb.flower.core.flow.FlowState;
@@ -84,7 +90,7 @@ class LlmEventFlowTest {
     void completesWhenResponseArrivesBeforeDeadline() {
         ManualClock clock = new ManualClock();
         InMemoryEventBus bus = InMemoryEventBus.create();
-        EventWorker worker = new EventWorker("llm", clock, bus);
+        EventWorker worker = EventWorker.builder("llm").clock(clock).eventBus(bus).build();
         List<String> log = new ArrayList<>();
 
         FlowId id = FlowId.of("llm-call", "req-1");
@@ -107,7 +113,7 @@ class LlmEventFlowTest {
     void doesNotLoseSynchronousResponsePublishedDuringRequestEffect() {
         ManualClock clock = new ManualClock();
         InMemoryEventBus bus = InMemoryEventBus.create();
-        EventWorker worker = new EventWorker("llm", clock, bus);
+        EventWorker worker = EventWorker.builder("llm").clock(clock).eventBus(bus).build();
         List<String> log = new ArrayList<>();
 
         bus.subscribe(LlmRequested.class, request -> bus.publish(new LlmResponded("sync")));
@@ -122,7 +128,7 @@ class LlmEventFlowTest {
     void routesToFallbackWhenDeadlineElapses() {
         ManualClock clock = new ManualClock();
         InMemoryEventBus bus = InMemoryEventBus.create();
-        EventWorker worker = new EventWorker("llm", clock, bus);
+        EventWorker worker = EventWorker.builder("llm").clock(clock).eventBus(bus).build();
         List<String> log = new ArrayList<>();
 
         worker.submit(buildFlow(log));
@@ -140,7 +146,7 @@ class LlmEventFlowTest {
     void lateResponseAfterTimeoutIsIgnored() {
         ManualClock clock = new ManualClock();
         InMemoryEventBus bus = InMemoryEventBus.create();
-        EventWorker worker = new EventWorker("llm", clock, bus);
+        EventWorker worker = EventWorker.builder("llm").clock(clock).eventBus(bus).build();
         List<String> log = new ArrayList<>();
 
         worker.submit(buildFlow(log));

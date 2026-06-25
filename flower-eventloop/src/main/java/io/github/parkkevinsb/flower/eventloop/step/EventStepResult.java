@@ -1,4 +1,4 @@
-package io.github.parkkevinsb.flower.eventloop;
+package io.github.parkkevinsb.flower.eventloop.step;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -126,20 +126,23 @@ public final class EventStepResult {
     }
 
     /**
-     * Offload an effect after the worker has accepted this result.
+     * Run an effect on the worker's async executor after the worker has
+     * accepted this result.
      *
-     * <p>For {@link Type#AWAIT}, the offload is scheduled after awaits are
-     * registered and checkpointed. The offloaded task may block, but it should
+     * <p>For {@link Type#AWAIT}, the async task is scheduled after awaits are
+     * registered and checkpointed. The async task may block, but it should
      * publish completion/failure events back to {@link EventStepContext#eventBus()}.
+     * Capture immutable ids before returning this result and avoid reading
+     * mutable flow state from the async task.
      */
-    public EventStepResult thenRunOffloaded(final EventEffect effect) {
+    public EventStepResult thenRunAsync(final EventEffect effect) {
         if (effect == null) {
             throw new IllegalArgumentException("effect must not be null");
         }
         return thenRun(new EventEffect() {
             @Override
             public void apply(final EventStepContext ctx) {
-                ctx.offload(new Runnable() {
+                ctx.runAsync(new Runnable() {
                     @Override
                     public void run() {
                         effect.apply(ctx);

@@ -1,4 +1,4 @@
-package io.github.parkkevinsb.flower.eventloop;
+package io.github.parkkevinsb.flower.eventloop.step;
 
 import io.github.parkkevinsb.flower.eventloop.recovery.EventRecoveryContext;
 
@@ -28,7 +28,7 @@ import io.github.parkkevinsb.flower.eventloop.recovery.EventRecoveryContext;
  *
  * <p>All callbacks run on the event-loop thread. They must be quick and
  * non-blocking. For LLM, MCP, HTTP, database, or tool work, use
- * {@link EventStepContext#offload(Runnable)} or another external service and
+ * {@link EventStepContext#runAsync(Runnable)} or another external service and
  * publish only the completion event back to the worker's
  * {@link EventStepContext#eventBus()}.
  */

@@ -1,7 +1,7 @@
 package io.github.parkkevinsb.flower.eventloop.recovery;
 
 import io.github.parkkevinsb.flower.core.flow.FlowId;
-import io.github.parkkevinsb.flower.eventloop.EventFlow;
+import io.github.parkkevinsb.flower.eventloop.flow.EventFlow;
 
 /**
  * Rebuilds a fresh {@link EventFlow} definition for one durable event-flow id.

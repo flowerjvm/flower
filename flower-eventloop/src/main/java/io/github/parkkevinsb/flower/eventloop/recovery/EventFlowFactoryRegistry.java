@@ -1,8 +1,8 @@
 package io.github.parkkevinsb.flower.eventloop.recovery;
 
 import io.github.parkkevinsb.flower.core.flow.FlowId;
-import io.github.parkkevinsb.flower.eventloop.EventFlow;
-import io.github.parkkevinsb.flower.eventloop.checkpoint.EventFlowCheckpoint;
+import io.github.parkkevinsb.flower.eventloop.flow.EventFlow;
+import io.github.parkkevinsb.flower.eventloop.persistence.EventFlowCheckpoint;
 
 import java.util.Collections;
 import java.util.LinkedHashMap;

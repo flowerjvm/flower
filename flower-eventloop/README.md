@@ -4,9 +4,9 @@ Event-driven Flower runtime. A reactor-pattern execution line where steps
 declare **what should wake them** instead of being re-ticked.
 
 ```text
-EventWorker
-  -> EventFlow
-      -> EventStep
+eventloop.worker.EventWorker
+  -> eventloop.flow.EventFlow
+      -> eventloop.step.EventStep
 ```
 
 This module does not replace tick-driven `flower-core`. It is a separate
@@ -40,17 +40,18 @@ own contract and its own classes.
 
 ## Package Layout
 
-The root `io.github.parkkevinsb.flower.eventloop` package contains the small
-core loop API: `EventWorker`, `EventFlow`, `EventStep`, `EventStepResult`,
-`AwaitCondition`, `EventSignal`, and closely related step/flow types.
+The packages intentionally mirror the role-based layout of `flower-core`:
 
-Supporting areas live under focused subpackages:
-
-- `eventloop.checkpoint`: durable await/checkpoint model and store SPI
+- `eventloop.worker`: `EventWorker`, the event-driven execution loop
+- `eventloop.flow`: `EventFlow` and `EventFlowBuilder`
+- `eventloop.step`: `EventStep`, `EventStepResult`, `AwaitCondition`, and step context/definition types
+- `eventloop.event`: built-in event-loop event types such as `EventSignal`
+- `eventloop.persistence`: durable await/checkpoint model and store SPI
 - `eventloop.recovery`: durable flow factories and recovery service
 
-The split is intentionally shallow. The core loop classes remain together
-because they share package-level runtime internals.
+The concepts line up with core, but the contracts differ: core `Worker/Flow/Step`
+tick repeatedly, while eventloop `EventWorker/EventFlow/EventStep` sleep until
+an awaited event, signal, or deadline arrives.
 
 ## Runtime model
 
@@ -100,24 +101,31 @@ return EventStepResult.await(AwaitCondition.event(LlmResponded.class))
         .thenPublish(new LlmRequested("hello"));
 ```
 
-For blocking calls, construct the worker with an offload executor and schedule
+For blocking calls, construct the worker with an async executor and schedule
 the work after awaits are registered:
 
 ```java
-EventWorker worker = new EventWorker("agents", SystemClock.INSTANCE, bus, offloadExecutor);
+EventWorker worker = EventWorker.builder("agents")
+        .clock(SystemClock.INSTANCE)
+        .eventBus(bus)
+        .asyncExecutor(blockingIoExecutor)
+        .build();
 
 return EventStepResult.await(
         AwaitCondition.event(ToolCompleted.class),
         AwaitCondition.deadlineIn(30_000))
-        .thenRunOffloaded(ctx -> {
+        .thenRunAsync(ctx -> {
             ToolCompleted completed = toolClient.callBlocking(...);
             ctx.eventBus().publish(completed);
         });
 ```
 
-The event-loop thread only registers awaits and submits the task. The offloaded
+The event-loop thread only registers awaits and submits the task. The async
 task owns the blocking call and publishes completion/failure events back to the
-event bus.
+event bus. Treat the async `ctx` as a publishing handle: use
+`ctx.eventBus().publish(...)` or `ctx.signal(...)`, and capture immutable ids
+before scheduling the async task. Do not read mutable flow state such as
+`ctx.currentStepId()` from inside the async block.
 
 `EventStepResult` has no `stay()`. Instead:
 
@@ -129,8 +137,8 @@ event bus.
 - `thenPublish(event)` / `thenRun(effect)` — run effects after the result is
   accepted; for `await`, effects run after awaits are registered
 
-- `thenRunOffloaded(effect)` schedules blocking work on the worker's offload
-  executor after the result is accepted
+- `thenRunAsync(effect)` schedules blocking work on the worker's async executor
+  after the result is accepted
 
 `AwaitCondition` currently supports `event(Type.class)`,
 `signal(name, key)`, and `deadlineIn(millis)`. Event awaits can also include a
@@ -156,7 +164,10 @@ No fixed interval, no polling. An idle worker does no work.
 ```java
 ManualClock clock = new ManualClock();
 InMemoryEventBus bus = InMemoryEventBus.create();
-EventWorker worker = new EventWorker("llm", clock, bus);
+EventWorker worker = EventWorker.builder("llm")
+        .clock(clock)
+        .eventBus(bus)
+        .build();
 
 EventFlow flow = EventFlow.builder("llm-call", "req-1")
         .step("request", new EventStep() {

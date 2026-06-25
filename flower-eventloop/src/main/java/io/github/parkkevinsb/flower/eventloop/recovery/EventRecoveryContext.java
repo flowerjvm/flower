@@ -1,8 +1,8 @@
 package io.github.parkkevinsb.flower.eventloop.recovery;
 
-import io.github.parkkevinsb.flower.eventloop.EventStep;
-import io.github.parkkevinsb.flower.eventloop.checkpoint.EventAwaitCheckpoint;
-import io.github.parkkevinsb.flower.eventloop.checkpoint.EventFlowCheckpoint;
+import io.github.parkkevinsb.flower.eventloop.step.EventStep;
+import io.github.parkkevinsb.flower.eventloop.persistence.EventAwaitCheckpoint;
+import io.github.parkkevinsb.flower.eventloop.persistence.EventFlowCheckpoint;
 
 import java.util.List;
 

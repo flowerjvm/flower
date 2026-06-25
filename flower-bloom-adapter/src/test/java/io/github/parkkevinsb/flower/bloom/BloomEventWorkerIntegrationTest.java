@@ -3,12 +3,12 @@ package io.github.parkkevinsb.flower.bloom;
 import io.github.parkkevinsb.bloom.LocalEventBus;
 import io.github.parkkevinsb.flower.core.flow.FlowState;
 import io.github.parkkevinsb.flower.core.time.SystemClock;
-import io.github.parkkevinsb.flower.eventloop.AwaitCondition;
-import io.github.parkkevinsb.flower.eventloop.EventFlow;
-import io.github.parkkevinsb.flower.eventloop.EventStep;
-import io.github.parkkevinsb.flower.eventloop.EventStepContext;
-import io.github.parkkevinsb.flower.eventloop.EventStepResult;
-import io.github.parkkevinsb.flower.eventloop.EventWorker;
+import io.github.parkkevinsb.flower.eventloop.flow.EventFlow;
+import io.github.parkkevinsb.flower.eventloop.step.AwaitCondition;
+import io.github.parkkevinsb.flower.eventloop.step.EventStep;
+import io.github.parkkevinsb.flower.eventloop.step.EventStepContext;
+import io.github.parkkevinsb.flower.eventloop.step.EventStepResult;
+import io.github.parkkevinsb.flower.eventloop.worker.EventWorker;
 import org.junit.jupiter.api.Test;
 
 import java.util.concurrent.CountDownLatch;
@@ -41,7 +41,10 @@ class BloomEventWorkerIntegrationTest {
     @Test
     void rawBloomPublishWakesEventWorkerThroughAdapter() throws Exception {
         LocalEventBus bloom = LocalEventBus.create();
-        EventWorker worker = new EventWorker("bloom-eventloop", SystemClock.INSTANCE, BloomEventBus.wrap(bloom));
+        EventWorker worker = EventWorker.builder("bloom-eventloop")
+                .clock(SystemClock.INSTANCE)
+                .eventBus(BloomEventBus.wrap(bloom))
+                .build();
         CountDownLatch entered = new CountDownLatch(1);
         CountDownLatch awaiting = new CountDownLatch(1);
         CountDownLatch finished = new CountDownLatch(1);
@@ -87,7 +90,10 @@ class BloomEventWorkerIntegrationTest {
     @Test
     void thenPublishCanReceiveSynchronousBloomResponse() {
         LocalEventBus bloom = LocalEventBus.create();
-        EventWorker worker = new EventWorker("bloom-sync", SystemClock.INSTANCE, BloomEventBus.wrap(bloom));
+        EventWorker worker = EventWorker.builder("bloom-sync")
+                .clock(SystemClock.INSTANCE)
+                .eventBus(BloomEventBus.wrap(bloom))
+                .build();
         CountDownLatch finished = new CountDownLatch(1);
 
         bloom.subscribe(Request.class, request -> bloom.publish(new Response(request.id)));

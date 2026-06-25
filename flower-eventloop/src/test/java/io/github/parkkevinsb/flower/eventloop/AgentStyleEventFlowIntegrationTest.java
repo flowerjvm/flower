@@ -1,11 +1,19 @@
 package io.github.parkkevinsb.flower.eventloop;
 
+import io.github.parkkevinsb.flower.eventloop.event.EventSignal;
+import io.github.parkkevinsb.flower.eventloop.flow.EventFlow;
+import io.github.parkkevinsb.flower.eventloop.flow.EventFlowBuilder;
+import io.github.parkkevinsb.flower.eventloop.step.AwaitCondition;
+import io.github.parkkevinsb.flower.eventloop.step.EventStep;
+import io.github.parkkevinsb.flower.eventloop.step.EventStepContext;
+import io.github.parkkevinsb.flower.eventloop.step.EventStepResult;
+import io.github.parkkevinsb.flower.eventloop.worker.EventWorker;
 import io.github.parkkevinsb.flower.core.event.InMemoryEventBus;
 import io.github.parkkevinsb.flower.core.flow.FlowId;
 import io.github.parkkevinsb.flower.core.flow.FlowState;
 import io.github.parkkevinsb.flower.core.time.ManualClock;
-import io.github.parkkevinsb.flower.eventloop.checkpoint.EventAwaitCheckpoint;
-import io.github.parkkevinsb.flower.eventloop.checkpoint.EventFlowCheckpoint;
+import io.github.parkkevinsb.flower.eventloop.persistence.EventAwaitCheckpoint;
+import io.github.parkkevinsb.flower.eventloop.persistence.EventFlowCheckpoint;
 import io.github.parkkevinsb.flower.eventloop.recovery.EventFlowFactoryRegistry;
 import io.github.parkkevinsb.flower.eventloop.recovery.EventFlowRecoveryService;
 import io.github.parkkevinsb.flower.eventloop.recovery.EventRecoveryContext;
@@ -33,7 +41,10 @@ class AgentStyleEventFlowIntegrationTest {
     void agentFlowCompletesThroughFakeLlmToolAndHumanSignals() {
         ManualClock clock = new ManualClock();
         InMemoryEventBus bus = InMemoryEventBus.create();
-        EventWorker worker = new EventWorker("runtime", clock, bus);
+        EventWorker worker = EventWorker.builder("runtime")
+                .clock(clock)
+                .eventBus(bus)
+                .build();
         List<String> log = new ArrayList<>();
 
         bus.subscribe(LlmRequested.class, request ->
@@ -85,7 +96,11 @@ class AgentStyleEventFlowIntegrationTest {
         bus.subscribe(LlmRequested.class, request ->
                 bus.publish(new LlmResponded(request.runId, "call tool")));
 
-        EventWorker firstWorker = new EventWorker("runtime", clock, bus, store);
+        EventWorker firstWorker = EventWorker.builder("runtime")
+                .clock(clock)
+                .eventBus(bus)
+                .checkpointStore(store)
+                .build();
         EventFlow flow = buildAgentFlow(FLOW_KEY, log, true);
 
         firstWorker.submit(flow);
@@ -104,7 +119,11 @@ class AgentStyleEventFlowIntegrationTest {
         assertThat(firstWorker.activeCount()).isZero();
         assertThat(store.find(flow.flowId())).isPresent();
 
-        EventWorker recoveredWorker = new EventWorker("runtime", clock, bus, store);
+        EventWorker recoveredWorker = EventWorker.builder("runtime")
+                .clock(clock)
+                .eventBus(bus)
+                .checkpointStore(store)
+                .build();
         EventFlowFactoryRegistry registry = EventFlowFactoryRegistry.builder()
                 .register(FLOW_TYPE, id -> buildAgentFlow(id.flowKey(), log, true))
                 .build();

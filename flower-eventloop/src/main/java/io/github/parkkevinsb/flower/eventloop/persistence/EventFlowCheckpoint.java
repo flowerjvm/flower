@@ -1,10 +1,10 @@
-package io.github.parkkevinsb.flower.eventloop.checkpoint;
+package io.github.parkkevinsb.flower.eventloop.persistence;
 
 import io.github.parkkevinsb.flower.core.context.ExecutionContext;
 import io.github.parkkevinsb.flower.core.flow.FlowId;
 import io.github.parkkevinsb.flower.core.flow.FlowPersistence;
 import io.github.parkkevinsb.flower.core.flow.FlowState;
-import io.github.parkkevinsb.flower.eventloop.EventFlow;
+import io.github.parkkevinsb.flower.eventloop.flow.EventFlow;
 
 import java.util.ArrayList;
 import java.util.Collections;

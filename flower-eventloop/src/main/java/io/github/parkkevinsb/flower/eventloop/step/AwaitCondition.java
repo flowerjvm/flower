@@ -1,4 +1,6 @@
-package io.github.parkkevinsb.flower.eventloop;
+package io.github.parkkevinsb.flower.eventloop.step;
+
+import io.github.parkkevinsb.flower.eventloop.event.EventSignal;
 
 import java.util.function.Predicate;
 
@@ -76,11 +78,11 @@ public abstract class AwaitCondition {
             return eventType;
         }
 
-        boolean hasPredicate() {
+        public boolean hasPredicate() {
             return predicate != null;
         }
 
-        boolean matches(Object event) {
+        public boolean matches(Object event) {
             if (event == null || event.getClass() != eventType) {
                 return false;
             }
@@ -108,7 +110,7 @@ public abstract class AwaitCondition {
             return key;
         }
 
-        boolean matches(EventSignal signal) {
+        public boolean matches(EventSignal signal) {
             return signal != null
                     && name.equals(signal.name())
                     && key.equals(signal.key());

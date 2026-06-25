@@ -1,5 +1,11 @@
 package io.github.parkkevinsb.flower.eventloop;
 
+import io.github.parkkevinsb.flower.eventloop.flow.EventFlow;
+import io.github.parkkevinsb.flower.eventloop.step.AwaitCondition;
+import io.github.parkkevinsb.flower.eventloop.step.EventStep;
+import io.github.parkkevinsb.flower.eventloop.step.EventStepContext;
+import io.github.parkkevinsb.flower.eventloop.step.EventStepResult;
+import io.github.parkkevinsb.flower.eventloop.worker.EventWorker;
 import io.github.parkkevinsb.flower.core.event.InMemoryEventBus;
 import io.github.parkkevinsb.flower.core.flow.FlowState;
 import io.github.parkkevinsb.flower.core.time.SystemClock;
@@ -20,7 +26,10 @@ class EventWorkerBackgroundTest {
     @Test
     void backgroundWorkerWakesWhenEventArrives() throws Exception {
         InMemoryEventBus bus = InMemoryEventBus.create();
-        EventWorker worker = new EventWorker("bg-event", SystemClock.INSTANCE, bus);
+        EventWorker worker = EventWorker.builder("bg-event")
+                .clock(SystemClock.INSTANCE)
+                .eventBus(bus)
+                .build();
         CountDownLatch entered = new CountDownLatch(1);
         CountDownLatch awaiting = new CountDownLatch(1);
         CountDownLatch finished = new CountDownLatch(1);
@@ -64,7 +73,10 @@ class EventWorkerBackgroundTest {
     @Test
     void backgroundWorkerWakesForDeadline() throws Exception {
         InMemoryEventBus bus = InMemoryEventBus.create();
-        EventWorker worker = new EventWorker("bg-deadline", SystemClock.INSTANCE, bus);
+        EventWorker worker = EventWorker.builder("bg-deadline")
+                .clock(SystemClock.INSTANCE)
+                .eventBus(bus)
+                .build();
         CountDownLatch timedOut = new CountDownLatch(1);
         AtomicReference<Throwable> failure = new AtomicReference<>();
 
@@ -102,7 +114,10 @@ class EventWorkerBackgroundTest {
 
     @Test
     void drainIsRejectedWhileBackgroundWorkerIsRunning() {
-        EventWorker worker = new EventWorker("bg-drain", SystemClock.INSTANCE, InMemoryEventBus.create());
+        EventWorker worker = EventWorker.builder("bg-drain")
+                .clock(SystemClock.INSTANCE)
+                .eventBus(InMemoryEventBus.create())
+                .build();
         try {
             worker.start();
 

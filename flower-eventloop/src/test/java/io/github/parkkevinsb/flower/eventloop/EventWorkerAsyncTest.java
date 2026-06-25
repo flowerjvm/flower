@@ -1,11 +1,17 @@
 package io.github.parkkevinsb.flower.eventloop;
 
+import io.github.parkkevinsb.flower.eventloop.flow.EventFlow;
+import io.github.parkkevinsb.flower.eventloop.step.AwaitCondition;
+import io.github.parkkevinsb.flower.eventloop.step.EventStep;
+import io.github.parkkevinsb.flower.eventloop.step.EventStepContext;
+import io.github.parkkevinsb.flower.eventloop.step.EventStepResult;
+import io.github.parkkevinsb.flower.eventloop.worker.EventWorker;
 import io.github.parkkevinsb.flower.core.event.InMemoryEventBus;
 import io.github.parkkevinsb.flower.core.flow.FlowSnapshot;
 import io.github.parkkevinsb.flower.core.flow.FlowState;
 import io.github.parkkevinsb.flower.core.listener.FlowerListener;
 import io.github.parkkevinsb.flower.core.time.ManualClock;
-import io.github.parkkevinsb.flower.eventloop.checkpoint.EventFlowCheckpointStore;
+import io.github.parkkevinsb.flower.eventloop.persistence.EventFlowCheckpointStore;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayDeque;
@@ -15,23 +21,27 @@ import java.util.concurrent.Executor;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-class EventWorkerOffloadTest {
+class EventWorkerAsyncTest {
 
     static final class Response {
     }
 
     @Test
-    void offloadedEffectPublishesResponseAfterAwaitIsRegistered() {
+    void asyncEffectPublishesResponseAfterAwaitIsRegistered() {
         QueuedExecutor executor = new QueuedExecutor();
         InMemoryEventBus bus = InMemoryEventBus.create();
-        EventWorker worker = new EventWorker("offload", new ManualClock(), bus, executor);
+        EventWorker worker = EventWorker.builder("async")
+                .clock(new ManualClock())
+                .eventBus(bus)
+                .asyncExecutor(executor)
+                .build();
 
-        EventFlow flow = EventFlow.builder("offload", "ok")
+        EventFlow flow = EventFlow.builder("async", "ok")
                 .step("call", new EventStep() {
                     @Override
                     protected EventStepResult onEnter(EventStepContext ctx) {
                         return EventStepResult.await(AwaitCondition.event(Response.class))
-                                .thenRunOffloaded(c -> c.eventBus().publish(new Response()));
+                                .thenRunAsync(c -> c.eventBus().publish(new Response()));
                     }
 
                     @Override
@@ -54,15 +64,18 @@ class EventWorkerOffloadTest {
     }
 
     @Test
-    void offloadWithoutExecutorFailsFlowFast() {
-        EventWorker worker = new EventWorker("offload-missing", new ManualClock(), InMemoryEventBus.create());
+    void asyncWithoutExecutorFailsFlowFast() {
+        EventWorker worker = EventWorker.builder("async-missing")
+                .clock(new ManualClock())
+                .eventBus(InMemoryEventBus.create())
+                .build();
 
-        EventFlow flow = EventFlow.builder("offload", "missing")
+        EventFlow flow = EventFlow.builder("async", "missing")
                 .step("call", new EventStep() {
                     @Override
                     protected EventStepResult onEnter(EventStepContext ctx) {
                         return EventStepResult.await(AwaitCondition.event(Response.class))
-                                .thenRunOffloaded(c -> c.eventBus().publish(new Response()));
+                                .thenRunAsync(c -> c.eventBus().publish(new Response()));
                     }
                 })
                 .build();
@@ -72,28 +85,28 @@ class EventWorkerOffloadTest {
 
         assertThat(flow.state()).isEqualTo(FlowState.FAILED);
         assertThat(flow.failureCause()).isInstanceOf(IllegalStateException.class);
-        assertThat(flow.failureCause()).hasMessageContaining("no offload executor");
+        assertThat(flow.failureCause()).hasMessageContaining("no async executor");
     }
 
     @Test
-    void offloadedTaskFailureIsReportedAsWorkerError() {
+    void asyncTaskFailureIsReportedAsWorkerError() {
         QueuedExecutor executor = new QueuedExecutor();
         RecordingListener listener = new RecordingListener();
-        EventWorker worker = new EventWorker(
-                "offload-error",
-                new ManualClock(),
-                InMemoryEventBus.create(),
-                EventFlowCheckpointStore.NOOP,
-                Collections.singletonList(listener),
-                executor);
+        EventWorker worker = EventWorker.builder("async-error")
+                .clock(new ManualClock())
+                .eventBus(InMemoryEventBus.create())
+                .checkpointStore(EventFlowCheckpointStore.NOOP)
+                .listeners(Collections.singletonList(listener))
+                .asyncExecutor(executor)
+                .build();
 
-        EventFlow flow = EventFlow.builder("offload", "task-error")
+        EventFlow flow = EventFlow.builder("async", "task-error")
                 .step("call", new EventStep() {
                     @Override
                     protected EventStepResult onEnter(EventStepContext ctx) {
                         return EventStepResult.await(AwaitCondition.event(Response.class))
-                                .thenRunOffloaded(c -> {
-                                    throw new IllegalStateException("offload boom");
+                                .thenRunAsync(c -> {
+                                    throw new IllegalStateException("async boom");
                                 });
                     }
                 })
@@ -104,7 +117,7 @@ class EventWorkerOffloadTest {
         executor.runNext();
 
         assertThat(flow.state()).isEqualTo(FlowState.RUNNING);
-        assertThat(listener.workerError).isEqualTo("offload-error:offload boom");
+        assertThat(listener.workerError).isEqualTo("async-error:async boom");
     }
 
     private static final class QueuedExecutor implements Executor {
@@ -134,7 +147,7 @@ class EventWorkerOffloadTest {
 
         @Override
         public void onFlowFailed(FlowSnapshot flow, Throwable cause) {
-            throw new AssertionError("offloaded task failure should not synchronously fail flow");
+            throw new AssertionError("async task failure should not synchronously fail flow");
         }
     }
 }

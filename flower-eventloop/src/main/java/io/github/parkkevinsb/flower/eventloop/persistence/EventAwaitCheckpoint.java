@@ -1,6 +1,6 @@
-package io.github.parkkevinsb.flower.eventloop.checkpoint;
+package io.github.parkkevinsb.flower.eventloop.persistence;
 
-import io.github.parkkevinsb.flower.eventloop.EventFlow;
+import io.github.parkkevinsb.flower.eventloop.flow.EventFlow;
 
 /**
  * Durable description of one await condition registered by an {@link EventFlow}.

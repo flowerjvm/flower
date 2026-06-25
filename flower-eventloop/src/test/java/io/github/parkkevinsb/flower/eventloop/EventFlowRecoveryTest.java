@@ -1,13 +1,20 @@
 package io.github.parkkevinsb.flower.eventloop;
 
+import io.github.parkkevinsb.flower.eventloop.event.EventSignal;
+import io.github.parkkevinsb.flower.eventloop.flow.EventFlow;
+import io.github.parkkevinsb.flower.eventloop.step.AwaitCondition;
+import io.github.parkkevinsb.flower.eventloop.step.EventStep;
+import io.github.parkkevinsb.flower.eventloop.step.EventStepContext;
+import io.github.parkkevinsb.flower.eventloop.step.EventStepResult;
+import io.github.parkkevinsb.flower.eventloop.worker.EventWorker;
 import io.github.parkkevinsb.flower.core.context.ExecutionContext;
 import io.github.parkkevinsb.flower.core.event.InMemoryEventBus;
 import io.github.parkkevinsb.flower.core.flow.FlowId;
 import io.github.parkkevinsb.flower.core.flow.FlowPersistence;
 import io.github.parkkevinsb.flower.core.flow.FlowState;
 import io.github.parkkevinsb.flower.core.time.ManualClock;
-import io.github.parkkevinsb.flower.eventloop.checkpoint.EventAwaitCheckpoint;
-import io.github.parkkevinsb.flower.eventloop.checkpoint.EventFlowCheckpoint;
+import io.github.parkkevinsb.flower.eventloop.persistence.EventAwaitCheckpoint;
+import io.github.parkkevinsb.flower.eventloop.persistence.EventFlowCheckpoint;
 import io.github.parkkevinsb.flower.eventloop.recovery.EventFlowFactoryRegistry;
 import io.github.parkkevinsb.flower.eventloop.recovery.EventFlowRecoveryService;
 import io.github.parkkevinsb.flower.eventloop.recovery.EventRecoveryContext;
@@ -28,7 +35,11 @@ class EventFlowRecoveryTest {
         ManualClock clock = new ManualClock(2_000L);
         InMemoryEventBus bus = InMemoryEventBus.create();
         FakeEventFlowCheckpointStore store = new FakeEventFlowCheckpointStore();
-        EventWorker worker = new EventWorker("worker-a", clock, bus, store);
+        EventWorker worker = EventWorker.builder("worker-a")
+                .clock(clock)
+                .eventBus(bus)
+                .checkpointStore(store)
+                .build();
         FlowId flowId = FlowId.of("recover", "event");
         AtomicInteger enterEffects = new AtomicInteger();
         AtomicInteger recoveries = new AtomicInteger();
@@ -89,7 +100,11 @@ class EventFlowRecoveryTest {
         ManualClock clock = new ManualClock(2_000L);
         InMemoryEventBus bus = InMemoryEventBus.create();
         FakeEventFlowCheckpointStore store = new FakeEventFlowCheckpointStore();
-        EventWorker worker = new EventWorker("worker-a", clock, bus, store);
+        EventWorker worker = EventWorker.builder("worker-a")
+                .clock(clock)
+                .eventBus(bus)
+                .checkpointStore(store)
+                .build();
         FlowId flowId = FlowId.of("recover", "deadline");
         AtomicInteger timeouts = new AtomicInteger();
 
@@ -139,7 +154,11 @@ class EventFlowRecoveryTest {
         ManualClock clock = new ManualClock(2_000L);
         InMemoryEventBus bus = InMemoryEventBus.create();
         FakeEventFlowCheckpointStore store = new FakeEventFlowCheckpointStore();
-        EventWorker worker = new EventWorker("worker-a", clock, bus, store);
+        EventWorker worker = EventWorker.builder("worker-a")
+                .clock(clock)
+                .eventBus(bus)
+                .checkpointStore(store)
+                .build();
         FlowId flowId = FlowId.of("recover", "signal");
 
         store.save(checkpoint(flowId, "worker-a",
@@ -194,7 +213,11 @@ class EventFlowRecoveryTest {
         ManualClock clock = new ManualClock();
         InMemoryEventBus bus = InMemoryEventBus.create();
         FakeEventFlowCheckpointStore store = new FakeEventFlowCheckpointStore();
-        EventWorker worker = new EventWorker("worker-a", clock, bus, store);
+        EventWorker worker = EventWorker.builder("worker-a")
+                .clock(clock)
+                .eventBus(bus)
+                .checkpointStore(store)
+                .build();
         FlowId flowId = FlowId.of("recover", "missing-on-recover");
 
         store.save(checkpoint(flowId, "worker-a",
@@ -229,7 +252,11 @@ class EventFlowRecoveryTest {
         ManualClock clock = new ManualClock();
         InMemoryEventBus bus = InMemoryEventBus.create();
         FakeEventFlowCheckpointStore store = new FakeEventFlowCheckpointStore();
-        EventWorker worker = new EventWorker("worker-a", clock, bus, store);
+        EventWorker worker = EventWorker.builder("worker-a")
+                .clock(clock)
+                .eventBus(bus)
+                .checkpointStore(store)
+                .build();
 
         store.save(checkpoint(FlowId.of("recover", "a"), "worker-a",
                 Collections.singletonList(EventAwaitCheckpoint.event(Response.class.getName()))));

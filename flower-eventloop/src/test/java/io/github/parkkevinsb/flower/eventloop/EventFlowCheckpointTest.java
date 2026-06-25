@@ -1,12 +1,18 @@
 package io.github.parkkevinsb.flower.eventloop;
 
+import io.github.parkkevinsb.flower.eventloop.flow.EventFlow;
+import io.github.parkkevinsb.flower.eventloop.step.AwaitCondition;
+import io.github.parkkevinsb.flower.eventloop.step.EventStep;
+import io.github.parkkevinsb.flower.eventloop.step.EventStepContext;
+import io.github.parkkevinsb.flower.eventloop.step.EventStepResult;
+import io.github.parkkevinsb.flower.eventloop.worker.EventWorker;
 import io.github.parkkevinsb.flower.core.event.InMemoryEventBus;
 import io.github.parkkevinsb.flower.core.flow.FlowId;
 import io.github.parkkevinsb.flower.core.flow.FlowPersistence;
 import io.github.parkkevinsb.flower.core.flow.FlowState;
 import io.github.parkkevinsb.flower.core.time.ManualClock;
-import io.github.parkkevinsb.flower.eventloop.checkpoint.EventAwaitCheckpoint;
-import io.github.parkkevinsb.flower.eventloop.checkpoint.EventFlowCheckpoint;
+import io.github.parkkevinsb.flower.eventloop.persistence.EventAwaitCheckpoint;
+import io.github.parkkevinsb.flower.eventloop.persistence.EventFlowCheckpoint;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -23,7 +29,11 @@ class EventFlowCheckpointTest {
         ManualClock clock = new ManualClock(1_000L);
         InMemoryEventBus bus = InMemoryEventBus.create();
         FakeEventFlowCheckpointStore store = new FakeEventFlowCheckpointStore();
-        EventWorker worker = new EventWorker("durable", clock, bus, store);
+        EventWorker worker = EventWorker.builder("durable")
+                .clock(clock)
+                .eventBus(bus)
+                .checkpointStore(store)
+                .build();
         FlowId flowId = FlowId.of("durable", "await");
 
         EventFlow flow = EventFlow.builder("durable", "await")
@@ -66,7 +76,11 @@ class EventFlowCheckpointTest {
         ManualClock clock = new ManualClock(1_000L);
         InMemoryEventBus bus = InMemoryEventBus.create();
         FakeEventFlowCheckpointStore store = new FakeEventFlowCheckpointStore();
-        EventWorker worker = new EventWorker("durable", clock, bus, store);
+        EventWorker worker = EventWorker.builder("durable")
+                .clock(clock)
+                .eventBus(bus)
+                .checkpointStore(store)
+                .build();
 
         EventFlow flow = EventFlow.builder("durable", "signal")
                 .durable()
@@ -96,7 +110,11 @@ class EventFlowCheckpointTest {
         ManualClock clock = new ManualClock();
         InMemoryEventBus bus = InMemoryEventBus.create();
         FakeEventFlowCheckpointStore store = new FakeEventFlowCheckpointStore();
-        EventWorker worker = new EventWorker("durable", clock, bus, store);
+        EventWorker worker = EventWorker.builder("durable")
+                .clock(clock)
+                .eventBus(bus)
+                .checkpointStore(store)
+                .build();
         FlowId flowId = FlowId.of("durable", "finish");
 
         EventFlow flow = EventFlow.builder("durable", "finish")
@@ -131,7 +149,11 @@ class EventFlowCheckpointTest {
         ManualClock clock = new ManualClock();
         InMemoryEventBus bus = InMemoryEventBus.create();
         FakeEventFlowCheckpointStore store = new FakeEventFlowCheckpointStore();
-        EventWorker worker = new EventWorker("durable", clock, bus, store);
+        EventWorker worker = EventWorker.builder("durable")
+                .clock(clock)
+                .eventBus(bus)
+                .checkpointStore(store)
+                .build();
         FlowId flowId = FlowId.of("durable", "cancel");
 
         EventFlow flow = EventFlow.builder("durable", "cancel")
@@ -156,7 +178,11 @@ class EventFlowCheckpointTest {
         ManualClock clock = new ManualClock();
         InMemoryEventBus bus = InMemoryEventBus.create();
         FakeEventFlowCheckpointStore store = new FakeEventFlowCheckpointStore();
-        EventWorker worker = new EventWorker("durable", clock, bus, store);
+        EventWorker worker = EventWorker.builder("durable")
+                .clock(clock)
+                .eventBus(bus)
+                .checkpointStore(store)
+                .build();
         FlowId flowId = FlowId.of("durable", "predicate");
 
         EventFlow flow = EventFlow.builder("durable", "predicate")
@@ -185,7 +211,11 @@ class EventFlowCheckpointTest {
         ManualClock clock = new ManualClock();
         InMemoryEventBus bus = InMemoryEventBus.create();
         FakeEventFlowCheckpointStore store = new FakeEventFlowCheckpointStore();
-        EventWorker worker = new EventWorker("durable", clock, bus, store);
+        EventWorker worker = EventWorker.builder("durable")
+                .clock(clock)
+                .eventBus(bus)
+                .checkpointStore(store)
+                .build();
 
         EventFlow flow = EventFlow.builder("durable", "stop")
                 .durable()

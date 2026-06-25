@@ -1,12 +1,17 @@
 package io.github.parkkevinsb.flower.eventloop;
 
+import io.github.parkkevinsb.flower.eventloop.flow.EventFlow;
+import io.github.parkkevinsb.flower.eventloop.step.EventStep;
+import io.github.parkkevinsb.flower.eventloop.step.EventStepContext;
+import io.github.parkkevinsb.flower.eventloop.step.EventStepResult;
+import io.github.parkkevinsb.flower.eventloop.worker.EventWorker;
 import io.github.parkkevinsb.flower.core.event.InMemoryEventBus;
 import io.github.parkkevinsb.flower.core.flow.FlowSnapshot;
 import io.github.parkkevinsb.flower.core.flow.FlowState;
 import io.github.parkkevinsb.flower.core.listener.FlowerListener;
 import io.github.parkkevinsb.flower.core.time.ManualClock;
-import io.github.parkkevinsb.flower.eventloop.checkpoint.EventFlowCheckpoint;
-import io.github.parkkevinsb.flower.eventloop.checkpoint.EventFlowCheckpointStore;
+import io.github.parkkevinsb.flower.eventloop.persistence.EventFlowCheckpoint;
+import io.github.parkkevinsb.flower.eventloop.persistence.EventFlowCheckpointStore;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
@@ -20,11 +25,11 @@ class EventWorkerListenerTest {
     @Test
     void listenerReceivesSubmittedStepAndTerminalCallbacks() {
         RecordingListener listener = new RecordingListener();
-        EventWorker worker = new EventWorker(
-                "listen",
-                new ManualClock(),
-                InMemoryEventBus.create(),
-                Collections.singletonList(listener));
+        EventWorker worker = EventWorker.builder("listen")
+                .clock(new ManualClock())
+                .eventBus(InMemoryEventBus.create())
+                .listeners(Collections.singletonList(listener))
+                .build();
 
         EventFlow flow = EventFlow.builder("listen", "ok")
                 .step("first", new EventStep() {
@@ -63,11 +68,11 @@ class EventWorkerListenerTest {
                 throw new IllegalStateException("listener boom");
             }
         };
-        EventWorker worker = new EventWorker(
-                "listen-error",
-                new ManualClock(),
-                InMemoryEventBus.create(),
-                Collections.singletonList(listener));
+        EventWorker worker = EventWorker.builder("listen-error")
+                .clock(new ManualClock())
+                .eventBus(InMemoryEventBus.create())
+                .listeners(Collections.singletonList(listener))
+                .build();
 
         EventFlow flow = EventFlow.builder("listen", "listener-error")
                 .step("only", new EventStep() {
@@ -90,11 +95,10 @@ class EventWorkerListenerTest {
     @Test
     void checkpointDeleteErrorsAreReportedAsWorkerErrors() {
         RecordingListener listener = new RecordingListener();
-        EventWorker worker = new EventWorker(
-                "worker-error",
-                new ManualClock(),
-                InMemoryEventBus.create(),
-                new EventFlowCheckpointStore() {
+        EventWorker worker = EventWorker.builder("worker-error")
+                .clock(new ManualClock())
+                .eventBus(InMemoryEventBus.create())
+                .checkpointStore(new EventFlowCheckpointStore() {
                     @Override
                     public void save(EventFlowCheckpoint checkpoint) {
                     }
@@ -103,8 +107,9 @@ class EventWorkerListenerTest {
                     public void delete(io.github.parkkevinsb.flower.core.flow.FlowId flowId) {
                         throw new IllegalStateException("delete boom");
                     }
-                },
-                Collections.singletonList(listener));
+                })
+                .listeners(Collections.singletonList(listener))
+                .build();
 
         EventFlow flow = EventFlow.builder("listen", "worker-error")
                 .durable()

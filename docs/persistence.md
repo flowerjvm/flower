@@ -46,11 +46,11 @@ EventFlowCheckpointStore eventStore = JdbcEventFlowCheckpointStore.create(
         dataSource,
         JdbcEventFlowCheckpointDialects.postgresql());
 
-EventWorker worker = new EventWorker(
-        "agents",
-        SystemClock.INSTANCE,
-        InMemoryEventBus.create(),
-        eventStore);
+EventWorker worker = EventWorker.builder("agents")
+        .clock(SystemClock.INSTANCE)
+        .eventBus(InMemoryEventBus.create())
+        .checkpointStore(eventStore)
+        .build();
 ```
 
 Event-loop checkpoint schema SQL is packaged separately under:

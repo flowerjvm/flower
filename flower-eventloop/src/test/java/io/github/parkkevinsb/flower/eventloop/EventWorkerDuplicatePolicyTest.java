@@ -1,5 +1,11 @@
 package io.github.parkkevinsb.flower.eventloop;
 
+import io.github.parkkevinsb.flower.eventloop.flow.EventFlow;
+import io.github.parkkevinsb.flower.eventloop.step.AwaitCondition;
+import io.github.parkkevinsb.flower.eventloop.step.EventStep;
+import io.github.parkkevinsb.flower.eventloop.step.EventStepContext;
+import io.github.parkkevinsb.flower.eventloop.step.EventStepResult;
+import io.github.parkkevinsb.flower.eventloop.worker.EventWorker;
 import io.github.parkkevinsb.flower.core.event.InMemoryEventBus;
 import io.github.parkkevinsb.flower.core.flow.FlowState;
 import io.github.parkkevinsb.flower.core.time.ManualClock;
@@ -16,7 +22,10 @@ class EventWorkerDuplicatePolicyTest {
 
     @Test
     void duplicateSubmitRejectsByDefault() {
-        EventWorker worker = new EventWorker("duplicates", new ManualClock(), InMemoryEventBus.create());
+        EventWorker worker = EventWorker.builder("duplicates")
+                .clock(new ManualClock())
+                .eventBus(InMemoryEventBus.create())
+                .build();
         EventFlow first = waitingFlow("same");
         EventFlow second = finishingFlow("same");
 
@@ -30,7 +39,10 @@ class EventWorkerDuplicatePolicyTest {
 
     @Test
     void duplicateSubmitCanIgnoreNewFlow() {
-        EventWorker worker = new EventWorker("duplicates", new ManualClock(), InMemoryEventBus.create());
+        EventWorker worker = EventWorker.builder("duplicates")
+                .clock(new ManualClock())
+                .eventBus(InMemoryEventBus.create())
+                .build();
         EventFlow first = waitingFlow("same");
         EventFlow second = finishingFlow("same");
 
@@ -45,7 +57,10 @@ class EventWorkerDuplicatePolicyTest {
 
     @Test
     void duplicateSubmitCanReplaceExistingFlow() {
-        EventWorker worker = new EventWorker("duplicates", new ManualClock(), InMemoryEventBus.create());
+        EventWorker worker = EventWorker.builder("duplicates")
+                .clock(new ManualClock())
+                .eventBus(InMemoryEventBus.create())
+                .build();
         EventFlow first = waitingFlow("same");
         EventFlow second = finishingFlow("same");
 

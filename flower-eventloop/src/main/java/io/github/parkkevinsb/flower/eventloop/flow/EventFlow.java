@@ -1,4 +1,4 @@
-package io.github.parkkevinsb.flower.eventloop;
+package io.github.parkkevinsb.flower.eventloop.flow;
 
 import io.github.parkkevinsb.flower.core.context.ExecutionContext;
 import io.github.parkkevinsb.flower.core.flow.FlowId;
@@ -6,7 +6,10 @@ import io.github.parkkevinsb.flower.core.flow.FlowPersistence;
 import io.github.parkkevinsb.flower.core.flow.FlowSnapshot;
 import io.github.parkkevinsb.flower.core.flow.FlowState;
 import io.github.parkkevinsb.flower.core.flow.FlowStepSnapshot;
-import io.github.parkkevinsb.flower.eventloop.checkpoint.EventFlowCheckpoint;
+import io.github.parkkevinsb.flower.eventloop.persistence.EventFlowCheckpoint;
+import io.github.parkkevinsb.flower.eventloop.step.EventStep;
+import io.github.parkkevinsb.flower.eventloop.step.EventStepDefinition;
+import io.github.parkkevinsb.flower.eventloop.worker.EventWorker;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -168,37 +171,37 @@ public final class EventFlow {
     }
 
     // ------------------------------------------------------------------
-    // Worker-facing (package-private) state transitions
+    // Worker-facing state transitions
     // ------------------------------------------------------------------
 
-    List<EventStepDefinition> steps() {
+    public List<EventStepDefinition> steps() {
         return steps;
     }
 
-    int currentIndex() {
+    public int currentIndex() {
         return currentIndex;
     }
 
-    EventStepDefinition currentStep() {
+    public EventStepDefinition currentStep() {
         if (currentIndex < 0 || currentIndex >= steps.size()) {
             return null;
         }
         return steps.get(currentIndex);
     }
 
-    Integer indexOf(String stepId) {
+    public Integer indexOf(String stepId) {
         return indexById.get(stepId);
     }
 
-    EventFlowCheckpoint recoveryCheckpoint() {
+    public EventFlowCheckpoint recoveryCheckpoint() {
         return recoveryCheckpoint;
     }
 
-    void clearRecoveryCheckpoint() {
+    public void clearRecoveryCheckpoint() {
         recoveryCheckpoint = null;
     }
 
-    void activateRecoveryCheckpoint(EventFlowCheckpoint checkpoint) {
+    public void activateRecoveryCheckpoint(EventFlowCheckpoint checkpoint) {
         Integer index = indexById.get(checkpoint.currentStepId());
         if (index == null) {
             throw new IllegalStateException(
@@ -208,25 +211,25 @@ public final class EventFlow {
         this.currentIndex = index;
     }
 
-    void markRunningAt(int index) {
+    public void markRunningAt(int index) {
         this.state = FlowState.RUNNING;
         this.currentIndex = index;
     }
 
-    void setCurrentIndex(int index) {
+    public void setCurrentIndex(int index) {
         this.currentIndex = index;
     }
 
-    void finish() {
+    public void finish() {
         this.state = FlowState.FINISHED;
     }
 
-    void fail(Throwable cause) {
+    public void fail(Throwable cause) {
         this.failureCause = cause;
         this.state = FlowState.FAILED;
     }
 
-    void cancel() {
+    public void cancel() {
         this.state = FlowState.CANCELLED;
     }
 }
