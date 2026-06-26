@@ -11,7 +11,10 @@ import io.github.parkkevinsb.flower.core.time.ManualClock;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -141,5 +144,68 @@ class WorkerSubmissionTest {
     @Test
     void cancel_unknown_flow_returns_false() {
         assertThat(worker.cancel(io.github.parkkevinsb.flower.core.flow.FlowId.of("t", "x"))).isFalse();
+    }
+
+    @Test
+    void stop_waits_for_active_tick_before_canceling_flow() throws Exception {
+        CountDownLatch enteredTick = new CountDownLatch(1);
+        CountDownLatch releaseTick = new CountDownLatch(1);
+        CountDownLatch stopReturned = new CountDownLatch(1);
+        AtomicReference<Throwable> tickFailure = new AtomicReference<>();
+        AtomicReference<Throwable> stopFailure = new AtomicReference<>();
+
+        Flow flow = Flow.builder("t", "blocking")
+                .step("only", new Step() {
+                    @Override
+                    protected StepResult onTick(StepContext ctx) {
+                        enteredTick.countDown();
+                        try {
+                            if (!releaseTick.await(2, TimeUnit.SECONDS)) {
+                                return StepResult.fail(new AssertionError("tick was not released"));
+                            }
+                        } catch (InterruptedException e) {
+                            Thread.currentThread().interrupt();
+                            return StepResult.fail(e);
+                        }
+                        return StepResult.stay();
+                    }
+                })
+                .build();
+        worker.submit(flow);
+
+        Thread tickThread = new Thread(() -> {
+            try {
+                worker.tickOnce();
+            } catch (Throwable t) {
+                tickFailure.set(t);
+            }
+        });
+        tickThread.start();
+        assertThat(enteredTick.await(1, TimeUnit.SECONDS)).isTrue();
+
+        Thread stopThread = new Thread(() -> {
+            try {
+                worker.stop();
+            } catch (Throwable t) {
+                stopFailure.set(t);
+            } finally {
+                stopReturned.countDown();
+            }
+        });
+        stopThread.start();
+
+        assertThat(stopReturned.await(100, TimeUnit.MILLISECONDS)).isFalse();
+
+        releaseTick.countDown();
+        assertThat(stopReturned.await(1, TimeUnit.SECONDS)).isTrue();
+        tickThread.join(1_000);
+        stopThread.join(1_000);
+
+        assertThat(tickThread.isAlive()).isFalse();
+        assertThat(stopThread.isAlive()).isFalse();
+        assertThat(tickFailure.get()).isNull();
+        assertThat(stopFailure.get()).isNull();
+        assertThat(flow.state()).isEqualTo(FlowState.CANCELLED);
+        assertThat(worker.state()).isEqualTo(WorkerState.STOPPED);
     }
 }

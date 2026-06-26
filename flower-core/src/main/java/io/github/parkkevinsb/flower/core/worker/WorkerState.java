@@ -7,6 +7,7 @@ public enum WorkerState {
     CREATED,
     RUNNING,
     PAUSED,
+    STOPPING,
     STOPPED;
 
     public boolean isTerminal() {

@@ -1,4 +1,5 @@
 package io.github.parkkevinsb.flower.core.worker;
+
 import io.github.parkkevinsb.flower.core.event.EventBus;
 import io.github.parkkevinsb.flower.core.flow.Flow;
 import io.github.parkkevinsb.flower.core.flow.FlowId;
@@ -24,6 +25,7 @@ import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.locks.ReentrantLock;
 
 /**
  * Single-threaded execution context for a set of Flows.
@@ -51,6 +53,8 @@ public final class Worker {
     private final Queue<Flow> pendingSubmits = new ConcurrentLinkedQueue<>();
     private final Queue<FlowId> pendingCancels = new ConcurrentLinkedQueue<>();
     private final Object stateLock = new Object();
+    // Serializes all direct Flow mutations: tick, active cancel, stop cleanup, and snapshots.
+    private final ReentrantLock executionLock = new ReentrantLock();
 
     private volatile WorkerState state = WorkerState.CREATED;
 
@@ -88,12 +92,17 @@ public final class Worker {
      * later mutations.
      */
     public List<FlowSnapshot> snapshot() {
-        synchronized (stateLock) {
-            List<FlowSnapshot> out = new ArrayList<>(activeFlows.size());
-            for (Flow f : activeFlows.values()) {
-                out.add(f.snapshot());
+        executionLock.lock();
+        try {
+            synchronized (stateLock) {
+                List<FlowSnapshot> out = new ArrayList<>(activeFlows.size());
+                for (Flow f : activeFlows.values()) {
+                    out.add(f.snapshot());
+                }
+                return out;
             }
-            return out;
+        } finally {
+            executionLock.unlock();
         }
     }
 
@@ -103,12 +112,17 @@ public final class Worker {
      * variant so Worker tick events do not repeatedly materialize Step lists.
      */
     public List<FlowSnapshot> snapshotWithStepDefinitions() {
-        synchronized (stateLock) {
-            List<FlowSnapshot> out = new ArrayList<>(activeFlows.size());
-            for (Flow f : activeFlows.values()) {
-                out.add(f.snapshotWithStepDefinitions());
+        executionLock.lock();
+        try {
+            synchronized (stateLock) {
+                List<FlowSnapshot> out = new ArrayList<>(activeFlows.size());
+                for (Flow f : activeFlows.values()) {
+                    out.add(f.snapshotWithStepDefinitions());
+                }
+                return out;
             }
-            return out;
+        } finally {
+            executionLock.unlock();
         }
     }
 
@@ -157,7 +171,7 @@ public final class Worker {
         synchronized (stateLock) {
             ensureAttached();
             if (state == WorkerState.RUNNING) return;
-            if (state == WorkerState.STOPPED) {
+            if (state == WorkerState.STOPPING || state == WorkerState.STOPPED) {
                 throw new IllegalStateException("Worker " + name + " already stopped");
             }
             scheduler = Executors.newSingleThreadScheduledExecutor(threadFactory());
@@ -176,20 +190,25 @@ public final class Worker {
     public void stop() {
         ScheduledExecutorService toShutdown;
         ScheduledFuture<?> toCancel;
-        List<Flow> flowsToCancel;
         synchronized (stateLock) {
             if (state == WorkerState.STOPPED) return;
             toShutdown = scheduler;
             toCancel = tickFuture;
             scheduler = null;
             tickFuture = null;
-            state = WorkerState.STOPPED;
-            flowsToCancel = drainAllFlows();
-            pendingCancels.clear();
+            state = WorkerState.STOPPING;
         }
         if (toCancel != null) toCancel.cancel(false);
-        if (toShutdown != null) toShutdown.shutdownNow();
-        stopFlows(flowsToCancel);
+        if (toShutdown != null) toShutdown.shutdown();
+        if (executionLock.isHeldByCurrentThread()) {
+            return;
+        }
+        executionLock.lock();
+        try {
+            completeStopIfRequested();
+        } finally {
+            executionLock.unlock();
+        }
     }
 
     public void pause() {
@@ -225,7 +244,7 @@ public final class Worker {
         }
         synchronized (stateLock) {
             ensureAttached();
-            if (state == WorkerState.STOPPED) {
+            if (state == WorkerState.STOPPING || state == WorkerState.STOPPED) {
                 throw new IllegalStateException("Worker " + name + " is stopped");
             }
             FlowId id = flow.flowId();
@@ -263,6 +282,9 @@ public final class Worker {
             throw new IllegalArgumentException("flowId must not be null");
         }
         synchronized (stateLock) {
+            if (state == WorkerState.STOPPING || state == WorkerState.STOPPED) {
+                return false;
+            }
             boolean active = activeFlows.containsKey(flowId);
             boolean pending = cancelPendingSubmits(flowId);
             if (!active && !pending) {
@@ -284,13 +306,29 @@ public final class Worker {
      * Does nothing if the Worker is paused or stopped.
      */
     public void tickOnce() {
-        if (state == WorkerState.PAUSED || state == WorkerState.STOPPED) {
-            return;
+        executionLock.lock();
+        try {
+            if (state == WorkerState.STOPPING) {
+                completeStopIfRequested();
+                return;
+            }
+            if (state == WorkerState.PAUSED || state == WorkerState.STOPPED) {
+                return;
+            }
+            ensureAttached();
+            applyPendingChanges();
+            if (state == WorkerState.STOPPING) {
+                completeStopIfRequested();
+                return;
+            }
+            runFlows();
+            removeTerminated();
+            if (state == WorkerState.STOPPING) {
+                completeStopIfRequested();
+            }
+        } finally {
+            executionLock.unlock();
         }
-        ensureAttached();
-        applyPendingChanges();
-        runFlows();
-        removeTerminated();
     }
 
     private void tickSafely() {
@@ -361,6 +399,7 @@ public final class Worker {
             snapshot = new ArrayList<>(activeFlows.values());
         }
         for (Flow flow : snapshot) {
+            if (state == WorkerState.STOPPING) break;
             if (flow.state().isTerminal()) continue;
             FlowState before = flow.state();
             try {
@@ -420,6 +459,25 @@ public final class Worker {
             drained.add(pending);
         }
         return drained;
+    }
+
+    private void completeStopIfRequested() {
+        List<Flow> flowsToStop;
+        synchronized (stateLock) {
+            if (state == WorkerState.STOPPED) {
+                return;
+            }
+            if (state != WorkerState.STOPPING) {
+                return;
+            }
+            flowsToStop = drainAllFlows();
+            pendingCancels.clear();
+        }
+        stopFlows(flowsToStop);
+        synchronized (stateLock) {
+            pendingCancels.clear();
+            state = WorkerState.STOPPED;
+        }
     }
 
     private void cancelAndNotify(List<Flow> flows) {
