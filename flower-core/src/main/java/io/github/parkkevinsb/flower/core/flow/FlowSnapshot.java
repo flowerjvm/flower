@@ -109,7 +109,8 @@ public final class FlowSnapshot {
     }
 
     /**
-     * @return failure cause if {@link FlowState#FAILED}, otherwise {@code null}.
+     * @return failure cause if {@link FlowState#FAILED} or
+     *         {@link FlowState#CHECKPOINT_FAILED}, otherwise {@code null}.
      */
     public Throwable failureCause() {
         return failureCause;

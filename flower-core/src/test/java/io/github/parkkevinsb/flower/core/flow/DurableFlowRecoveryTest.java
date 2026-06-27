@@ -2,6 +2,7 @@ package io.github.parkkevinsb.flower.core.flow;
 
 import io.github.parkkevinsb.flower.core.engine.Engine;
 import io.github.parkkevinsb.flower.core.event.InMemoryEventBus;
+import io.github.parkkevinsb.flower.core.listener.FlowerListener;
 import io.github.parkkevinsb.flower.core.persistence.FlowCheckpoint;
 import io.github.parkkevinsb.flower.core.persistence.FlowCheckpointStore;
 import io.github.parkkevinsb.flower.core.step.DurableStep;
@@ -19,6 +20,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -89,6 +91,48 @@ class DurableFlowRecoveryTest {
         assertThat(checkpoint.currentStepNo()).isEqualTo(7);
         assertThat(checkpoint.currentStepEntered()).isTrue();
         assertThat(checkpoint.workerName()).isEqualTo("test");
+    }
+
+    @Test
+    void durable_flow_skips_checkpoint_when_position_is_unchanged() {
+        Flow flow = Flow.builder("t", "1")
+                .durable()
+                .durableStep("only", stayStep(), RecoveryPolicy.REENTER_IDEMPOTENT)
+                .build();
+
+        worker.submit(flow);
+        worker.tickOnce();
+        assertThat(store.saveCalls).isEqualTo(2);
+
+        clock.advance(1_000L);
+        worker.tickOnce();
+
+        assertThat(store.saveCalls).isEqualTo(2);
+    }
+
+    @Test
+    void durable_flow_saves_checkpoint_when_stepNo_changes_on_stay() {
+        final AtomicInteger ticks = new AtomicInteger();
+        Flow flow = Flow.builder("t", "1")
+                .durable()
+                .durableStep("only", new Step() {
+                    @Override
+                    protected StepResult onTick(StepContext ctx) {
+                        ctx.setStepNo(ticks.incrementAndGet());
+                        return StepResult.stay();
+                    }
+                }, RecoveryPolicy.REENTER_IDEMPOTENT)
+                .build();
+
+        worker.submit(flow);
+        worker.tickOnce();
+        assertThat(store.saveCalls).isEqualTo(2);
+
+        worker.tickOnce();
+
+        FlowCheckpoint checkpoint = store.get(flow.flowId());
+        assertThat(store.saveCalls).isEqualTo(3);
+        assertThat(checkpoint.currentStepNo()).isEqualTo(2);
     }
 
     @Test
@@ -225,6 +269,87 @@ class DurableFlowRecoveryTest {
         assertThat(store.get(durable.flowId())).isNotNull();
     }
 
+    @Test
+    void checkpoint_save_failure_halts_durable_flow_before_next_tick() {
+        AtomicInteger secondTicks = new AtomicInteger();
+        store.failSaveOnCall(2, new RuntimeException("save down"));
+        Flow flow = Flow.builder("t", "1")
+                .durable()
+                .durableStep("first", doneStep(), RecoveryPolicy.REENTER_IDEMPOTENT)
+                .durableStep("second", new Step() {
+                    @Override
+                    protected StepResult onTick(StepContext ctx) {
+                        secondTicks.incrementAndGet();
+                        return StepResult.done();
+                    }
+                }, RecoveryPolicy.REENTER_IDEMPOTENT)
+                .build();
+
+        worker.submit(flow);
+        worker.tickOnce();
+        worker.tickOnce();
+
+        assertThat(flow.state()).isEqualTo(FlowState.CHECKPOINT_FAILED);
+        assertThat(flow.failureCause()).hasMessage("save down");
+        assertThat(secondTicks.get()).isZero();
+        assertThat(worker.snapshot()).isEmpty();
+    }
+
+    @Test
+    void terminal_checkpoint_delete_failure_keeps_tombstone_out_of_recovery() {
+        store.failDeleteOnCall(1, new RuntimeException("delete down"));
+        Flow flow = Flow.builder("t", "1")
+                .durable()
+                .durableStep("only", doneStep(), RecoveryPolicy.REENTER_IDEMPOTENT)
+                .build();
+
+        worker.submit(flow);
+        worker.tickOnce();
+
+        FlowCheckpoint tombstone = store.get(flow.flowId());
+        assertThat(flow.state()).isEqualTo(FlowState.FINISHED);
+        assertThat(tombstone).isNotNull();
+        assertThat(tombstone.state()).isEqualTo(FlowState.FINISHED);
+        assertThat(store.findActive()).isEmpty();
+        assertThat(worker.snapshot()).isEmpty();
+    }
+
+    @Test
+    void terminal_checkpoint_save_failure_halts_before_finished_event() {
+        InMemoryCheckpointStore failingStore = new InMemoryCheckpointStore();
+        failingStore.failSaveOnCall(2, new RuntimeException("terminal save down"));
+        Worker localWorker = Worker.builder("local").build();
+        List<String> events = new ArrayList<>();
+        Engine.builder()
+                .clock(clock)
+                .eventBus(InMemoryEventBus.create())
+                .worker(localWorker)
+                .checkpointStore(failingStore)
+                .listener(new FlowerListener() {
+                    @Override
+                    public void onFlowFinished(FlowSnapshot flow) {
+                        events.add("finished");
+                    }
+
+                    @Override
+                    public void onFlowFailed(FlowSnapshot flow, Throwable cause) {
+                        events.add("failed:" + flow.state() + ":" + cause.getMessage());
+                    }
+                })
+                .build()
+                .attach();
+        Flow flow = Flow.builder("t", "terminal-save")
+                .durable()
+                .durableStep("only", doneStep(), RecoveryPolicy.REENTER_IDEMPOTENT)
+                .build();
+
+        localWorker.submit(flow);
+        localWorker.tickOnce();
+
+        assertThat(flow.state()).isEqualTo(FlowState.CHECKPOINT_FAILED);
+        assertThat(events).containsExactly("failed:CHECKPOINT_FAILED:terminal save down");
+    }
+
     private static Step stayStep() {
         return new Step() {
             @Override
@@ -271,14 +396,28 @@ class DurableFlowRecoveryTest {
     private static final class InMemoryCheckpointStore implements FlowCheckpointStore {
         private final Map<FlowId, FlowCheckpoint> checkpoints = new LinkedHashMap<>();
         private final List<FlowId> deletes = new ArrayList<>();
+        private int saveCalls;
+        private int deleteCalls;
+        private int failSaveOnCall = -1;
+        private int failDeleteOnCall = -1;
+        private RuntimeException saveFailure;
+        private RuntimeException deleteFailure;
 
         @Override
         public void save(FlowCheckpoint checkpoint) {
+            saveCalls++;
+            if (saveCalls == failSaveOnCall) {
+                throw saveFailure;
+            }
             checkpoints.put(checkpoint.flowId(), checkpoint);
         }
 
         @Override
         public void delete(FlowId flowId) {
+            deleteCalls++;
+            if (deleteCalls == failDeleteOnCall) {
+                throw deleteFailure;
+            }
             checkpoints.remove(flowId);
             deletes.add(flowId);
         }
@@ -290,12 +429,15 @@ class DurableFlowRecoveryTest {
 
         @Override
         public List<FlowCheckpoint> findActive() {
-            return new ArrayList<>(checkpoints.values());
+            return checkpoints.values().stream()
+                    .filter(c -> c.state() == FlowState.READY || c.state() == FlowState.RUNNING)
+                    .collect(Collectors.toList());
         }
 
         @Override
         public List<FlowCheckpoint> findActiveByWorker(String workerName) {
             return checkpoints.values().stream()
+                    .filter(c -> c.state() == FlowState.READY || c.state() == FlowState.RUNNING)
                     .filter(c -> workerName == null
                             ? c.workerName() == null
                             : workerName.equals(c.workerName()))
@@ -304,6 +446,16 @@ class DurableFlowRecoveryTest {
 
         private FlowCheckpoint get(FlowId flowId) {
             return checkpoints.get(flowId);
+        }
+
+        private void failSaveOnCall(int callNumber, RuntimeException failure) {
+            failSaveOnCall = callNumber;
+            saveFailure = failure;
+        }
+
+        private void failDeleteOnCall(int callNumber, RuntimeException failure) {
+            failDeleteOnCall = callNumber;
+            deleteFailure = failure;
         }
     }
 }

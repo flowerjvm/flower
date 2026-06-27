@@ -57,11 +57,13 @@ public final class Worker {
     private final ReentrantLock executionLock = new ReentrantLock();
 
     private volatile WorkerState state = WorkerState.CREATED;
+    private volatile DriveMode driveMode = DriveMode.NONE;
 
     private Clock clock;
     private EventBus eventBus;
     private List<FlowerListener> listeners = Collections.emptyList();
-    private FlowCheckpointStore checkpointStore = FlowCheckpointStore.NOOP;
+    private CheckpointCoordinator checkpointCoordinator;
+    private FlowOwnershipRegistry ownershipRegistry;
 
     private ScheduledExecutorService scheduler;
     private ScheduledFuture<?> tickFuture;
@@ -85,6 +87,10 @@ public final class Worker {
 
     public WorkerState state() {
         return state;
+    }
+
+    public DriveMode driveMode() {
+        return driveMode;
     }
 
     /**
@@ -146,8 +152,20 @@ public final class Worker {
             EventBus eventBus,
             List<FlowerListener> listeners,
             FlowCheckpointStore checkpointStore) {
+        attach(clock, eventBus, listeners, checkpointStore, new FlowOwnershipRegistry());
+    }
+
+    public void attach(
+            Clock clock,
+            EventBus eventBus,
+            List<FlowerListener> listeners,
+            FlowCheckpointStore checkpointStore,
+            FlowOwnershipRegistry ownershipRegistry) {
         if (clock == null) {
             throw new IllegalArgumentException("clock must not be null");
+        }
+        if (ownershipRegistry == null) {
+            throw new IllegalArgumentException("ownershipRegistry must not be null");
         }
         synchronized (stateLock) {
             if (state != WorkerState.CREATED) {
@@ -159,26 +177,46 @@ public final class Worker {
             this.listeners = listeners == null
                     ? Collections.emptyList()
                     : Collections.unmodifiableList(new ArrayList<>(listeners));
-            this.checkpointStore = checkpointStore == null ? FlowCheckpointStore.NOOP : checkpointStore;
+            this.checkpointCoordinator = new CheckpointCoordinator(
+                    name,
+                    clock,
+                    checkpointStore == null ? FlowCheckpointStore.NOOP : checkpointStore,
+                    this::notifyWorkerError);
+            this.ownershipRegistry = ownershipRegistry;
+            this.state = WorkerState.ATTACHED;
+            this.driveMode = DriveMode.NONE;
         }
     }
 
     /**
      * Start the internal scheduler. Engine calls this; user code does not
-     * need to call it directly when using Engine.
+     * need to call it directly when using Engine. A paused Worker must be
+     * resumed with {@link #resume()}, not started again.
      */
     public void start() {
         synchronized (stateLock) {
             ensureAttached();
             if (state == WorkerState.RUNNING) return;
+            if (state == WorkerState.PAUSED) {
+                throw new IllegalStateException(
+                        "Worker " + name + " is paused; call resume() instead of start()");
+            }
             if (state == WorkerState.STOPPING || state == WorkerState.STOPPED) {
                 throw new IllegalStateException("Worker " + name + " already stopped");
             }
+            if (state != WorkerState.ATTACHED) {
+                throw new IllegalStateException("Worker " + name + " cannot start from state=" + state);
+            }
+            if (driveMode == DriveMode.MANUAL) {
+                throw new IllegalStateException(
+                        "Worker " + name + " is already in manual drive mode");
+            }
+            driveMode = DriveMode.SCHEDULED;
+            state = WorkerState.RUNNING;
             scheduler = Executors.newSingleThreadScheduledExecutor(threadFactory());
             // flower-check:ignore FLOWER-CHECK-016 reason: Flower Worker owns the framework tick loop.
             tickFuture = scheduler.scheduleWithFixedDelay(
                     this::tickSafely, 0L, intervalMillis, TimeUnit.MILLISECONDS);
-            state = WorkerState.RUNNING;
         }
     }
 
@@ -247,6 +285,11 @@ public final class Worker {
             if (state == WorkerState.STOPPING || state == WorkerState.STOPPED) {
                 throw new IllegalStateException("Worker " + name + " is stopped");
             }
+            if (flow.persistence() == FlowPersistence.DURABLE
+                    && !checkpointCoordinator.supportsDurableFlows()) {
+                throw new IllegalStateException(
+                        "Durable Flow requires a durable FlowCheckpointStore: " + flow.flowId());
+            }
             FlowId id = flow.flowId();
             boolean duplicateActive = activeFlows.containsKey(id);
             boolean duplicatePending = containsPending(id);
@@ -270,10 +313,26 @@ public final class Worker {
                         throw new IllegalStateException("Unknown DuplicatePolicy: " + policy);
                 }
             }
-            // Attach now under lock so the Flow has clock+bus before reaching tick.
-            // Worker is responsible for a Flow's lifecycle from this point on.
-            flow.attach(clock, eventBus, observerFor(flow));
-            pendingSubmits.add(flow);
+            FlowOwnershipRegistry.Claim claim = ownershipRegistry.claim(id, name);
+            if (!claim.accepted()) {
+                if (policy == DuplicatePolicy.IGNORE) {
+                    return;
+                }
+                throw new IllegalStateException(
+                        "Flow " + id + " is already owned by worker " + claim.ownerName());
+            }
+            boolean submitted = false;
+            try {
+                // Attach now under lock so the Flow has clock+bus before reaching tick.
+                // Worker is responsible for a Flow's lifecycle from this point on.
+                flow.attach(clock, eventBus, observerFor(flow));
+                pendingSubmits.add(flow);
+                submitted = true;
+            } finally {
+                if (!submitted && claim.newlyClaimed()) {
+                    ownershipRegistry.release(id, name);
+                }
+            }
         }
     }
 
@@ -292,6 +351,8 @@ public final class Worker {
             }
             if (active) {
                 pendingCancels.add(flowId);
+            } else if (pending) {
+                ownershipRegistry.release(flowId, name);
             }
             return true;
         }
@@ -303,19 +364,23 @@ public final class Worker {
 
     /**
      * Run one Worker tick. Safe to call from tests in lieu of {@link #start()}.
-     * Does nothing if the Worker is paused or stopped.
+     * The first public tick selects manual drive mode. Throws if the Worker is
+     * already owned by the background scheduler.
      */
     public void tickOnce() {
+        tickOnce(false);
+    }
+
+    private void tickOnce(boolean scheduledTick) {
         executionLock.lock();
         try {
+            if (!prepareTick(scheduledTick)) {
+                return;
+            }
             if (state == WorkerState.STOPPING) {
                 completeStopIfRequested();
                 return;
             }
-            if (state == WorkerState.PAUSED || state == WorkerState.STOPPED) {
-                return;
-            }
-            ensureAttached();
             applyPendingChanges();
             if (state == WorkerState.STOPPING) {
                 completeStopIfRequested();
@@ -331,9 +396,38 @@ public final class Worker {
         }
     }
 
+    private boolean prepareTick(boolean scheduledTick) {
+        synchronized (stateLock) {
+            if (state == WorkerState.STOPPING) {
+                return true;
+            }
+            if (state == WorkerState.STOPPED) {
+                return false;
+            }
+            ensureAttached();
+            if (!scheduledTick && driveMode == DriveMode.SCHEDULED) {
+                throw new IllegalStateException(
+                        "Worker " + name + " is running in scheduled mode; do not call tickOnce()");
+            }
+            if (state == WorkerState.PAUSED) {
+                return false;
+            }
+            if (scheduledTick) {
+                return state == WorkerState.RUNNING && driveMode == DriveMode.SCHEDULED;
+            }
+            if (driveMode == DriveMode.NONE) {
+                driveMode = DriveMode.MANUAL;
+            }
+            if (driveMode != DriveMode.MANUAL) {
+                throw new IllegalStateException("Worker " + name + " cannot tick in drive mode " + driveMode);
+            }
+            return true;
+        }
+    }
+
     private void tickSafely() {
         try {
-            tickOnce();
+            tickOnce(true);
         } catch (Throwable t) {
             // Don't let exceptions kill the scheduled task. The Flow runtime
             // already converts step exceptions to FAIL results, so reaching
@@ -356,6 +450,33 @@ public final class Worker {
         return false;
     }
 
+    private boolean hasNonTerminalLocalFlow(FlowId id) {
+        Flow active = activeFlows.get(id);
+        if (active != null && !active.state().isTerminal()) {
+            return true;
+        }
+        for (Flow pending : pendingSubmits) {
+            if (id.equals(pending.flowId()) && !pending.state().isTerminal()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private void releaseOwnershipIfIdle(Flow flow) {
+        FlowId id = flow.flowId();
+        synchronized (stateLock) {
+            if (hasNonTerminalLocalFlow(id)) {
+                return;
+            }
+            ownershipRegistry.release(id, name);
+        }
+    }
+
+    private void releaseOwnership(Flow flow) {
+        ownershipRegistry.release(flow.flowId(), name);
+    }
+
     private void ensureAttached() {
         if (clock == null) {
             throw new IllegalStateException(
@@ -371,8 +492,7 @@ public final class Worker {
                 Flow active = activeFlows.remove(cid);
                 if (active != null) {
                     active.cancel();
-                    fireFlowTerminated(active);
-                    deleteCheckpoint(active);
+                    completeTerminalFlow(active);
                 }
             }
             Flow ps;
@@ -385,7 +505,9 @@ public final class Worker {
                 }
                 activeFlows.put(id, ps);
                 fireFlowSubmitted(ps);
-                saveCheckpoint(ps);
+                if (!checkpointCoordinator.saveActive(ps)) {
+                    fireFlowTerminated(ps);
+                }
             }
         }
     }
@@ -409,11 +531,13 @@ public final class Worker {
                 notifyWorkerError(t);
                 System.err.println("[flower] worker " + name + " flow " + flow.flowId() + " tick blew up: " + t);
             }
-            FlowState after = flow.state();
-            if (!before.isTerminal() && after.isTerminal()) {
+            if (flow.state().isTerminal()) {
+                if (!before.isTerminal()) {
+                    completeTerminalFlow(flow);
+                }
+            } else if (!checkpointCoordinator.saveActive(flow)) {
                 fireFlowTerminated(flow);
             }
-            saveOrDeleteCheckpoint(flow);
         }
     }
 
@@ -421,8 +545,10 @@ public final class Worker {
         synchronized (stateLock) {
             Iterator<Map.Entry<FlowId, Flow>> it = activeFlows.entrySet().iterator();
             while (it.hasNext()) {
-                if (it.next().getValue().state().isTerminal()) {
+                Flow flow = it.next().getValue();
+                if (flow.state().isTerminal()) {
                     it.remove();
+                    releaseOwnershipIfIdle(flow);
                 }
             }
         }
@@ -476,6 +602,7 @@ public final class Worker {
         stopFlows(flowsToStop);
         synchronized (stateLock) {
             pendingCancels.clear();
+            driveMode = DriveMode.NONE;
             state = WorkerState.STOPPED;
         }
     }
@@ -486,59 +613,42 @@ public final class Worker {
                 continue;
             }
             flow.cancel();
-            fireFlowTerminated(flow);
-            deleteCheckpoint(flow);
+            completeTerminalFlow(flow);
         }
     }
 
     private void stopFlows(List<Flow> flows) {
         for (Flow flow : flows) {
             if (flow.state().isTerminal()) {
+                checkpointCoordinator.forget(flow.flowId());
+                releaseOwnership(flow);
                 continue;
             }
             if (flow.persistence() == FlowPersistence.DURABLE) {
-                saveCheckpoint(flow);
-                flow.suspend();
+                if (checkpointCoordinator.saveActive(flow)) {
+                    flow.suspend();
+                    checkpointCoordinator.forget(flow.flowId());
+                    releaseOwnership(flow);
+                } else {
+                    fireFlowTerminated(flow);
+                    checkpointCoordinator.forget(flow.flowId());
+                    releaseOwnership(flow);
+                }
             } else {
                 flow.cancel();
-                fireFlowTerminated(flow);
-                deleteCheckpoint(flow);
+                completeTerminalFlow(flow);
             }
         }
     }
 
-    private void saveOrDeleteCheckpoint(Flow flow) {
-        if (flow.state().isTerminal()) {
-            deleteCheckpoint(flow);
+    private void completeTerminalFlow(Flow flow) {
+        if (checkpointCoordinator.saveTerminalTombstone(flow)) {
+            fireFlowTerminated(flow);
+            checkpointCoordinator.cleanupTerminalTombstoneBestEffort(flow);
         } else {
-            saveCheckpoint(flow);
+            fireFlowTerminated(flow);
         }
-    }
-
-    private void saveCheckpoint(Flow flow) {
-        if (flow.persistence() != FlowPersistence.DURABLE) {
-            return;
-        }
-        try {
-            checkpointStore.save(flow.checkpoint(name, clock.currentTimeMillis()));
-        } catch (Throwable t) {
-            notifyWorkerError(t);
-            System.err.println("[flower] worker " + name + " checkpoint save failed for "
-                    + flow.flowId() + ": " + t);
-        }
-    }
-
-    private void deleteCheckpoint(Flow flow) {
-        if (flow.persistence() != FlowPersistence.DURABLE) {
-            return;
-        }
-        try {
-            checkpointStore.delete(flow.flowId());
-        } catch (Throwable t) {
-            notifyWorkerError(t);
-            System.err.println("[flower] worker " + name + " checkpoint delete failed for "
-                    + flow.flowId() + ": " + t);
-        }
+        releaseOwnershipIfIdle(flow);
     }
 
     // ------------------------------------------------------------------
@@ -597,6 +707,7 @@ public final class Worker {
                 }
                 break;
             case FAILED:
+            case CHECKPOINT_FAILED:
                 Throwable cause = flow.failureCause();
                 for (FlowerListener l : listeners) {
                     try {

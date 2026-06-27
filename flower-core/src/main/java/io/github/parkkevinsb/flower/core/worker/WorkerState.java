@@ -5,6 +5,7 @@ package io.github.parkkevinsb.flower.core.worker;
  */
 public enum WorkerState {
     CREATED,
+    ATTACHED,
     RUNNING,
     PAUSED,
     STOPPING,

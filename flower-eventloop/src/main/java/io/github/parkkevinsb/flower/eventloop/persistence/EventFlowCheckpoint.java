@@ -9,6 +9,7 @@ import io.github.parkkevinsb.flower.eventloop.flow.EventFlow;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Objects;
 
 /**
  * Durable event-loop position for one {@link EventFlow}.
@@ -16,6 +17,10 @@ import java.util.List;
  * <p>Unlike core tick-flow checkpoints, this records the await descriptors that
  * would need to be re-registered on recovery. It still does not serialize Java
  * step instances, subscriptions, event objects, or predicate lambdas.
+ *
+ * <p>Terminal states may also be stored as tombstones. A terminal tombstone is
+ * not recoverable, but it prevents a completed flow from reappearing if later
+ * cleanup fails.
  */
 public final class EventFlowCheckpoint {
 
@@ -124,6 +129,31 @@ public final class EventFlowCheckpoint {
 
     public List<EventAwaitCheckpoint> awaits() {
         return awaits;
+    }
+
+    /**
+     * Compare checkpoint fields that describe the durable stored position.
+     *
+     * <p>{@code updatedAtMillis} is intentionally excluded. It is a write time,
+     * not part of the recovery position. When a future schema adds a persisted
+     * field, decide here whether that field affects recovery/ownership/await
+     * re-registration. If it does, include it in this comparison so dirty
+     * checkpoint skipping stays correct.
+     */
+    public boolean sameStoredPositionAs(EventFlowCheckpoint other) {
+        if (other == null) {
+            return false;
+        }
+        return Objects.equals(flowId, other.flowId)
+                && state == other.state
+                && Objects.equals(currentStepId, other.currentStepId)
+                && currentStepEntered == other.currentStepEntered
+                && persistence == other.persistence
+                && Objects.equals(workerName, other.workerName)
+                && Objects.equals(definitionVersion, other.definitionVersion)
+                && Objects.equals(executionContext, other.executionContext)
+                && awaitGeneration == other.awaitGeneration
+                && Objects.equals(awaits, other.awaits);
     }
 
     @Override

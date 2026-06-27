@@ -40,7 +40,8 @@ public interface FlowerListener {
     }
 
     /**
-     * Fires when a Flow terminates with a Throwable.
+     * Fires when a Flow terminates with a Throwable, including durable
+     * checkpoint persistence failures.
      */
     default void onFlowFailed(FlowSnapshot flow, Throwable cause) {
     }

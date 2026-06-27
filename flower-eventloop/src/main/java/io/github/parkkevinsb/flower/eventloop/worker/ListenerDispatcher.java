@@ -66,6 +66,7 @@ final class ListenerDispatcher {
                 }
                 break;
             case FAILED:
+            case CHECKPOINT_FAILED:
                 Throwable cause = flow.failureCause();
                 for (FlowerListener listener : listeners) {
                     try {

@@ -2,6 +2,8 @@ package io.github.parkkevinsb.flower.eventloop.persistence;
 
 import io.github.parkkevinsb.flower.eventloop.flow.EventFlow;
 
+import java.util.Objects;
+
 /**
  * Durable description of one await condition registered by an {@link EventFlow}.
  *
@@ -83,6 +85,24 @@ public final class EventAwaitCheckpoint {
             return "EventAwaitCheckpoint{signal=" + signalName + ", key=" + signalKey + "}";
         }
         return "EventAwaitCheckpoint{deadlineAtMillis=" + deadlineAtMillis + "}";
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (!(o instanceof EventAwaitCheckpoint)) {
+            return false;
+        }
+        EventAwaitCheckpoint that = (EventAwaitCheckpoint) o;
+        return deadlineAtMillis == that.deadlineAtMillis
+                && type == that.type
+                && Objects.equals(eventTypeName, that.eventTypeName)
+                && Objects.equals(signalName, that.signalName)
+                && Objects.equals(signalKey, that.signalKey);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(type, eventTypeName, signalName, signalKey, deadlineAtMillis);
     }
 
     private static void validateSignalPart(String label, String value) {

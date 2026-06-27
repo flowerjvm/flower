@@ -232,4 +232,26 @@ public final class EventFlow {
     public void cancel() {
         this.state = FlowState.CANCELLED;
     }
+
+    /**
+     * Halt this durable event flow because its checkpoint could not be
+     * persisted. The worker removes it from active execution after this state.
+     */
+    public void checkpointFailed(Throwable cause) {
+        if (state == FlowState.CHECKPOINT_FAILED) {
+            return;
+        }
+        if (cause == null) {
+            cause = new IllegalStateException("checkpoint failed");
+        }
+        if (failureCause != null && failureCause != cause) {
+            try {
+                cause.addSuppressed(failureCause);
+            } catch (Throwable ignored) {
+                // best-effort diagnostic only
+            }
+        }
+        failureCause = cause;
+        state = FlowState.CHECKPOINT_FAILED;
+    }
 }

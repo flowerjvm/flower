@@ -30,7 +30,7 @@ import java.util.Map;
  * CREATED  -- after build()
  * READY    -- after attach(clock, bus) inside Worker.submit()
  * RUNNING  -- after the first tick that enters a Step
- * FINISHED / FAILED / CANCELLED -- terminal
+ * FINISHED / FAILED / CANCELLED / CHECKPOINT_FAILED -- terminal
  * </pre>
  *
  * <p>Not thread-safe: a Flow is owned by one Worker and ticked from one
@@ -367,6 +367,29 @@ public final class Flow {
         }
     }
 
+    /**
+     * Halt this durable Flow because its checkpoint could not be persisted or
+     * removed. The Worker removes it from active execution after this state.
+     */
+    public void checkpointFailed(Throwable cause) {
+        if (state == FlowState.CHECKPOINT_FAILED) {
+            return;
+        }
+        if (cause == null) {
+            cause = new IllegalStateException("checkpoint failed");
+        }
+        if (failureCause != null && failureCause != cause) {
+            try {
+                cause.addSuppressed(failureCause);
+            } catch (Throwable ignored) {
+                // best-effort diagnostic only
+            }
+        }
+        releaseRuntime();
+        failureCause = cause;
+        state = FlowState.CHECKPOINT_FAILED;
+    }
+
     // ------------------------------------------------------------------
     // internals
     // ------------------------------------------------------------------
@@ -595,6 +618,25 @@ public final class Flow {
             if (notifyExit) {
                 notifyExited(def.stepId());
             }
+        }
+    }
+
+    private void releaseRuntime() {
+        if (currentRuntime == null) {
+            currentEntered = false;
+            recoveringCurrentStep = false;
+            retainedStepNo = 0;
+            return;
+        }
+        try {
+            currentRuntime.dispose();
+        } catch (Throwable ignored) {
+            // checkpoint failure already owns the terminal state
+        } finally {
+            currentRuntime = null;
+            currentEntered = false;
+            recoveringCurrentStep = false;
+            retainedStepNo = 0;
         }
     }
 

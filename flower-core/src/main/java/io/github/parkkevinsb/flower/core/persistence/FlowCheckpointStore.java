@@ -17,12 +17,31 @@ public interface FlowCheckpointStore {
     FlowCheckpointStore NOOP = new NoopFlowCheckpointStore();
 
     /**
-     * Persist or replace the latest checkpoint for a non-terminal durable Flow.
+     * Capabilities advertised by this store.
+     *
+     * <p>The default assumes a custom implementation really persists
+     * checkpoints through {@link #save(FlowCheckpoint)} and
+     * {@link #delete(FlowId)}, but does not assume recovery queries are
+     * implemented because {@link #findActive()} has an empty default.
+     */
+    default CheckpointStoreCapabilities capabilities() {
+        return CheckpointStoreCapabilities.durableOnly();
+    }
+
+    /**
+     * Persist or replace the latest checkpoint for a durable Flow.
+     *
+     * <p>Non-terminal checkpoints ({@code READY}/{@code RUNNING}) are recovery
+     * positions. Terminal checkpoints ({@code FINISHED}/{@code FAILED}/
+     * {@code CANCELLED}) are tombstones: they prove a Flow reached a terminal
+     * state even if later cleanup deletion fails.
      */
     void save(FlowCheckpoint checkpoint);
 
     /**
-     * Remove the active checkpoint for a terminal or explicitly cancelled Flow.
+     * Remove a checkpoint row after it is no longer needed. For terminal Flows,
+     * correctness must come from a terminal tombstone saved before this delete;
+     * deletion is only cleanup/compaction.
      */
     void delete(FlowId flowId);
 
@@ -34,14 +53,18 @@ public interface FlowCheckpointStore {
     }
 
     /**
-     * Find all active checkpoints known to this store.
+     * Find recoverable active checkpoints known to this store. Implementations
+     * must return only {@code READY}/{@code RUNNING} checkpoints, not terminal
+     * tombstones.
      */
     default List<FlowCheckpoint> findActive() {
         return Collections.emptyList();
     }
 
     /**
-     * Find active checkpoints last owned by the given Worker.
+     * Find recoverable active checkpoints last owned by the given Worker.
+     * Implementations must return only {@code READY}/{@code RUNNING}
+     * checkpoints, not terminal tombstones.
      */
     default List<FlowCheckpoint> findActiveByWorker(String workerName) {
         return Collections.emptyList();
@@ -49,6 +72,11 @@ public interface FlowCheckpointStore {
 }
 
 final class NoopFlowCheckpointStore implements FlowCheckpointStore {
+    @Override
+    public CheckpointStoreCapabilities capabilities() {
+        return CheckpointStoreCapabilities.none();
+    }
+
     @Override
     public void save(FlowCheckpoint checkpoint) {
     }

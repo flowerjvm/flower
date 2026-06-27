@@ -5,12 +5,18 @@ import io.github.parkkevinsb.flower.core.flow.FlowId;
 import io.github.parkkevinsb.flower.core.flow.FlowPersistence;
 import io.github.parkkevinsb.flower.core.flow.FlowState;
 
+import java.util.Objects;
+
 /**
- * Durable position of one Flow.
+ * Durable position or terminal tombstone of one Flow.
  *
  * <p>A checkpoint is intentionally small: it remembers where Flower should
  * resume ticking, not the complete Java object graph, event history, or Step
  * instance fields.
+ *
+ * <p>Terminal checkpoints are tombstones. Recovery APIs must ignore them, but
+ * they let Flower prove a Flow reached {@code FINISHED}/{@code FAILED}/
+ * {@code CANCELLED} even if later cleanup deletion fails.
  */
 public final class FlowCheckpoint {
 
@@ -131,6 +137,30 @@ public final class FlowCheckpoint {
 
     public ExecutionContext executionContext() {
         return executionContext;
+    }
+
+    /**
+     * Compare checkpoint fields that describe the durable stored position.
+     *
+     * <p>{@code updatedAtMillis} is intentionally excluded. It is a write time,
+     * not part of the recovery position. When a future schema adds a persisted
+     * field, decide here whether that field affects recovery/ownership. If it
+     * does, include it in this comparison so dirty-checkpoint skipping stays
+     * correct.
+     */
+    public boolean sameStoredPositionAs(FlowCheckpoint other) {
+        if (other == null) {
+            return false;
+        }
+        return Objects.equals(flowId, other.flowId)
+                && state == other.state
+                && Objects.equals(currentStepId, other.currentStepId)
+                && currentStepNo == other.currentStepNo
+                && currentStepEntered == other.currentStepEntered
+                && persistence == other.persistence
+                && Objects.equals(workerName, other.workerName)
+                && Objects.equals(definitionVersion, other.definitionVersion)
+                && Objects.equals(executionContext, other.executionContext);
     }
 
     @Override

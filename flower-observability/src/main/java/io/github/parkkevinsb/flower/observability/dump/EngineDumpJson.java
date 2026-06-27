@@ -18,6 +18,7 @@ import io.github.parkkevinsb.flower.core.flow.FlowStepSnapshot;
  *     {
  *       "name": "main",
  *       "state": "RUNNING",
+ *       "driveMode": "SCHEDULED",
  *       "intervalMillis": 100,
  *       "flows": [
  *         {
@@ -97,6 +98,8 @@ public final class EngineDumpJson {
         w.field("name", worker.name());
         w.comma();
         w.field("state", worker.state() == null ? null : worker.state().name());
+        w.comma();
+        w.field("driveMode", worker.driveMode() == null ? null : worker.driveMode().name());
         w.comma();
         w.numberField("intervalMillis", worker.intervalMillis());
         w.comma();

@@ -4,6 +4,7 @@ import io.github.parkkevinsb.flower.core.context.ExecutionContext;
 import io.github.parkkevinsb.flower.core.flow.FlowId;
 import io.github.parkkevinsb.flower.core.flow.FlowPersistence;
 import io.github.parkkevinsb.flower.core.flow.FlowState;
+import io.github.parkkevinsb.flower.core.persistence.CheckpointStoreCapabilities;
 import io.github.parkkevinsb.flower.core.persistence.FlowCheckpoint;
 import io.github.parkkevinsb.flower.core.persistence.FlowCheckpointStore;
 
@@ -41,6 +42,11 @@ public final class JdbcFlowCheckpointStore implements FlowCheckpointStore {
         }
         this.dataSource = dataSource;
         this.dialect = dialect;
+    }
+
+    @Override
+    public CheckpointStoreCapabilities capabilities() {
+        return CheckpointStoreCapabilities.durableQueryable();
     }
 
     @Override

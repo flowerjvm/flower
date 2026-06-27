@@ -1,6 +1,8 @@
 package io.github.parkkevinsb.flower.eventloop.worker;
 
 import io.github.parkkevinsb.flower.core.flow.FlowPersistence;
+import io.github.parkkevinsb.flower.core.flow.FlowId;
+import io.github.parkkevinsb.flower.core.flow.FlowState;
 import io.github.parkkevinsb.flower.core.time.Clock;
 import io.github.parkkevinsb.flower.eventloop.flow.EventFlow;
 import io.github.parkkevinsb.flower.eventloop.persistence.EventAwaitCheckpoint;
@@ -11,6 +13,8 @@ import io.github.parkkevinsb.flower.eventloop.step.AwaitCondition;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 
 final class CheckpointCoordinator {
 
@@ -20,6 +24,7 @@ final class CheckpointCoordinator {
     private final Clock clock;
     private final EventFlowCheckpointStore checkpointStore;
     private final ListenerDispatcher listenerDispatcher;
+    private final ConcurrentMap<FlowId, EventFlowCheckpoint> lastSaved = new ConcurrentHashMap<>();
 
     CheckpointCoordinator(
             String workerName,
@@ -79,15 +84,67 @@ final class CheckpointCoordinator {
         return Collections.unmodifiableList(out);
     }
 
-    void save(
+    boolean saveActive(
             EventFlow flow,
             boolean entered,
             long awaitGeneration,
             List<EventAwaitCheckpoint> awaits) {
-        if (flow.persistence() != FlowPersistence.DURABLE || flow.state().isTerminal()) {
+        if (!requiresCheckpoint(flow) || flow.state().isTerminal()) {
+            return true;
+        }
+        EventFlowCheckpoint checkpoint = checkpoint(flow, entered, awaitGeneration, awaits);
+        EventFlowCheckpoint previous = lastSaved.get(flow.flowId());
+        if (checkpoint.sameStoredPositionAs(previous)) {
+            return true;
+        }
+        return save(flow, checkpoint, "save");
+    }
+
+    boolean supportsDurableFlows() {
+        return checkpointStore.capabilities().durable();
+    }
+
+    boolean saveTerminalTombstone(EventFlow flow, long awaitGeneration) {
+        if (!requiresCheckpoint(flow)) {
+            return true;
+        }
+        if (flow.state() == FlowState.CHECKPOINT_FAILED) {
+            return false;
+        }
+        return save(flow, checkpoint(
+                flow,
+                false,
+                awaitGeneration,
+                Collections.<EventAwaitCheckpoint>emptyList()), "terminal save");
+    }
+
+    void cleanupTerminalTombstoneBestEffort(EventFlow flow) {
+        if (!requiresCheckpoint(flow)) {
             return;
         }
-        checkpointStore.save(new EventFlowCheckpoint(
+        try {
+            checkpointStore.delete(flow.flowId());
+        } catch (Throwable t) {
+            System.err.println("[flower] eventloop " + workerName + " terminal checkpoint cleanup failed for "
+                    + flow.flowId() + ": " + t);
+            listenerDispatcher.workerError(t);
+        } finally {
+            forget(flow.flowId());
+        }
+    }
+
+    void forget(FlowId flowId) {
+        if (flowId != null) {
+            lastSaved.remove(flowId);
+        }
+    }
+
+    private EventFlowCheckpoint checkpoint(
+            EventFlow flow,
+            boolean entered,
+            long awaitGeneration,
+            List<EventAwaitCheckpoint> awaits) {
+        return new EventFlowCheckpoint(
                 flow.flowId(),
                 flow.state(),
                 flow.currentStepId(),
@@ -98,20 +155,30 @@ final class CheckpointCoordinator {
                 flow.definitionVersion(),
                 flow.executionContext(),
                 awaitGeneration,
-                awaits));
+                awaits);
     }
 
-    void delete(EventFlow flow) {
-        if (flow.persistence() != FlowPersistence.DURABLE) {
-            return;
-        }
+    private boolean save(EventFlow flow, EventFlowCheckpoint checkpoint, String action) {
         try {
-            checkpointStore.delete(flow.flowId());
+            checkpointStore.save(checkpoint);
+            lastSaved.put(flow.flowId(), checkpoint);
+            return true;
         } catch (Throwable t) {
-            System.err.println("[flower] eventloop " + workerName + " checkpoint delete failed for "
-                    + flow.flowId() + ": " + t);
-            listenerDispatcher.workerError(t);
+            markCheckpointFailed(flow, t, action);
+            return false;
         }
+    }
+
+    private boolean requiresCheckpoint(EventFlow flow) {
+        return flow.persistence() == FlowPersistence.DURABLE;
+    }
+
+    private void markCheckpointFailed(EventFlow flow, Throwable cause, String action) {
+        forget(flow.flowId());
+        flow.checkpointFailed(cause);
+        listenerDispatcher.workerError(cause);
+        System.err.println("[flower] eventloop " + workerName + " checkpoint " + action + " failed for "
+                + flow.flowId() + ": " + cause);
     }
 
     private long deadlineAt(long now, long millisFromNow) {

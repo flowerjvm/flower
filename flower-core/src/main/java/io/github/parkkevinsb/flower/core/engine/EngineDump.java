@@ -1,6 +1,7 @@
 package io.github.parkkevinsb.flower.core.engine;
 
 import io.github.parkkevinsb.flower.core.flow.FlowSnapshot;
+import io.github.parkkevinsb.flower.core.worker.DriveMode;
 import io.github.parkkevinsb.flower.core.worker.WorkerState;
 
 import java.util.Collections;
@@ -33,7 +34,8 @@ public final class EngineDump {
         sb.append("Engine: ").append(engineState).append('\n');
         for (WorkerDump w : workers) {
             sb.append("  Worker '").append(w.name()).append("' [")
-                    .append(w.state()).append(", interval=")
+                    .append(w.state()).append(", drive=")
+                    .append(w.driveMode()).append(", interval=")
                     .append(w.intervalMillis()).append("ms]\n");
             for (FlowSnapshot f : w.flows()) {
                 sb.append("    ").append(f).append('\n');
@@ -50,12 +52,23 @@ public final class EngineDump {
     public static final class WorkerDump {
         private final String name;
         private final WorkerState state;
+        private final DriveMode driveMode;
         private final long intervalMillis;
         private final List<FlowSnapshot> flows;
 
         public WorkerDump(String name, WorkerState state, long intervalMillis, List<FlowSnapshot> flows) {
+            this(name, state, DriveMode.NONE, intervalMillis, flows);
+        }
+
+        public WorkerDump(
+                String name,
+                WorkerState state,
+                DriveMode driveMode,
+                long intervalMillis,
+                List<FlowSnapshot> flows) {
             this.name = name;
             this.state = state;
+            this.driveMode = driveMode == null ? DriveMode.NONE : driveMode;
             this.intervalMillis = intervalMillis;
             this.flows = Collections.unmodifiableList(flows);
         }
@@ -66,6 +79,10 @@ public final class EngineDump {
 
         public WorkerState state() {
             return state;
+        }
+
+        public DriveMode driveMode() {
+            return driveMode;
         }
 
         public long intervalMillis() {

@@ -1,10 +1,14 @@
 package io.github.parkkevinsb.flower.core.engine;
 
 import io.github.parkkevinsb.flower.core.event.EventBus;
+import io.github.parkkevinsb.flower.core.flow.Flow;
+import io.github.parkkevinsb.flower.core.flow.FlowId;
 import io.github.parkkevinsb.flower.core.flow.FlowSnapshot;
 import io.github.parkkevinsb.flower.core.listener.FlowerListener;
 import io.github.parkkevinsb.flower.core.persistence.FlowCheckpointStore;
 import io.github.parkkevinsb.flower.core.time.Clock;
+import io.github.parkkevinsb.flower.core.worker.DuplicatePolicy;
+import io.github.parkkevinsb.flower.core.worker.FlowOwnershipRegistry;
 import io.github.parkkevinsb.flower.core.worker.Worker;
 
 import java.util.ArrayList;
@@ -37,6 +41,7 @@ public final class Engine {
     private final Map<String, Worker> workers;
     private final List<FlowerListener> listeners;
     private final FlowCheckpointStore checkpointStore;
+    private final FlowOwnershipRegistry ownershipRegistry = new FlowOwnershipRegistry();
 
     private final Object lock = new Object();
     private volatile EngineState state = EngineState.CREATED;
@@ -91,6 +96,23 @@ public final class Engine {
         return checkpointStore;
     }
 
+    public void submit(String workerName, Flow flow) {
+        submit(workerName, flow, DuplicatePolicy.REJECT);
+    }
+
+    public void submit(String workerName, Flow flow, DuplicatePolicy policy) {
+        worker(workerName).submit(flow, policy);
+    }
+
+    public boolean cancel(FlowId flowId) {
+        String owner = ownershipRegistry.ownerOf(flowId);
+        if (owner == null) {
+            return false;
+        }
+        Worker worker = workers.get(owner);
+        return worker != null && worker.cancel(flowId);
+    }
+
     /**
      * Attach all Workers to the shared {@link Clock}, {@link EventBus}, and
      * listeners. Idempotent. Used directly by tests that want to drive
@@ -100,7 +122,7 @@ public final class Engine {
         synchronized (lock) {
             if (attached) return;
             for (Worker w : workers.values()) {
-                w.attach(clock, eventBus, listeners, checkpointStore);
+                w.attach(clock, eventBus, listeners, checkpointStore, ownershipRegistry);
             }
             attached = true;
         }
@@ -148,7 +170,12 @@ public final class Engine {
         List<EngineDump.WorkerDump> wd = new ArrayList<>(workers.size());
         for (Worker w : workers.values()) {
             List<FlowSnapshot> flows = w.snapshotWithStepDefinitions();
-            wd.add(new EngineDump.WorkerDump(w.name(), w.state(), w.intervalMillis(), flows));
+            wd.add(new EngineDump.WorkerDump(
+                    w.name(),
+                    w.state(),
+                    w.driveMode(),
+                    w.intervalMillis(),
+                    flows));
         }
         return new EngineDump(state, wd);
     }

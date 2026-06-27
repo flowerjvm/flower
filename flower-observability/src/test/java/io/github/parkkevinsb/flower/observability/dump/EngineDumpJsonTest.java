@@ -7,6 +7,7 @@ import io.github.parkkevinsb.flower.core.flow.FlowId;
 import io.github.parkkevinsb.flower.core.flow.FlowSnapshot;
 import io.github.parkkevinsb.flower.core.flow.FlowState;
 import io.github.parkkevinsb.flower.core.flow.FlowStepSnapshot;
+import io.github.parkkevinsb.flower.core.worker.DriveMode;
 import io.github.parkkevinsb.flower.core.worker.WorkerState;
 import org.junit.jupiter.api.Test;
 
@@ -35,13 +36,14 @@ class EngineDumpJsonTest {
                 10,
                 null);
         EngineDump.WorkerDump worker = new EngineDump.WorkerDump(
-                "main", WorkerState.RUNNING, 100L, Collections.singletonList(snap));
+                "main", WorkerState.RUNNING, DriveMode.SCHEDULED, 100L, Collections.singletonList(snap));
         EngineDump dump = new EngineDump(EngineState.RUNNING, Collections.singletonList(worker));
 
         String json = EngineDumpJson.toJson(dump);
 
         assertThat(json).contains("\"engineState\":\"RUNNING\"");
         assertThat(json).contains("\"name\":\"main\"");
+        assertThat(json).contains("\"driveMode\":\"SCHEDULED\"");
         assertThat(json).contains("\"intervalMillis\":100");
         assertThat(json).contains("\"flowType\":\"quay-work\"");
         assertThat(json).contains("\"flowKey\":\"WO-1\"");

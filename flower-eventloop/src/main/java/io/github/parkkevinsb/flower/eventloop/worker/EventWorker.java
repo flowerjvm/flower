@@ -157,6 +157,11 @@ public final class EventWorker {
         if (flow.state() != FlowState.CREATED) {
             throw new IllegalStateException("flow must be CREATED before submit: " + flow.flowId());
         }
+        if (flow.persistence() == FlowPersistence.DURABLE
+                && !checkpointCoordinator.supportsDurableFlows()) {
+            throw new IllegalStateException(
+                    "Durable EventFlow requires a durable EventFlowCheckpointStore: " + flow.flowId());
+        }
         if (stopped) {
             throw new IllegalStateException("EventWorker " + name + " is stopped");
         }
@@ -474,14 +479,8 @@ public final class EventWorker {
             result = EventStepResult.fail(t);
         }
         if (result == null) {
-            try {
-                checkpointCoordinator.save(
-                        rt.flow,
-                        rt.entered,
-                        rt.awaitGeneration,
-                        rt.awaitCheckpoints);
-            } catch (Throwable t) {
-                failFlow(rt, t);
+            if (!saveActiveCheckpoint(rt)) {
+                return;
             }
             return; // keep waiting on remaining (event) conditions
         }
@@ -498,6 +497,9 @@ public final class EventWorker {
                     registerAwaits(rt, result.awaits());
                 } catch (Throwable t) {
                     failFlow(rt, t);
+                    return;
+                }
+                if (!isActive(rt) || rt.flow.state().isTerminal()) {
                     return;
                 }
                 runEffects(rt, result);
@@ -627,7 +629,31 @@ public final class EventWorker {
             default:
                 throw new IllegalStateException("Unknown terminal transition: " + transition);
         }
-        checkpointCoordinator.delete(rt.flow);
+        if (checkpointCoordinator.saveTerminalTombstone(rt.flow, rt.awaitGeneration)) {
+            listenerDispatcher.flowTerminated(rt.flow);
+            checkpointCoordinator.cleanupTerminalTombstoneBestEffort(rt.flow);
+        } else {
+            listenerDispatcher.flowTerminated(rt.flow);
+        }
+        if (removeActive) {
+            remove(rt);
+        }
+    }
+
+    private boolean saveActiveCheckpoint(FlowRuntime rt) {
+        if (checkpointCoordinator.saveActive(
+                rt.flow,
+                rt.entered,
+                rt.awaitGeneration,
+                rt.awaitCheckpoints)) {
+            return true;
+        }
+        handleCheckpointFailure(rt, true);
+        return false;
+    }
+
+    private void handleCheckpointFailure(FlowRuntime rt, boolean removeActive) {
+        clearAwaits(rt);
         listenerDispatcher.flowTerminated(rt.flow);
         if (removeActive) {
             remove(rt);
@@ -662,11 +688,7 @@ public final class EventWorker {
             deadlines.add(new DeadlineEntry(rt, generation, earliestDeadline, ++deadlineSeq));
         }
         rt.awaitCheckpoints = checkpointAwaits;
-        checkpointCoordinator.save(
-                rt.flow,
-                rt.entered,
-                rt.awaitGeneration,
-                rt.awaitCheckpoints);
+        saveActiveCheckpoint(rt);
     }
 
     private long deadlineAt(long now, long millisFromNow) {
@@ -819,22 +841,19 @@ public final class EventWorker {
             }
         }
         for (FlowRuntime rt : runtimes) {
-            try {
-                checkpointCoordinator.save(
-                        rt.flow,
-                        rt.entered,
-                        rt.awaitGeneration,
-                        rt.awaitCheckpoints);
-            } catch (Throwable t) {
-                System.err.println("[flower] eventloop " + name + " checkpoint save failed for "
-                        + rt.flow.flowId() + ": " + t);
-                listenerDispatcher.workerError(t);
+            if (!checkpointCoordinator.saveActive(
+                    rt.flow,
+                    rt.entered,
+                    rt.awaitGeneration,
+                    rt.awaitCheckpoints)) {
+                handleCheckpointFailure(rt, false);
+                continue;
             }
+            checkpointCoordinator.forget(rt.flow.flowId());
             clearAwaits(rt);
             safeExit(rt);
             if (!rt.flow.state().isTerminal() && rt.flow.persistence() != FlowPersistence.DURABLE) {
                 rt.flow.cancel();
-                checkpointCoordinator.delete(rt.flow);
                 listenerDispatcher.flowTerminated(rt.flow);
             }
         }

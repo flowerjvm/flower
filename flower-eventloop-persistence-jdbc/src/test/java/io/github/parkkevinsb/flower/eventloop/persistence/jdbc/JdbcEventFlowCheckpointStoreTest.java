@@ -22,6 +22,7 @@ import java.sql.SQLFeatureNotSupportedException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Base64;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -127,6 +128,32 @@ class JdbcEventFlowCheckpointStoreTest {
         assertThat(found.get().awaits().get(1).signalKey()).isEqualTo("call-1");
         assertThat(found.get().awaits().get(2).type()).isEqualTo(EventAwaitCheckpoint.Type.DEADLINE);
         assertThat(found.get().awaits().get(2).deadlineAtMillis()).isEqualTo(7_000L);
+    }
+
+    @Test
+    void save_binds_terminal_tombstone_without_current_step() {
+        RecordingDataSource ds = new RecordingDataSource();
+        JdbcEventFlowCheckpointStore store = JdbcEventFlowCheckpointStore.create(
+                ds, JdbcEventFlowCheckpointDialects.postgresql());
+
+        store.save(new EventFlowCheckpoint(
+                FlowId.of("agent", "A-1"),
+                FlowState.FINISHED,
+                null,
+                false,
+                FlowPersistence.DURABLE,
+                "event-worker-a",
+                1234L,
+                "v1",
+                ExecutionContext.empty(),
+                10L,
+                Collections.<EventAwaitCheckpoint>emptyList()));
+
+        assertThat(ds.params).containsEntry(3, "FINISHED");
+        assertThat(ds.params).containsEntry(4, null);
+        assertThat(ds.params).containsEntry(5, false);
+        assertThat(ds.params).containsEntry(16, 10L);
+        assertThat(ds.params).containsEntry(17, "");
     }
 
     @Test

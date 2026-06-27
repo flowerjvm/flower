@@ -18,10 +18,28 @@ import org.junit.jupiter.api.Test;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class EventFlowCheckpointTest {
 
     static final class Response {
+    }
+
+    @Test
+    void durableEventFlowRequiresDurableCheckpointStore() {
+        EventWorker worker = EventWorker.builder("durable")
+                .clock(new ManualClock())
+                .eventBus(InMemoryEventBus.create())
+                .build();
+        EventFlow flow = EventFlow.builder("durable", "no-store")
+                .durable()
+                .step("wait", new AwaitForeverStep())
+                .build();
+
+        assertThatThrownBy(() -> worker.submit(flow))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("Durable EventFlow requires a durable EventFlowCheckpointStore");
+        assertThat(flow.state()).isEqualTo(FlowState.CREATED);
     }
 
     @Test
@@ -72,6 +90,72 @@ class EventFlowCheckpointTest {
     }
 
     @Test
+    void durableFlowSkipsCheckpointWhenAwaitPositionIsUnchanged() {
+        ManualClock clock = new ManualClock(1_000L);
+        InMemoryEventBus bus = InMemoryEventBus.create();
+        FakeEventFlowCheckpointStore store = new FakeEventFlowCheckpointStore();
+        EventWorker worker = EventWorker.builder("durable")
+                .clock(clock)
+                .eventBus(bus)
+                .checkpointStore(store)
+                .build();
+
+        EventFlow flow = EventFlow.builder("durable", "unchanged")
+                .durable()
+                .step("wait", new AwaitForeverStep())
+                .build();
+
+        worker.submit(flow);
+        worker.drain();
+        assertThat(store.saveCount()).isEqualTo(1);
+
+        worker.stop();
+
+        assertThat(store.saveCount()).isEqualTo(1);
+    }
+
+    @Test
+    void durableFlowSavesCheckpointWhenAwaitPositionChanges() {
+        ManualClock clock = new ManualClock(1_000L);
+        InMemoryEventBus bus = InMemoryEventBus.create();
+        FakeEventFlowCheckpointStore store = new FakeEventFlowCheckpointStore();
+        EventWorker worker = EventWorker.builder("durable")
+                .clock(clock)
+                .eventBus(bus)
+                .checkpointStore(store)
+                .build();
+
+        EventFlow flow = EventFlow.builder("durable", "changed")
+                .durable()
+                .step("wait", new EventStep() {
+                    @Override
+                    protected EventStepResult onEnter(EventStepContext ctx) {
+                        return EventStepResult.await(
+                                AwaitCondition.event(Response.class),
+                                AwaitCondition.deadlineIn(500));
+                    }
+
+                    @Override
+                    protected EventStepResult onTimeout(EventStepContext ctx) {
+                        return null;
+                    }
+                })
+                .build();
+
+        worker.submit(flow);
+        worker.drain();
+        assertThat(store.saveCount()).isEqualTo(1);
+
+        clock.advance(500L);
+        worker.drain();
+
+        List<EventFlowCheckpoint> saves = store.saves();
+        assertThat(store.saveCount()).isEqualTo(2);
+        assertThat(saves.get(1).awaits()).hasSize(1);
+        assertThat(saves.get(1).awaits().get(0).type()).isEqualTo(EventAwaitCheckpoint.Type.EVENT);
+    }
+
+    @Test
     void durableSignalAwaitIsCheckpointedAsData() {
         ManualClock clock = new ManualClock(1_000L);
         InMemoryEventBus bus = InMemoryEventBus.create();
@@ -106,7 +190,7 @@ class EventFlowCheckpointTest {
     }
 
     @Test
-    void finishingDurableFlowDeletesCheckpoint() {
+    void finishingDurableFlowSavesTerminalTombstoneThenCleansUpCheckpoint() {
         ManualClock clock = new ManualClock();
         InMemoryEventBus bus = InMemoryEventBus.create();
         FakeEventFlowCheckpointStore store = new FakeEventFlowCheckpointStore();
@@ -140,6 +224,9 @@ class EventFlowCheckpointTest {
         worker.drain();
 
         assertThat(flow.state()).isEqualTo(FlowState.FINISHED);
+        assertThat(store.saves())
+                .extracting(EventFlowCheckpoint::state)
+                .contains(FlowState.RUNNING, FlowState.FINISHED);
         assertThat(store.find(flowId)).isEmpty();
         assertThat(store.deleteCount()).isEqualTo(1);
     }
@@ -169,8 +256,126 @@ class EventFlowCheckpointTest {
         worker.drain();
 
         assertThat(flow.state()).isEqualTo(FlowState.CANCELLED);
+        assertThat(store.saves())
+                .extracting(EventFlowCheckpoint::state)
+                .contains(FlowState.RUNNING, FlowState.CANCELLED);
         assertThat(store.find(flowId)).isEmpty();
         assertThat(store.deleteCount()).isEqualTo(1);
+    }
+
+    @Test
+    void activeCheckpointSaveFailureHaltsDurableFlow() {
+        ManualClock clock = new ManualClock();
+        InMemoryEventBus bus = InMemoryEventBus.create();
+        FakeEventFlowCheckpointStore store = new FakeEventFlowCheckpointStore();
+        store.failSavesWith(new IllegalStateException("save boom"));
+        EventWorker worker = EventWorker.builder("durable")
+                .clock(clock)
+                .eventBus(bus)
+                .checkpointStore(store)
+                .build();
+        FlowId flowId = FlowId.of("durable", "save-fail");
+
+        EventFlow flow = EventFlow.builder("durable", "save-fail")
+                .durable()
+                .step("wait", new AwaitForeverStep())
+                .build();
+
+        worker.submit(flow);
+        worker.drain();
+
+        assertThat(flow.state()).isEqualTo(FlowState.CHECKPOINT_FAILED);
+        assertThat(flow.failureCause()).hasMessage("save boom");
+        assertThat(worker.stateOf(flowId)).isNull();
+        assertThat(store.find(flowId)).isEmpty();
+
+        bus.publish(new Response());
+        worker.drain();
+
+        assertThat(flow.state()).isEqualTo(FlowState.CHECKPOINT_FAILED);
+    }
+
+    @Test
+    void terminalTombstoneDeleteFailureDoesNotMakeFinishedFlowActiveAgain() {
+        ManualClock clock = new ManualClock();
+        InMemoryEventBus bus = InMemoryEventBus.create();
+        FakeEventFlowCheckpointStore store = new FakeEventFlowCheckpointStore();
+        store.failDeletesWith(new IllegalStateException("delete boom"));
+        EventWorker worker = EventWorker.builder("durable")
+                .clock(clock)
+                .eventBus(bus)
+                .checkpointStore(store)
+                .build();
+        FlowId flowId = FlowId.of("durable", "delete-fail");
+
+        EventFlow flow = EventFlow.builder("durable", "delete-fail")
+                .durable()
+                .step("wait", new EventStep() {
+                    @Override
+                    protected EventStepResult onEnter(EventStepContext ctx) {
+                        return EventStepResult.await(AwaitCondition.event(Response.class));
+                    }
+
+                    @Override
+                    protected EventStepResult onEvent(EventStepContext ctx, Object event) {
+                        return EventStepResult.finish();
+                    }
+                })
+                .build();
+
+        worker.submit(flow);
+        worker.drain();
+        bus.publish(new Response());
+        worker.drain();
+
+        assertThat(flow.state()).isEqualTo(FlowState.FINISHED);
+        EventFlowCheckpoint tombstone = store.find(flowId).orElseThrow(AssertionError::new);
+        assertThat(tombstone.state()).isEqualTo(FlowState.FINISHED);
+        assertThat(store.findActive()).isEmpty();
+        assertThat(store.deleteCount()).isEqualTo(1);
+    }
+
+    @Test
+    void terminalTombstoneSaveFailureHaltsFlowInsteadOfReportingFinished() {
+        ManualClock clock = new ManualClock();
+        InMemoryEventBus bus = InMemoryEventBus.create();
+        FakeEventFlowCheckpointStore store = new FakeEventFlowCheckpointStore();
+        store.failSaveOnCall(2, new IllegalStateException("terminal save boom"));
+        EventWorker worker = EventWorker.builder("durable")
+                .clock(clock)
+                .eventBus(bus)
+                .checkpointStore(store)
+                .build();
+        FlowId flowId = FlowId.of("durable", "terminal-save-fail");
+
+        EventFlow flow = EventFlow.builder("durable", "terminal-save-fail")
+                .durable()
+                .step("wait", new EventStep() {
+                    @Override
+                    protected EventStepResult onEnter(EventStepContext ctx) {
+                        return EventStepResult.await(AwaitCondition.event(Response.class));
+                    }
+
+                    @Override
+                    protected EventStepResult onEvent(EventStepContext ctx, Object event) {
+                        return EventStepResult.finish();
+                    }
+                })
+                .build();
+
+        worker.submit(flow);
+        worker.drain();
+        assertThat(store.find(flowId)).isPresent();
+
+        bus.publish(new Response());
+        worker.drain();
+
+        assertThat(flow.state()).isEqualTo(FlowState.CHECKPOINT_FAILED);
+        assertThat(flow.failureCause()).hasMessage("terminal save boom");
+        assertThat(store.find(flowId).orElseThrow(AssertionError::new).state())
+                .isEqualTo(FlowState.RUNNING);
+        assertThat(worker.stateOf(flowId)).isNull();
+        assertThat(store.deleteCount()).isZero();
     }
 
     @Test

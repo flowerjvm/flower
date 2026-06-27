@@ -23,11 +23,12 @@ class JdbcEventFlowCheckpointDialectsTest {
     }
 
     @Test
-    void active_queries_select_ready_and_running_event_checkpoints() {
+    void active_queries_select_only_running_event_checkpoints() {
         assertThat(JdbcEventFlowCheckpointDialects.postgresql().findActiveSql())
                 .contains("flower_event_flow_checkpoint")
-                .contains("state IN ('READY', 'RUNNING')");
+                .contains("state = 'RUNNING'");
         assertThat(JdbcEventFlowCheckpointDialects.postgresql().findActiveByWorkerSql())
+                .contains("state = 'RUNNING'")
                 .contains("worker_name = ?");
     }
 }

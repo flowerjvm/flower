@@ -18,9 +18,9 @@ public final class JdbcEventFlowCheckpointDialects {
     private static final String FIND =
             SELECT + " WHERE flow_type = ? AND flow_key = ?";
     private static final String FIND_ACTIVE =
-            SELECT + " WHERE state IN ('READY', 'RUNNING') ORDER BY updated_at_millis ASC";
+            SELECT + " WHERE state = 'RUNNING' ORDER BY updated_at_millis ASC";
     private static final String FIND_ACTIVE_BY_WORKER =
-            SELECT + " WHERE state IN ('READY', 'RUNNING') AND worker_name = ? ORDER BY updated_at_millis ASC";
+            SELECT + " WHERE state = 'RUNNING' AND worker_name = ? ORDER BY updated_at_millis ASC";
 
     private JdbcEventFlowCheckpointDialects() {
     }

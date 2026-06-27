@@ -4,6 +4,7 @@ import io.github.parkkevinsb.flower.core.context.ExecutionContext;
 import io.github.parkkevinsb.flower.core.flow.FlowId;
 import io.github.parkkevinsb.flower.core.flow.FlowPersistence;
 import io.github.parkkevinsb.flower.core.flow.FlowState;
+import io.github.parkkevinsb.flower.core.persistence.CheckpointStoreCapabilities;
 import io.github.parkkevinsb.flower.eventloop.persistence.EventAwaitCheckpoint;
 import io.github.parkkevinsb.flower.eventloop.persistence.EventFlowCheckpoint;
 import io.github.parkkevinsb.flower.eventloop.persistence.EventFlowCheckpointStore;
@@ -47,6 +48,11 @@ public final class JdbcEventFlowCheckpointStore implements EventFlowCheckpointSt
         }
         this.dataSource = dataSource;
         this.dialect = dialect;
+    }
+
+    @Override
+    public CheckpointStoreCapabilities capabilities() {
+        return CheckpointStoreCapabilities.durableQueryable();
     }
 
     @Override
