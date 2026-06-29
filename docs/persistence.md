@@ -95,3 +95,8 @@ and user identifiers. Flower does not regenerate a new run id during recovery.
 Flower's durable mode is checkpoint/resume, not durable execution replay.
 External writes and API calls should be idempotent because recovery may rebuild
 a fresh Flow and re-enter a Step according to that Step's `RecoveryPolicy`.
+
+Core `StepContext.startTimeout(...)` is runtime-only and is not stored in
+durable checkpoints. Durable Flows reject it. Store long-lived deadlines in
+domain state, or use event-loop await deadlines when the deadline itself must
+survive restart.

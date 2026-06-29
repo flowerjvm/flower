@@ -101,6 +101,12 @@ public interface StepContext {
     /**
      * Start a timeout window relative to the current clock time. Replaces any
      * pending timeout on the same Step.
+     *
+     * <p>This is a runtime-only helper. Durable Flow checkpoints do not store
+     * timeout state, so durable Steps must keep long-lived deadlines in domain
+     * state or use the event-loop runtime's await deadlines instead.
+     *
+     * @throws IllegalStateException when called from a durable Flow
      */
     void startTimeout(long millis);
 

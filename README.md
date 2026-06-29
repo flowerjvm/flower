@@ -931,6 +931,11 @@ Durable checkpoints keep the `ExecutionContext` with the saved flow position.
 After recovery, the same logical run keeps the same `runId`, `traceId`, tenant,
 and user identifiers. Flower does not regenerate a new run id during recovery.
 
+Core `StepContext.startTimeout(...)` is a runtime-only helper and is not stored
+in durable checkpoints. Durable Flows reject it so a restart cannot silently
+reset or lose a deadline. For durable waits, store `dueAtMillis` or equivalent
+deadline data in domain state, or use the event-loop runtime's await deadlines.
+
 `flower-persistence-jdbc` provides a JDBC implementation:
 
 ```java

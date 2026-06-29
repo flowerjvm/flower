@@ -396,7 +396,8 @@ public final class Flow {
 
     private void ensureCurrentRuntime(StepDefinition def) {
         if (currentRuntime == null) {
-            currentRuntime = new StepRuntime(flowId, executionContext, def.stepId(), clock, eventBus);
+            currentRuntime = new StepRuntime(
+                    flowId, executionContext, def.stepId(), clock, eventBus, persistence);
             currentEntered = false;
         }
     }
@@ -421,7 +422,8 @@ public final class Flow {
         currentIndex = index;
         currentEntered = false;
         recoveringCurrentStep = checkpoint.currentStepEntered();
-        currentRuntime = new StepRuntime(flowId, executionContext, checkpoint.currentStepId(), clock, eventBus);
+        currentRuntime = new StepRuntime(
+                flowId, executionContext, checkpoint.currentStepId(), clock, eventBus, persistence);
         currentRuntime.setStepNo(checkpoint.currentStepNo());
         retainedStepNo = 0;
     }

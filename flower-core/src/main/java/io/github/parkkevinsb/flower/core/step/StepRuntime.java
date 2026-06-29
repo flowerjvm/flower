@@ -5,6 +5,7 @@ import io.github.parkkevinsb.flower.core.event.EventBus;
 import io.github.parkkevinsb.flower.core.event.EventHandler;
 import io.github.parkkevinsb.flower.core.event.Subscription;
 import io.github.parkkevinsb.flower.core.flow.FlowId;
+import io.github.parkkevinsb.flower.core.flow.FlowPersistence;
 import io.github.parkkevinsb.flower.core.time.Clock;
 
 import java.util.ArrayList;
@@ -41,6 +42,7 @@ public final class StepRuntime implements StepContext {
     private final String stepId;
     private final Clock clock;
     private final EventBus eventBus;
+    private final FlowPersistence persistence;
 
     private final ConcurrentMap<String, SignalValue> signals = new ConcurrentHashMap<>();
     private final List<Subscription> subscriptions = Collections.synchronizedList(new ArrayList<>());
@@ -59,6 +61,16 @@ public final class StepRuntime implements StepContext {
             String stepId,
             Clock clock,
             EventBus eventBus) {
+        this(flowId, executionContext, stepId, clock, eventBus, FlowPersistence.TRANSIENT);
+    }
+
+    public StepRuntime(
+            FlowId flowId,
+            ExecutionContext executionContext,
+            String stepId,
+            Clock clock,
+            EventBus eventBus,
+            FlowPersistence persistence) {
         if (flowId == null) {
             throw new IllegalArgumentException("flowId must not be null");
         }
@@ -77,6 +89,7 @@ public final class StepRuntime implements StepContext {
         this.stepId = stepId;
         this.clock = clock;
         this.eventBus = eventBus;
+        this.persistence = persistence == null ? FlowPersistence.TRANSIENT : persistence;
     }
 
     // ------------------------------------------------------------------
@@ -183,6 +196,12 @@ public final class StepRuntime implements StepContext {
     public void startTimeout(long millis) {
         if (millis < 0L) {
             throw new IllegalArgumentException("timeout millis must not be negative: " + millis);
+        }
+        if (persistence == FlowPersistence.DURABLE) {
+            throw new IllegalStateException(
+                    "StepContext.startTimeout is runtime-only and cannot be used in durable Flow "
+                            + flowId + " step=" + stepId
+                            + ". Store long-lived deadlines in domain state or use event-loop await deadlines.");
         }
         this.timeoutStart = clock.currentTimeMillis();
         this.timeoutMillis = millis;

@@ -136,6 +136,33 @@ class DurableFlowRecoveryTest {
     }
 
     @Test
+    void durable_flow_rejects_runtime_timeout_helper() {
+        Flow flow = Flow.builder("t", "1")
+                .durable()
+                .durableStep("only", new Step() {
+                    @Override
+                    protected void onEnter(StepContext ctx) {
+                        ctx.startTimeout(5_000);
+                    }
+
+                    @Override
+                    protected StepResult onTick(StepContext ctx) {
+                        return StepResult.stay();
+                    }
+                }, RecoveryPolicy.REENTER_IDEMPOTENT)
+                .build();
+
+        worker.submit(flow);
+        worker.tickOnce();
+
+        assertThat(flow.state()).isEqualTo(FlowState.FAILED);
+        assertThat(flow.failureCause())
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("StepContext.startTimeout is runtime-only")
+                .hasMessageContaining("durable Flow");
+    }
+
+    @Test
     void checkpoint_keeps_definition_version_and_rejects_mismatch() {
         Flow flow = Flow.builder("t", "1")
                 .durable()
