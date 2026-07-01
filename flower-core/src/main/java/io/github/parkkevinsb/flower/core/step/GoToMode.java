@@ -4,9 +4,9 @@ package io.github.parkkevinsb.flower.core.step;
  * How a Flow should treat the current Step when {@link StepResult#goTo(String)}
  * is returned.
  *
- * <p>v1 ships only {@link #COMPLETE_CURRENT}. {@code REQUEUE_CURRENT} from
- * the legacy {@code REDIRECT_REQ} pattern is intentionally deferred until
- * a real use case appears.
+ * <p>The current runtime supports {@link #COMPLETE_CURRENT}. Additional jump
+ * semantics can be added later if an application needs a different lifecycle
+ * behavior.
  */
 public enum GoToMode {
     /**
