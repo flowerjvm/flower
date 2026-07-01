@@ -962,6 +962,18 @@ Signals are still in-memory wake-up hints. Durable step decisions should be
 based on domain state that can be checked again after restart, not on signal
 payloads alone.
 
+Operational boundaries to remember:
+
+- Flow ownership is enforced inside one `Engine`, not across JVMs. If multiple
+  processes recover from the same checkpoint store, the application must
+  coordinate recovery with its own lock, lease, or leader election.
+- Checkpoint `save(...)` and `delete(...)` run synchronously on the Worker tick
+  path or EventWorker loop path. Slow storage slows Flow progress.
+- Terminal durable Flows save a terminal tombstone before cleanup delete, so
+  normal completion may perform both a save and a delete.
+- `definitionVersion` is checked only when both the Flow and checkpoint have a
+  non-null version.
+
 ## Observability
 
 Attach `FlowerListener` implementations to observe flow submission, step

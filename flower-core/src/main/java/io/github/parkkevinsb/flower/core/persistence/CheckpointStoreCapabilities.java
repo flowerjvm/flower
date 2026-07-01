@@ -1,7 +1,12 @@
 package io.github.parkkevinsb.flower.core.persistence;
 
 /**
- * Declares what a checkpoint store can safely do.
+ * Declares checkpoint-store capabilities.
+ *
+ * <p>These flags describe the store. They do not expand core's execution
+ * guarantees. In particular, Flower's in-memory Flow ownership is scoped to one
+ * JVM and one Engine; cross-process recovery still needs host-level locking,
+ * leases, fencing, or leader election.
  */
 public final class CheckpointStoreCapabilities {
 
@@ -80,7 +85,11 @@ public final class CheckpointStoreCapabilities {
     }
 
     /**
-     * True when the store can safely coordinate multiple writers.
+     * True when the store itself can participate in multi-writer coordination.
+     *
+     * <p>This is advisory metadata. Core recovery does not automatically claim
+     * rows or enforce cross-process single-writer execution just because this
+     * flag is true.
      */
     public boolean multiWriterSafe() {
         return multiWriterSafe;
