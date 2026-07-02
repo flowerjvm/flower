@@ -8,8 +8,9 @@ on:
     paths:
       - pom.xml
       - flower-core/**
+      - flower-eventloop/**
       - flower-persistence-jdbc/**
-      - flower-bloom-adapter/**
+      - flower-eventloop-persistence-jdbc/**
       - flower-spring-boot-starter/**
       - flower-observability/**
       - flower-testkit/**
@@ -32,22 +33,12 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Checkout Bloom
-        uses: actions/checkout@v4
-        with:
-          repository: parkKevinSB/bloom
-          path: bloom
-          token: ${{ secrets.PACKAGE_READ_TOKEN }}
-
       - name: Set up Java
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
           cache: maven
-
-      - name: Install Bloom Core locally
-        run: mvn -B -f bloom/pom.xml -pl bloom-core -am install
 
       - name: Configure GitHub Packages
         run: |

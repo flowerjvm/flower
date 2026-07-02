@@ -743,7 +743,7 @@ the host application, for example `office-a:DOC-1`.
 
 `flower-core` includes `InMemoryEventBus` for simple setups and deterministic
 tests. Bloom is the small in-memory event bus provided in the Flower ecosystem.
-To share events with Bloom, add `flower-bloom-adapter`:
+To share events with Bloom, use Bloom's optional `bloom-flower-adapter` module:
 
 ```java
 EventBus bloom = LocalEventBus.create();
@@ -755,6 +755,8 @@ Engine engine = Engine.builder()
 ```
 
 The adapter preserves the dispatch semantics of the wrapped Bloom bus.
+The adapter is owned by the Bloom repository so Flower's default build remains
+independent of Bloom.
 
 ### Bloom Event Example
 
@@ -1056,7 +1058,11 @@ Persistence / integration:
   PostgreSQL, MySQL, Oracle, and H2.
 - `flower-spring-boot-starter`: Spring Boot auto-configuration for an `Engine`
   and optional checkpoint store wiring.
-- `flower-bloom-adapter`: adapts Bloom's event bus to Flower's `EventBus` SPI.
+
+Bloom integration:
+
+- `bloom-flower-adapter`: maintained in the Bloom repository; adapts Bloom's
+  event bus to Flower's `EventBus` SPI.
 
 Observability / testing:
 

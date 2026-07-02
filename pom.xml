@@ -52,7 +52,6 @@
         <module>flower-eventloop</module>
         <module>flower-persistence-jdbc</module>
         <module>flower-eventloop-persistence-jdbc</module>
-        <module>flower-bloom-adapter</module>
         <module>flower-spring-boot-starter</module>
         <module>flower-observability</module>
         <module>flower-testkit</module>
@@ -103,9 +102,6 @@
         <javaparser.version>3.28.2</javaparser.version>
         <flower.check.skip>false</flower.check.skip>
 
-        <!-- Adapter dependency versions -->
-        <bloom-core.version>0.1.0-SNAPSHOT</bloom-core.version>
-
         <!-- Spring Boot starter targets Java 17+; managed via BOM. -->
         <spring-boot.version>3.3.5</spring-boot.version>
 
@@ -152,11 +148,6 @@
                 <groupId>io.github.parkkevinsb.flower</groupId>
                 <artifactId>flower-check</artifactId>
                 <version>${project.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>io.github.parkkevinsb</groupId>
-                <artifactId>bloom-core</artifactId>
-                <version>${bloom-core.version}</version>
             </dependency>
             <dependency>
                 <groupId>org.junit</groupId>

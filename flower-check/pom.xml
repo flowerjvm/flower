@@ -77,8 +77,9 @@
                             <classpathScope>runtime</classpathScope>
                             <arguments>
                                 <argument>${project.basedir}/../flower-core/src/main/java</argument>
+                                <argument>${project.basedir}/../flower-eventloop/src/main/java</argument>
                                 <argument>${project.basedir}/../flower-persistence-jdbc/src/main/java</argument>
-                                <argument>${project.basedir}/../flower-bloom-adapter/src/main/java</argument>
+                                <argument>${project.basedir}/../flower-eventloop-persistence-jdbc/src/main/java</argument>
                                 <argument>${project.basedir}/../flower-spring-boot-starter/src/main/java</argument>
                                 <argument>${project.basedir}/../flower-observability/src/main/java</argument>
                                 <argument>${project.basedir}/../flower-testkit/src/main/java</argument>

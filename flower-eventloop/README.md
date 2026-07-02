@@ -31,8 +31,8 @@ event bus and clock:
 
 Like `flower-core`, this module only depends on the Flower `EventBus` SPI. It
 does not depend on Bloom directly. A host can still use Bloom by adding
-`flower-bloom-adapter` and passing `BloomEventBus.wrap(...)` as the worker's
-`EventBus` implementation.
+Bloom's optional `bloom-flower-adapter` and passing `BloomEventBus.wrap(...)`
+as the worker's `EventBus` implementation.
 
 It does **not** reuse `Worker`, `Flow`, `Step`, or `StepResult`: those encode
 the tick contract (`stay()` = "tick me again"). The event-driven model has its
