@@ -1,30 +1,38 @@
 # 🌸 Flower
 
+[![CI](https://github.com/flowerjvm/flower/actions/workflows/ci.yml/badge.svg)](https://github.com/flowerjvm/flower/actions/workflows/ci.yml)
+
 Flower -- the one that flows.
 
-Flower is not a workflow platform. It is a tiny in-JVM runtime for
-long-running Spring application flows.
+Project status: `0.1.0-SNAPSHOT`. The stable center is `flower-core`; modules
+marked MVP are usable but may change more quickly before a 1.0 release. See
+[CONTRIBUTING.md](CONTRIBUTING.md), [SECURITY.md](SECURITY.md), and
+[ROADMAP.md](ROADMAP.md) for project process and planned work.
 
-It gives application code an explicit, testable, human-operable execution shape
-inside one JVM.
+## The Flow Is Already There
 
-It helps you model long-running application behavior as a `Flow` made of small
-`Step` objects. A `Worker` ticks active flows, each step returns an explicit
-transition, and an `Engine` owns the shared clock, event bus, workers, and
-lifecycle listeners.
+Your app has flows. You just cannot see them yet.
 
-Flower fits naturally in Spring Boot applications: Spring provides the
-application framework, and Flower gives long-running business flows an explicit
-runtime shape without replacing the application's framework or domain model.
+Hand your service to a new engineer and watch where they get stuck. Not on the
+class diagram. That part may be clean. They get stuck on one question no diagram
+answers: when a request comes in, what actually happens, and in what order?
 
-It is not BPMN, Temporal, Camunda, a distributed scheduler, or a durable saga
-engine. It is a plain Java toolkit for applications that need controlled
-internal orchestration without surrendering their domain model to a large
-runtime.
+Because the answer is not in any single place. It is spread across a poller, a
+background thread, an event listener, a shared flag, and a catch-all service
+class that quietly became the home for leftover orchestration.
 
-## The Shape, In One Screen
+The person who knows the whole sequence will eventually move on, and the flow
+moves with them.
 
-The reason Flower exists is one small execution shape:
+Flower is how you write that flow down before that happens: one flow, small
+steps, explicit transitions, and one place to look.
+
+## Flower, In One Screen
+
+Flower is a tiny in-JVM runtime for long-running Spring application flows. It
+gives application code an explicit, testable, human-operable execution shape
+inside one JVM, without replacing your application framework or your domain
+model.
 
 ```text
 Engine
@@ -36,16 +44,17 @@ Engine
 
 A flow has a current step. A step returns an explicit result. Waiting is
 modeled through events, signals, timeouts, or durable domain state instead of
-hidden sleeps and ad-hoc polling loops. That is the core idea.
+hidden sleeps and ad-hoc polling loops.
+
+That is the whole discipline, borrowed from equipment-control software where
+long-running work has always been modeled this way: make the current state
+visible, make every transition explicit, keep each unit small, and leave a
+trace a human can inspect.
 
 ## Before / After
 
-Most orchestration inside real applications does not start as a workflow
-engine. It starts as a status column, a scheduled poller, an event listener,
-and a few shared flags that drift apart over time.
-
-Before: orchestration scattered across status strings, scheduled scans, and
-side channels:
+This is the shape the "already there" flow usually starts in: orchestration
+scattered across a status string, a scheduled scan, and a side-channel flag.
 
 ```java
 @Entity
@@ -91,6 +100,7 @@ void onPaid(PaymentApproved event) {
 
 The state machine is implicit in strings and a switch. Waiting is hidden in a
 shared flag. Recovery means "whatever the status column happened to be."
+Nobody can see the flow, because there is no flow, only fragments.
 
 After: the same behavior as an explicit Flow of Steps:
 
@@ -132,7 +142,8 @@ final class WaitForPaymentStep extends Step {
 Now the current step is visible. The transition is the return value. The wait
 is a subscription plus a timeout that Flower cleans up for you. The same flow
 can be tested with a manual clock and `tickOnce()`, without starting a
-scheduler or database.
+scheduler or database. That is the readable shape a new engineer can follow
+and repair.
 
 ## Where It Comes From
 
@@ -160,27 +171,27 @@ Flower makes this kind of logic easier to reason about because every flow has a
 current step, every step returns an explicit result, and time/event waiting is
 represented by `StepContext` instead of ad-hoc threads and sleeps.
 
-Flower is not the right tool when you need cross-service distributed
-transactions, durable execution replay, a BPMN designer, or a multi-node
-scheduler. Reach for Temporal, Camunda, or a saga framework there. Flower
-stays in one JVM on purpose.
+## What Flower Is Not
 
-## Why Not Just an Enum or Spring StateMachine?
+Once the flow is visible, it is worth being precise about scope.
+
+Flower is not BPMN, Temporal, Camunda, a distributed scheduler, or a durable
+saga engine. It stays in one JVM on purpose. If you need cross-service
+distributed transactions, durable execution replay, a BPMN designer, or a
+multi-node scheduler, reach for those tools. That is not what Flower is for.
 
 For small flows, an enum and a switch are genuinely enough. Use them.
 Spring StateMachine is a good fit when your main problem is modeling
 formal states, events, transitions, and guards.
 
-Flower is different: it is an execution runtime for internal application flows.
-It focuses on running steps, waiting for events, handling timeouts,
-checkpointing, resuming, inspecting, and testing flows inside one JVM.
+Flower is for the other case: your domain model stays in your Spring Boot
+application, but a long-running internal flow needs a small runtime to execute
+it, one that waits for events, handles timeouts, checkpoints, resumes,
+inspects, and tests inside one JVM. State machines model state. Flower runs
+flows.
 
-State machines model state.
-Flower runs flows.
-
-The cost of "just build it yourself" appears when the flow starts needing the
-things below. None of them is hard alone. Together, they become a runtime you
-did not mean to write.
+The cost of "just build it yourself" is that, one requirement at a time, you
+rebuild a runtime you did not mean to write.
 
 | What the flow eventually needs | Hand-rolled around an enum | With Flower |
 | --- | --- | --- |
@@ -190,14 +201,6 @@ did not mean to write.
 | Checkpoint and resume after restart | Serialize position, persist it, rebuild, and resume. | `durable()` plus a `FlowCheckpointStore`. |
 | Deterministic tests | Abstract the clock, bypass the scheduler, and fake the bus yourself. | `ManualClock` plus `worker.tickOnce()`. |
 | Inspect what is running right now | Build your own dump/admin view. | `Engine.dump()` plus optional console. |
-
-You can build every row yourself, but then you are slowly rebuilding a runtime.
-Or you can adopt a formal state machine framework when the state model itself is
-the center of the problem.
-
-Flower is for the other case: your domain model stays in your Spring Boot
-application, but a long-running internal flow needs a small runtime to execute
-it.
 
 ## Typical Use With Kafka
 
@@ -432,7 +435,7 @@ worker.tickOnce();
 worker.tickOnce();
 ```
 
-## AI-Era Positioning
+## Structure For Generated Code
 
 Flower core is not an AI framework, and it does not depend on an LLM. Its
 relevance in the AI coding era is structure.
@@ -450,41 +453,11 @@ Generated and hand-written orchestration both become easier to inspect, test,
 recover, observe, and change. A step starts work, checks state, and returns an
 explicit result, so a reviewer, tool, or coding agent can follow it.
 
-> Flower is AI-era friendly, but not AI-specific.
-
-The broader Flower ecosystem is meant to bound AI in two places:
-
-- When AI writes code, Flower gives generated code an explicit Flow / Step
-  structure. `flower-check` can reject known bad patterns, and a future
-  developer MCP can guide coding agents before code is written.
-- When AI runs inside an application, higher-level modules can keep AI actions
-  behind harnesses, policies, approvals, audits, state machines, and MCP/tool
-  boundaries.
-
-Available now:
-
-- `flower-core`: the stable center. Explicit Flow / Step structure for
-  generated and hand-written orchestration.
-- `flower-check` (MVP): build-time checks that reject known Flower
-  anti-patterns, such as blocking a worker tick or hiding orchestration outside
-  the Flow / Step boundary.
-- `flower-ai-harness`: a separate higher-level AI execution harness, early but
-  already being tested with real application usage.
-
-Taking shape / in validation:
-
-- `flower-agent-runtime`: a controlled agent/action execution layer. The shape
-  exists and is being validated against real usage; APIs may still move.
-
-Roadmap:
-
-- `flower-dev-mcp`: developer MCP tools that teach coding agents Flower
-  concepts, templates, and design rules before code is written.
-- `flower-mcp-proxy`: a secure MCP/tool gateway for controlled business
-  actions.
-
-None of these layers turn `flower-core` itself into a model framework. The
-separation is deliberate.
+`flower-check` is available as build-time tooling for host applications. It can
+reject known Flower anti-patterns such as blocking a worker tick or hiding
+orchestration outside the Flow / Step boundary. Longer-term developer tooling
+ideas live in [ROADMAP.md](ROADMAP.md); they are intentionally outside
+`flower-core`.
 
 ## Step Lifecycle
 
@@ -727,8 +700,8 @@ String runId = ctx.executionContext().runId().orElse("unknown");
 
 Keep this context small. It is an execution id card, not a business context.
 Do not put roles, permissions, approval state, domain objects, agent ids,
-action ids, or policy decisions in Flower core context. Agent/action state
-belongs in higher-level runtime modules such as `flower-agent-runtime`.
+action ids, or policy decisions in Flower core context. Keep that state in the
+host application's own runtime or in a higher-level integration layer.
 
 `ExecutionContext` is attached to the `Flow`, not to a `ThreadLocal`. That keeps
 the same identity visible from steps, listeners, dumps, checkpoints, and
@@ -1090,7 +1063,8 @@ Early execution line:
 Read the MVP labels literally. These modules are useful enough to try, but
 their APIs may move more than `flower-core`. The event loop is a separate
 execution line, not a replacement for the tick-driven Worker / Flow / Step
-model.
+model. Work that is not shipped in this repository is tracked in
+[ROADMAP.md](ROADMAP.md).
 
 ## Future Worker Scheduling Direction
 

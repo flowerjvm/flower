@@ -43,14 +43,14 @@ cat > "$work_dir/pom.xml" <<XML
     <repositories>
         <repository>
             <id>github</id>
-            <url>https://maven.pkg.github.com/parkkevinsb/flower</url>
+            <url>https://maven.pkg.github.com/flowerjvm/flower</url>
         </repository>
     </repositories>
 
     <pluginRepositories>
         <pluginRepository>
             <id>github</id>
-            <url>https://maven.pkg.github.com/parkkevinsb/flower</url>
+            <url>https://maven.pkg.github.com/flowerjvm/flower</url>
         </pluginRepository>
     </pluginRepositories>
 

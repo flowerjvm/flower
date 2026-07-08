@@ -2,6 +2,24 @@ name: CI
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - pom.xml
+      - flower-core/**
+      - flower-eventloop/**
+      - flower-persistence-jdbc/**
+      - flower-eventloop-persistence-jdbc/**
+      - flower-spring-boot-starter/**
+      - flower-observability/**
+      - flower-testkit/**
+      - flower-check-annotations/**
+      - flower-check/**
+      - flower-check-maven-plugin/**
+      - flower-check-gradle-plugin/**
+      - .github/scripts/**
+      - .github/workflows/ci.yml
   pull_request:
     paths:
       - pom.xml

@@ -61,7 +61,8 @@ FLOWER-CHECK-001
 
 FLOWER-CHECK-002
   Step must not call LLM/provider SDKs directly.
-  Use flower-ai-harness for AI model calls.
+  Delegate model calls to an application service or higher-level integration
+  layer and wake Flower through state, events, signals, or deadlines.
 
 FLOWER-CHECK-003
   Flow code must not directly tick another Flow.
@@ -164,8 +165,8 @@ pull request
 ## Relationship To Other Flower Tools
 
 ```text
-flower-dev-mcp
-  = guides AI coding agents toward correct Flower designs.
+Developer guidance tools
+  = roadmap work for helping humans and coding agents design Flower flows.
 
 flower-check
   = rejects known bad Flower code patterns.

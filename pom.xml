@@ -15,7 +15,7 @@
         Flower is a lightweight Java orchestration toolkit.
         Engine -> Worker -> Flow -> Step -> StepNo / StepId.
     </description>
-    <url>https://github.com/parkKevinSB/flower</url>
+    <url>https://github.com/flowerjvm/flower</url>
     <inceptionYear>2026</inceptionYear>
 
     <licenses>
@@ -36,15 +36,15 @@
     </developers>
 
     <scm>
-        <connection>scm:git:https://github.com/parkKevinSB/flower.git</connection>
-        <developerConnection>scm:git:ssh://git@github.com/parkKevinSB/flower.git</developerConnection>
-        <url>https://github.com/parkKevinSB/flower</url>
+        <connection>scm:git:https://github.com/flowerjvm/flower.git</connection>
+        <developerConnection>scm:git:ssh://git@github.com/flowerjvm/flower.git</developerConnection>
+        <url>https://github.com/flowerjvm/flower</url>
         <tag>HEAD</tag>
     </scm>
 
     <issueManagement>
         <system>GitHub</system>
-        <url>https://github.com/parkKevinSB/flower/issues</url>
+        <url>https://github.com/flowerjvm/flower/issues</url>
     </issueManagement>
 
     <modules>
@@ -64,12 +64,12 @@
         <repository>
             <id>github</id>
             <name>GitHub Packages</name>
-            <url>https://maven.pkg.github.com/parkkevinsb/flower</url>
+            <url>https://maven.pkg.github.com/flowerjvm/flower</url>
         </repository>
         <snapshotRepository>
             <id>github</id>
             <name>GitHub Packages</name>
-            <url>https://maven.pkg.github.com/parkkevinsb/flower</url>
+            <url>https://maven.pkg.github.com/flowerjvm/flower</url>
         </snapshotRepository>
     </distributionManagement>
 

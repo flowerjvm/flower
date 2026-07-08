@@ -413,8 +413,7 @@ is called out as "a back door for business state"
 (`08-current-implementation-update.md`; `flower/README.md` Execution Context).
 
 **Fix:** Keep identity in `ExecutionContext`. Put roles/policy/approval/domain
-state in domain services and (for agents) a higher-level
-`flower-agent-runtime` layer.
+state in domain services or a higher-level integration layer.
 
 Detection: `ExecutionContext` construction from a map, or accessor names
 outside the allowed field set used on an `executionContext()` result.
@@ -510,8 +509,7 @@ registered action / policy gate.
 
 **Why:** Agent actions must be registered and policy-checked, not free-form side
 effects. Current Flower docs deliberately keep agent/action/approval state out
-of `flower-core` and reserve it for a higher-level `flower-agent-runtime`
-boundary.
+of `flower-core` and reserve it for a higher-level runtime boundary.
 
 **Fix:** Register the action and dispatch through `ActionRegistry`/`PolicyGate`
 so the write is gated, observable, and revocable.

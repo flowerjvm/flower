@@ -35,6 +35,9 @@ bin/
 # Local assistant config
 .claude/
 
+# Local legacy snapshots
+old/
+
 # OS
 .DS_Store
 Thumbs.db

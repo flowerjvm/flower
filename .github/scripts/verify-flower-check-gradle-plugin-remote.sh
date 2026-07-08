@@ -16,7 +16,7 @@ pluginManagement {
         gradlePluginPortal()
         mavenCentral()
         maven {
-            url = uri("https://maven.pkg.github.com/parkkevinsb/flower")
+            url = uri("https://maven.pkg.github.com/flowerjvm/flower")
             credentials {
                 username = providers.environmentVariable("GITHUB_ACTOR").orNull
                 password = providers.environmentVariable("GITHUB_TOKEN").orNull
@@ -30,7 +30,7 @@ dependencyResolutionManagement {
     repositories {
         mavenCentral()
         maven {
-            url = uri("https://maven.pkg.github.com/parkkevinsb/flower")
+            url = uri("https://maven.pkg.github.com/flowerjvm/flower")
             credentials {
                 username = providers.environmentVariable("GITHUB_ACTOR").orNull
                 password = providers.environmentVariable("GITHUB_TOKEN").orNull
