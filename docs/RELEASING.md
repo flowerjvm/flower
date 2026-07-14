@@ -141,4 +141,15 @@ The skip mode does not retain the final upload ZIP. Check each module's
 Javadoc JARs for every non-POM artifact before a real release is attempted.
 
 The separate `flower-check-gradle-plugin` build is not part of the Maven
-reactor and continues to use its dedicated Gradle publishing flow.
+reactor. It publishes two Maven Central coordinates through JReleaser:
+
+```text
+io.github.flowerjvm:flower-check-gradle-plugin:<version>
+io.github.flowerjvm.flower-check:io.github.flowerjvm.flower-check.gradle.plugin:<version>
+```
+
+The second coordinate is the marker used by Gradle's `plugins {}` DSL. The
+`Publish Gradle Plugin Release to Maven Central` workflow stages the plugin
+JAR, sources, Javadocs, and marker POM, then signs and publishes the bundle.
+For a release created before this workflow existed, run it manually with the
+same non-SNAPSHOT version after the Maven reactor is visible on Central.

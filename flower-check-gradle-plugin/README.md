@@ -17,15 +17,6 @@ pluginManagement {
     repositories {
         gradlePluginPortal()
         mavenCentral()
-        maven {
-            url = uri("https://maven.pkg.github.com/flowerjvm/flower")
-            credentials {
-                username = providers.gradleProperty("gpr.user")
-                    .orElse(providers.environmentVariable("GITHUB_ACTOR")).orNull
-                password = providers.gradleProperty("gpr.key")
-                    .orElse(providers.environmentVariable("GITHUB_TOKEN")).orNull
-            }
-        }
     }
 }
 ```
@@ -73,15 +64,16 @@ flowerCheck {
 
 ## Building This Plugin
 
-The Gradle plugin depends on the local `flower-check` artifact. Build it after
-installing the Maven checker artifacts:
+The Gradle plugin consumes the stable `flower-check` release from Maven
+Central. When developing both builds together, install the Maven checker
+artifacts locally first so the local build takes precedence:
 
 ```bash
 mvn -pl flower-check,flower-check-annotations -am install -DskipTests
 gradle -p flower-check-gradle-plugin --no-daemon check
 ```
 
-Publishing uses the Gradle `maven-publish` plugin and the same GitHub Packages
-repository as the Maven modules. The repository publish workflow verifies the
-published plugin by creating a temporary external Gradle project, resolving the
-plugin from GitHub Packages, and running `check`.
+Release publishing stages both the plugin implementation and its generated
+plugin marker, signs them, and publishes them to Maven Central. Snapshot builds
+continue to use GitHub Packages and are verified there by the repository
+publish workflow.

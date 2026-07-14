@@ -20,6 +20,7 @@ on:
       - flower-check-gradle-plugin/**
       - .github/scripts/**
       - .github/workflows/ci.yml
+      - .github/workflows/release-gradle-plugin.yml
   pull_request:
     paths:
       - pom.xml
@@ -36,6 +37,7 @@ on:
       - flower-check-gradle-plugin/**
       - .github/scripts/**
       - .github/workflows/ci.yml
+      - .github/workflows/release-gradle-plugin.yml
 
 permissions:
   contents: read
@@ -67,5 +69,7 @@ jobs:
         with:
           gradle-version: '8.10.2'
 
-      - name: Verify Gradle plugin
-        run: gradle -p flower-check-gradle-plugin --no-daemon check
+      - name: Verify and stage Gradle plugin publications
+        run: >-
+          gradle -p flower-check-gradle-plugin --no-daemon
+          check publishAllPublicationsToStagingRepository jreleaserConfig
