@@ -79,3 +79,4 @@ jobs:
           JRELEASER_GPG_PASSPHRASE: unused-for-config-validation
           JRELEASER_MAVENCENTRAL_USERNAME: unused-for-config-validation
           JRELEASER_MAVENCENTRAL_PASSWORD: unused-for-config-validation
+          JRELEASER_GITHUB_TOKEN: unused-for-config-validation
