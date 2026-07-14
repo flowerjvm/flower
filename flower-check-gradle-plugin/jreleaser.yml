@@ -15,6 +15,10 @@ signing:
     armored: true
     verify: false
 
+release:
+  github:
+    active: NEVER
+
 deploy:
   maven:
     mavenCentral:

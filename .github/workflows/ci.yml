@@ -73,3 +73,9 @@ jobs:
         run: >-
           gradle -p flower-check-gradle-plugin --no-daemon
           check publishAllPublicationsToStagingRepository jreleaserConfig
+        env:
+          JRELEASER_DRY_RUN: 'true'
+          JRELEASER_GPG_SECRET_KEY: unused-for-config-validation
+          JRELEASER_GPG_PASSPHRASE: unused-for-config-validation
+          JRELEASER_MAVENCENTRAL_USERNAME: unused-for-config-validation
+          JRELEASER_MAVENCENTRAL_PASSWORD: unused-for-config-validation
