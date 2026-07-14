@@ -100,4 +100,5 @@ publishing {
 jreleaser {
     configFile.set(layout.projectDirectory.file("jreleaser.yml"))
     dependsOnAssemble.set(false)
+    gitRootSearch.set(true)
 }
