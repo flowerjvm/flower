@@ -94,6 +94,10 @@ jobs:
           jreleaserConfig
         env:
           JRELEASER_PROJECT_VERSION: ${{ steps.release-version.outputs.version }}
+          JRELEASER_GPG_SECRET_KEY: ${{ secrets.MAVEN_GPG_PRIVATE_KEY }}
+          JRELEASER_GPG_PASSPHRASE: ${{ secrets.MAVEN_GPG_PASSPHRASE }}
+          JRELEASER_MAVENCENTRAL_USERNAME: ${{ secrets.CENTRAL_TOKEN_USERNAME }}
+          JRELEASER_MAVENCENTRAL_PASSWORD: ${{ secrets.CENTRAL_TOKEN_PASSWORD }}
           JRELEASER_GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Sign and publish Gradle plugin to Maven Central
