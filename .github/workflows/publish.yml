@@ -40,7 +40,21 @@ jobs:
           java-version: '17'
           cache: maven
 
+      - name: Resolve Flower snapshot version
+        id: flower-version
+        shell: bash
+        run: |
+          version="$(mvn -q -DforceStdout help:evaluate -Dexpression=project.version)"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          if [[ "$version" == *-SNAPSHOT ]]; then
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+            echo "Skipping snapshot publication for release version $version."
+          fi
+
       - name: Configure GitHub Packages
+        if: steps.flower-version.outputs.publish == 'true'
         run: |
           mkdir -p ~/.m2
           cat > ~/.m2/settings.xml <<'EOF'
@@ -60,20 +74,19 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Verify build
+        if: steps.flower-version.outputs.publish == 'true'
         run: mvn -B verify
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Publish to GitHub Packages
+        if: steps.flower-version.outputs.publish == 'true'
         run: mvn -B -DskipTests deploy
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Resolve Flower version
-        id: flower-version
-        run: echo "version=$(mvn -q -DforceStdout help:evaluate -Dexpression=project.version)" >> "$GITHUB_OUTPUT"
-
       - name: Verify Maven plugin remote consumption
+        if: steps.flower-version.outputs.publish == 'true'
         run: bash .github/scripts/verify-flower-check-maven-plugin-remote.sh
         env:
           FLOWER_VERSION: ${{ steps.flower-version.outputs.version }}
@@ -81,16 +94,22 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Set up Gradle
+        if: steps.flower-version.outputs.publish == 'true'
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.10.2'
 
       - name: Publish Gradle plugin to GitHub Packages
-        run: gradle -p flower-check-gradle-plugin --no-daemon check publish
+        if: steps.flower-version.outputs.publish == 'true'
+        run: >-
+          gradle -p flower-check-gradle-plugin --no-daemon
+          -PflowerVersion=${{ steps.flower-version.outputs.version }}
+          check publishAllPublicationsToGitHubPackagesRepository
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Verify Gradle plugin remote consumption
+        if: steps.flower-version.outputs.publish == 'true'
         run: bash .github/scripts/verify-flower-check-gradle-plugin-remote.sh
         env:
           FLOWER_VERSION: ${{ steps.flower-version.outputs.version }}

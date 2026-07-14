@@ -20,6 +20,7 @@ on:
       - flower-check-gradle-plugin/**
       - .github/scripts/**
       - .github/workflows/ci.yml
+      - .github/workflows/release-gradle-plugin.yml
   pull_request:
     paths:
       - pom.xml
@@ -36,6 +37,7 @@ on:
       - flower-check-gradle-plugin/**
       - .github/scripts/**
       - .github/workflows/ci.yml
+      - .github/workflows/release-gradle-plugin.yml
 
 permissions:
   contents: read
@@ -67,5 +69,14 @@ jobs:
         with:
           gradle-version: '8.10.2'
 
-      - name: Verify Gradle plugin
-        run: gradle -p flower-check-gradle-plugin --no-daemon check
+      - name: Verify and stage Gradle plugin publications
+        run: >-
+          gradle -p flower-check-gradle-plugin --no-daemon
+          check publishAllPublicationsToStagingRepository jreleaserConfig
+        env:
+          JRELEASER_DRY_RUN: 'true'
+          JRELEASER_GPG_SECRET_KEY: unused-for-config-validation
+          JRELEASER_GPG_PASSPHRASE: unused-for-config-validation
+          JRELEASER_MAVENCENTRAL_USERNAME: unused-for-config-validation
+          JRELEASER_MAVENCENTRAL_PASSWORD: unused-for-config-validation
+          JRELEASER_GITHUB_TOKEN: unused-for-config-validation

@@ -1,0 +1,110 @@
+name: Publish Gradle Plugin Release to Maven Central
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Release version already committed in pom.xml (for example, 0.1.0)
+        required: true
+        type: string
+  release:
+    types:
+      - published
+
+permissions:
+  contents: read
+
+concurrency:
+  group: maven-central-gradle-plugin-release
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Check required release secrets
+        shell: bash
+        env:
+          CENTRAL_TOKEN_USERNAME: ${{ secrets.CENTRAL_TOKEN_USERNAME }}
+          CENTRAL_TOKEN_PASSWORD: ${{ secrets.CENTRAL_TOKEN_PASSWORD }}
+          MAVEN_GPG_PRIVATE_KEY: ${{ secrets.MAVEN_GPG_PRIVATE_KEY }}
+          MAVEN_GPG_PASSPHRASE: ${{ secrets.MAVEN_GPG_PASSPHRASE }}
+        run: |
+          missing=0
+          for name in CENTRAL_TOKEN_USERNAME CENTRAL_TOKEN_PASSWORD MAVEN_GPG_PRIVATE_KEY MAVEN_GPG_PASSPHRASE; do
+            if [ -z "${!name}" ]; then
+              echo "Missing required GitHub Actions secret: ${name}" >&2
+              missing=1
+            fi
+          done
+          exit "$missing"
+
+      - name: Set up Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.10.2'
+
+      - name: Resolve and validate release version
+        id: release-version
+        shell: bash
+        env:
+          REQUESTED_VERSION: ${{ github.event.inputs.version }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          if [ "$GITHUB_EVENT_NAME" = "release" ]; then
+            release_version="${RELEASE_TAG#v}"
+          else
+            release_version="$REQUESTED_VERSION"
+          fi
+
+          if [[ ! "$release_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z][0-9A-Za-z.-]*)?$ ]] || [[ "$release_version" == *-SNAPSHOT ]]; then
+            echo "Gradle plugin releases require a non-SNAPSHOT semantic version: $release_version" >&2
+            exit 1
+          fi
+
+          pom_version="$(mvn -q -DforceStdout help:evaluate -Dexpression=project.version)"
+          if [ "$pom_version" != "$release_version" ]; then
+            echo "pom.xml version ($pom_version) does not match release version ($release_version)." >&2
+            exit 1
+          fi
+
+          echo "version=$release_version" >> "$GITHUB_OUTPUT"
+
+      - name: Build and stage Gradle plugin publications
+        run: >-
+          gradle -p flower-check-gradle-plugin --no-daemon
+          -PflowerVersion=${{ steps.release-version.outputs.version }}
+          clean check publishAllPublicationsToStagingRepository
+
+      - name: Validate JReleaser configuration
+        run: >-
+          gradle -p flower-check-gradle-plugin --no-daemon
+          -PflowerVersion=${{ steps.release-version.outputs.version }}
+          jreleaserConfig
+        env:
+          JRELEASER_PROJECT_VERSION: ${{ steps.release-version.outputs.version }}
+          JRELEASER_GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Sign and publish Gradle plugin to Maven Central
+        run: >-
+          gradle -p flower-check-gradle-plugin --no-daemon
+          -PflowerVersion=${{ steps.release-version.outputs.version }}
+          jreleaserDeploy
+        env:
+          JRELEASER_PROJECT_VERSION: ${{ steps.release-version.outputs.version }}
+          JRELEASER_GPG_SECRET_KEY: ${{ secrets.MAVEN_GPG_PRIVATE_KEY }}
+          JRELEASER_GPG_PASSPHRASE: ${{ secrets.MAVEN_GPG_PASSPHRASE }}
+          JRELEASER_MAVENCENTRAL_USERNAME: ${{ secrets.CENTRAL_TOKEN_USERNAME }}
+          JRELEASER_MAVENCENTRAL_PASSWORD: ${{ secrets.CENTRAL_TOKEN_PASSWORD }}
+          JRELEASER_GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

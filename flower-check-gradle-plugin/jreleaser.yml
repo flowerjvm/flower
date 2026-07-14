@@ -1,0 +1,36 @@
+project:
+  name: flower-check-gradle-plugin
+  description: Runs flower-check against host application source during Gradle check.
+  authors:
+    - Kevin SB Park
+  license: Apache-2.0
+  links:
+    homepage: https://github.com/flowerjvm/flower
+    documentation: https://github.com/flowerjvm/flower/tree/main/flower-check-gradle-plugin
+    bugTracker: https://github.com/flowerjvm/flower/issues
+
+signing:
+  pgp:
+    active: ALWAYS
+    armored: true
+    verify: false
+
+deploy:
+  maven:
+    mavenCentral:
+      central:
+        active: RELEASE
+        url: https://central.sonatype.com/api/v1/publisher
+        stage: FULL
+        applyMavenCentralRules: true
+        maxRetries: 120
+        retryDelay: 10
+        stagingRepositories:
+          - build/staging-deploy
+        artifactOverrides:
+          - groupId: io.github.flowerjvm.flower-check
+            artifactId: io.github.flowerjvm.flower-check.gradle.plugin
+            jar: false
+            sourceJar: false
+            javadocJar: false
+            verifyPom: true
