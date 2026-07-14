@@ -1,6 +1,6 @@
 // Copy this snippet into build.gradle.kts in the host Flower project.
 // The host project should apply the Java plugin before this snippet.
-val flowerCheckVersion = "0.1.0-SNAPSHOT"
+val flowerCheckVersion = "0.1.0"
 
 repositories {
     mavenCentral()

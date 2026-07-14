@@ -1,7 +1,7 @@
 // Copy this snippet into build.gradle.kts in the host Flower project.
 plugins {
     java
-    id("io.github.flowerjvm.flower-check") version "0.1.0-SNAPSHOT"
+    id("io.github.flowerjvm.flower-check") version "0.1.0"
 }
 
 repositories {
@@ -17,7 +17,7 @@ repositories {
 }
 
 dependencies {
-    compileOnly("io.github.flowerjvm:flower-check-annotations:0.1.0-SNAPSHOT")
+    compileOnly("io.github.flowerjvm:flower-check-annotations:0.1.0")
 }
 
 flowerCheck {

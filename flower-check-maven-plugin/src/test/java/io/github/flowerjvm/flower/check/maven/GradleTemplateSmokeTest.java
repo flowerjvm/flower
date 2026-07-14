@@ -25,7 +25,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class GradleTemplateSmokeTest {
 
     private static final String FLOWER_GROUP_ID = "io.github.flowerjvm";
-    private static final String FLOWER_VERSION = "0.1.0-SNAPSHOT";
+    private static final String FLOWER_VERSION = "0.1.0";
 
     @TempDir
     Path tempDir;

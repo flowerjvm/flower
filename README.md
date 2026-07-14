@@ -4,7 +4,7 @@
 
 Flower -- the one that flows.
 
-Project status: `0.1.0-SNAPSHOT`. The stable center is `flower-core`; modules
+Project status: `0.1.0`. The stable center is `flower-core`; modules
 marked MVP are usable but may change more quickly before a 1.0 release. See
 [CONTRIBUTING.md](CONTRIBUTING.md), [SECURITY.md](SECURITY.md), and
 [ROADMAP.md](ROADMAP.md) for project process and planned work.
@@ -1118,7 +1118,7 @@ Add it as a test dependency:
 <dependency>
     <groupId>io.github.flowerjvm</groupId>
     <artifactId>flower-testkit</artifactId>
-    <version>0.1.0-SNAPSHOT</version>
+    <version>0.1.0</version>
     <scope>test</scope>
 </dependency>
 ```
