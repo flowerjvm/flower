@@ -1,6 +1,6 @@
 package demo;
 
-import io.github.parkkevinsb.flower.check.annotation.FlowerSchedulerApproved;
+import io.github.flowerjvm.flower.check.annotation.FlowerSchedulerApproved;
 
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;

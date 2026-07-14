@@ -16,7 +16,7 @@
 
     <dependencies>
         <dependency>
-            <groupId>io.github.parkkevinsb.flower</groupId>
+            <groupId>io.github.flowerjvm</groupId>
             <artifactId>flower-core</artifactId>
             <version>@project.version@</version>
         </dependency>
@@ -33,7 +33,7 @@
                 </configuration>
             </plugin>
             <plugin>
-                <groupId>io.github.parkkevinsb.flower</groupId>
+                <groupId>io.github.flowerjvm</groupId>
                 <artifactId>flower-check-maven-plugin</artifactId>
                 <version>@project.version@</version>
                 <executions>

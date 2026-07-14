@@ -49,7 +49,7 @@ engine   FlowerCheckEngine - orchestrates the pipeline
    dev-notes, sample, or archdox for agent rules.
 3. Create the class under `rule.core` (or `rule.agent`), extend `AbstractRule`.
 4. Register it in
-   `src/main/resources/META-INF/services/io.github.parkkevinsb.flower.check.rule.Rule`.
+   `src/main/resources/META-INF/services/io.github.flowerjvm.flower.check.rule.Rule`.
    The engine discovers rules by `ServiceLoader`; do not hard-wire rules into
    the engine.
 5. Add a test, and add/confirm a known-good `flower-sample` file stays at zero

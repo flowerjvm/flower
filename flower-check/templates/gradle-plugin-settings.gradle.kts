@@ -5,7 +5,7 @@ pluginManagement {
         mavenCentral()
         maven {
             name = "GitHubPackages"
-            url = uri("https://maven.pkg.github.com/parkkevinsb/flower")
+            url = uri("https://maven.pkg.github.com/flowerjvm/flower")
             credentials {
                 username = providers.gradleProperty("gpr.user")
                     .orElse(providers.environmentVariable("GITHUB_ACTOR"))

@@ -62,7 +62,7 @@ cat > "$work_dir/pom.xml" <<XML
                 <version>3.13.0</version>
             </plugin>
             <plugin>
-                <groupId>io.github.parkkevinsb.flower</groupId>
+                <groupId>io.github.flowerjvm</groupId>
                 <artifactId>flower-check-maven-plugin</artifactId>
                 <version>$FLOWER_VERSION</version>
                 <executions>

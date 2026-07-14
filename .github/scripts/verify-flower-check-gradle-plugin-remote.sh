@@ -45,7 +45,7 @@ KOTLIN
 cat > "$work_dir/build.gradle.kts" <<KOTLIN
 plugins {
     java
-    id("io.github.parkkevinsb.flower.flower-check") version "$FLOWER_VERSION"
+    id("io.github.flowerjvm.flower-check") version "$FLOWER_VERSION"
 }
 KOTLIN
 

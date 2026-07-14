@@ -98,14 +98,14 @@ Host application Maven build:
 
 ```xml
 <dependency>
-    <groupId>io.github.parkkevinsb.flower</groupId>
+    <groupId>io.github.flowerjvm</groupId>
     <artifactId>flower-check-annotations</artifactId>
     <version>0.1.0-SNAPSHOT</version>
     <scope>provided</scope>
 </dependency>
 
 <plugin>
-    <groupId>io.github.parkkevinsb.flower</groupId>
+    <groupId>io.github.flowerjvm</groupId>
     <artifactId>flower-check-maven-plugin</artifactId>
     <version>0.1.0-SNAPSHOT</version>
     <executions>

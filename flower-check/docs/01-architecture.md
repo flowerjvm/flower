@@ -62,7 +62,7 @@ collect source roots and configuration, then call the same engine the CLI calls.
 Internal package layout:
 
 ```text
-io.github.parkkevinsb.flower.check
+io.github.flowerjvm.flower.check
   cli         entry point, argument parsing, exit codes
   source      SourceLoader, SourceFile, SourceSet
   parse       Parser abstraction over JavaParser + text fallback

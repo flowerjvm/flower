@@ -8,7 +8,7 @@ official marker for development policy checks.
 
 ```xml
 <dependency>
-    <groupId>io.github.parkkevinsb.flower</groupId>
+    <groupId>io.github.flowerjvm</groupId>
     <artifactId>flower-check-annotations</artifactId>
     <version>0.1.0-SNAPSHOT</version>
     <scope>provided</scope>
@@ -18,7 +18,7 @@ official marker for development policy checks.
 Example:
 
 ```java
-import io.github.parkkevinsb.flower.check.annotation.FlowerSchedulerApproved;
+import io.github.flowerjvm.flower.check.annotation.FlowerSchedulerApproved;
 import org.springframework.scheduling.annotation.Scheduled;
 
 class ReconciliationJob {
