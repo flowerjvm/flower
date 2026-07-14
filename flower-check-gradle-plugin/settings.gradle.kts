@@ -12,7 +12,7 @@ dependencyResolutionManagement {
         mavenCentral()
         maven {
             name = "GitHubPackages"
-            url = uri("https://maven.pkg.github.com/parkkevinsb/flower")
+            url = uri("https://maven.pkg.github.com/flowerjvm/flower")
             credentials {
                 username = (providers.gradleProperty("gpr.user").orNull
                     ?: System.getenv("GITHUB_ACTOR")

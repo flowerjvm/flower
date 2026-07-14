@@ -67,7 +67,7 @@ the canonical Flower definition. These external sources outrank every
 `flower-check` doc on questions of correct Flower usage:
 
 ```text
-1. flower-core source   io.github.parkkevinsb.flower.core.*  (the real API)
+1. flower-core source   io.github.flowerjvm.flower.core.*  (the real API)
 2. flower/README.md     public Step Design Rules, Notes For AI Agents
 3. flower-dev-notes     design rationale and intentional exclusions
 4. flower-sample        known-good code = the zero-false-positive baseline

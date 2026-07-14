@@ -10,9 +10,8 @@ This project records notable changes here.
 - Updated repository metadata for the `flowerjvm/flower` organization.
 - Added public contribution, security, conduct, and roadmap documents.
 
-## 0.1.0-SNAPSHOT
+## 0.1.0
 
 - Initial development line for `flower-core`, JDBC persistence, Spring Boot
   integration, observability, testkit, event loop modules, and flower-check
   tooling.
-

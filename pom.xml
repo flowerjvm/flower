@@ -5,9 +5,9 @@
                              https://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
-    <groupId>io.github.parkkevinsb.flower</groupId>
+    <groupId>io.github.flowerjvm</groupId>
     <artifactId>flower-parent</artifactId>
-    <version>0.1.0-SNAPSHOT</version>
+    <version>0.1.0</version>
     <packaging>pom</packaging>
 
     <name>Flower Parent</name>
@@ -87,12 +87,19 @@
         <maven-surefire-plugin.version>3.2.5</maven-surefire-plugin.version>
         <maven-source-plugin.version>3.3.1</maven-source-plugin.version>
         <maven-javadoc-plugin.version>3.10.1</maven-javadoc-plugin.version>
+        <maven-gpg-plugin.version>3.2.8</maven-gpg-plugin.version>
         <maven-jar-plugin.version>3.4.2</maven-jar-plugin.version>
         <maven-enforcer-plugin.version>3.5.0</maven-enforcer-plugin.version>
         <exec-maven-plugin.version>3.5.0</exec-maven-plugin.version>
         <maven-plugin-plugin.version>3.13.1</maven-plugin-plugin.version>
         <maven-invoker-plugin.version>3.10.1</maven-invoker-plugin.version>
         <maven-plugin-api.version>3.9.9</maven-plugin-api.version>
+        <central-publishing-maven-plugin.version>0.11.0</central-publishing-maven-plugin.version>
+
+        <!-- Maven Central release controls. Override central.skipPublishing for a local lifecycle dry run. -->
+        <central.autoPublish>true</central.autoPublish>
+        <central.skipPublishing>false</central.skipPublishing>
+        <central.waitUntil>published</central.waitUntil>
 
         <!-- Test dependency versions -->
         <junit-jupiter.version>5.10.3</junit-jupiter.version>
@@ -115,37 +122,37 @@
     <dependencyManagement>
         <dependencies>
             <dependency>
-                <groupId>io.github.parkkevinsb.flower</groupId>
+                <groupId>io.github.flowerjvm</groupId>
                 <artifactId>flower-core</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
-                <groupId>io.github.parkkevinsb.flower</groupId>
+                <groupId>io.github.flowerjvm</groupId>
                 <artifactId>flower-eventloop</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
-                <groupId>io.github.parkkevinsb.flower</groupId>
+                <groupId>io.github.flowerjvm</groupId>
                 <artifactId>flower-persistence-jdbc</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
-                <groupId>io.github.parkkevinsb.flower</groupId>
+                <groupId>io.github.flowerjvm</groupId>
                 <artifactId>flower-eventloop-persistence-jdbc</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
-                <groupId>io.github.parkkevinsb.flower</groupId>
+                <groupId>io.github.flowerjvm</groupId>
                 <artifactId>flower-testkit</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
-                <groupId>io.github.parkkevinsb.flower</groupId>
+                <groupId>io.github.flowerjvm</groupId>
                 <artifactId>flower-check-annotations</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
-                <groupId>io.github.parkkevinsb.flower</groupId>
+                <groupId>io.github.flowerjvm</groupId>
                 <artifactId>flower-check</artifactId>
                 <version>${project.version}</version>
             </dependency>
@@ -273,6 +280,18 @@
                 </plugin>
                 <plugin>
                     <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-gpg-plugin</artifactId>
+                    <version>${maven-gpg-plugin.version}</version>
+                    <configuration>
+                        <bestPractices>true</bestPractices>
+                        <gpgArguments>
+                            <arg>--pinentry-mode</arg>
+                            <arg>loopback</arg>
+                        </gpgArguments>
+                    </configuration>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
                     <artifactId>maven-jar-plugin</artifactId>
                     <version>${maven-jar-plugin.version}</version>
                 </plugin>
@@ -320,6 +339,31 @@
                                 </goals>
                             </execution>
                         </executions>
+                    </plugin>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-gpg-plugin</artifactId>
+                        <executions>
+                            <execution>
+                                <id>sign-artifacts</id>
+                                <phase>verify</phase>
+                                <goals>
+                                    <goal>sign</goal>
+                                </goals>
+                            </execution>
+                        </executions>
+                    </plugin>
+                    <plugin>
+                        <groupId>org.sonatype.central</groupId>
+                        <artifactId>central-publishing-maven-plugin</artifactId>
+                        <version>${central-publishing-maven-plugin.version}</version>
+                        <extensions>true</extensions>
+                        <configuration>
+                            <publishingServerId>central</publishingServerId>
+                            <autoPublish>${central.autoPublish}</autoPublish>
+                            <skipPublishing>${central.skipPublishing}</skipPublishing>
+                            <waitUntil>${central.waitUntil}</waitUntil>
+                        </configuration>
                     </plugin>
                 </plugins>
             </build>

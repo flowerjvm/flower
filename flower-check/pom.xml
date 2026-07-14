@@ -6,9 +6,9 @@
     <modelVersion>4.0.0</modelVersion>
 
     <parent>
-        <groupId>io.github.parkkevinsb.flower</groupId>
+        <groupId>io.github.flowerjvm</groupId>
         <artifactId>flower-parent</artifactId>
-        <version>0.1.0-SNAPSHOT</version>
+        <version>0.1.0</version>
         <relativePath>../pom.xml</relativePath>
     </parent>
 
@@ -56,7 +56,7 @@
                 <configuration>
                     <archive>
                         <manifest>
-                            <mainClass>io.github.parkkevinsb.flower.check.cli.FlowerCheckCli</mainClass>
+                            <mainClass>io.github.flowerjvm.flower.check.cli.FlowerCheckCli</mainClass>
                         </manifest>
                     </archive>
                 </configuration>
@@ -73,7 +73,7 @@
                         </goals>
                         <configuration>
                             <skip>${flower.check.skip}</skip>
-                            <mainClass>io.github.parkkevinsb.flower.check.cli.FlowerCheckVerify</mainClass>
+                            <mainClass>io.github.flowerjvm.flower.check.cli.FlowerCheckVerify</mainClass>
                             <classpathScope>runtime</classpathScope>
                             <arguments>
                                 <argument>${project.basedir}/../flower-core/src/main/java</argument>

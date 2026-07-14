@@ -35,7 +35,7 @@ Then apply the plugin:
 ```kotlin
 plugins {
     java
-    id("io.github.parkkevinsb.flower.flower-check") version "0.1.0-SNAPSHOT"
+    id("io.github.flowerjvm.flower-check") version "0.1.0"
 }
 ```
 

@@ -6,9 +6,9 @@
     <modelVersion>4.0.0</modelVersion>
 
     <parent>
-        <groupId>io.github.parkkevinsb.flower</groupId>
+        <groupId>io.github.flowerjvm</groupId>
         <artifactId>flower-parent</artifactId>
-        <version>0.1.0-SNAPSHOT</version>
+        <version>0.1.0</version>
         <relativePath>../pom.xml</relativePath>
     </parent>
 
@@ -23,16 +23,16 @@
 
     <dependencies>
         <dependency>
-            <groupId>io.github.parkkevinsb.flower</groupId>
+            <groupId>io.github.flowerjvm</groupId>
             <artifactId>flower-check</artifactId>
         </dependency>
         <dependency>
-            <groupId>io.github.parkkevinsb.flower</groupId>
+            <groupId>io.github.flowerjvm</groupId>
             <artifactId>flower-core</artifactId>
             <scope>test</scope>
         </dependency>
         <dependency>
-            <groupId>io.github.parkkevinsb.flower</groupId>
+            <groupId>io.github.flowerjvm</groupId>
             <artifactId>flower-check-annotations</artifactId>
             <scope>test</scope>
         </dependency>

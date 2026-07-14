@@ -4,7 +4,7 @@
 
 Flower -- the one that flows.
 
-Project status: `0.1.0-SNAPSHOT`. The stable center is `flower-core`; modules
+Project status: `0.1.0`. The stable center is `flower-core`; modules
 marked MVP are usable but may change more quickly before a 1.0 release. See
 [CONTRIBUTING.md](CONTRIBUTING.md), [SECURITY.md](SECURITY.md), and
 [ROADMAP.md](ROADMAP.md) for project process and planned work.
@@ -366,14 +366,14 @@ Engine
 ## Quick Start
 
 ```java
-import io.github.parkkevinsb.flower.core.engine.Engine;
-import io.github.parkkevinsb.flower.core.event.InMemoryEventBus;
-import io.github.parkkevinsb.flower.core.flow.Flow;
-import io.github.parkkevinsb.flower.core.step.Step;
-import io.github.parkkevinsb.flower.core.step.StepContext;
-import io.github.parkkevinsb.flower.core.step.StepResult;
-import io.github.parkkevinsb.flower.core.time.SystemClock;
-import io.github.parkkevinsb.flower.core.worker.Worker;
+import io.github.flowerjvm.flower.core.engine.Engine;
+import io.github.flowerjvm.flower.core.event.InMemoryEventBus;
+import io.github.flowerjvm.flower.core.flow.Flow;
+import io.github.flowerjvm.flower.core.step.Step;
+import io.github.flowerjvm.flower.core.step.StepContext;
+import io.github.flowerjvm.flower.core.step.StepResult;
+import io.github.flowerjvm.flower.core.time.SystemClock;
+import io.github.flowerjvm.flower.core.worker.Worker;
 
 public final class FlowerQuickStart {
 
@@ -673,7 +673,7 @@ Existing code does not need to change. Flows default to
 `ExecutionContext.empty()`.
 
 ```java
-import io.github.parkkevinsb.flower.core.context.ExecutionContext;
+import io.github.flowerjvm.flower.core.context.ExecutionContext;
 
 ExecutionContext execution = ExecutionContext.builder()
         .tenantId("office-a")
@@ -1116,9 +1116,9 @@ Add it as a test dependency:
 
 ```xml
 <dependency>
-    <groupId>io.github.parkkevinsb.flower</groupId>
+    <groupId>io.github.flowerjvm</groupId>
     <artifactId>flower-testkit</artifactId>
-    <version>0.1.0-SNAPSHOT</version>
+    <version>0.1.0</version>
     <scope>test</scope>
 </dependency>
 ```
@@ -1238,6 +1238,9 @@ mvn install
 ```
 
 Then use the modules you need from your application.
+
+Release preparation and Maven Central publisher setup are documented in
+[docs/RELEASING.md](docs/RELEASING.md).
 
 ## License
 

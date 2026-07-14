@@ -1,0 +1,765 @@
+package io.github.flowerjvm.flower.core.worker;
+
+import io.github.flowerjvm.flower.core.event.EventBus;
+import io.github.flowerjvm.flower.core.flow.Flow;
+import io.github.flowerjvm.flower.core.flow.FlowId;
+import io.github.flowerjvm.flower.core.flow.FlowPersistence;
+import io.github.flowerjvm.flower.core.flow.FlowSnapshot;
+import io.github.flowerjvm.flower.core.flow.FlowState;
+import io.github.flowerjvm.flower.core.flow.LifecycleObserver;
+import io.github.flowerjvm.flower.core.listener.FlowerListener;
+import io.github.flowerjvm.flower.core.persistence.FlowCheckpointStore;
+import io.github.flowerjvm.flower.core.time.Clock;
+
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Iterator;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Queue;
+import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.locks.ReentrantLock;
+
+/**
+ * Single-threaded execution context for a set of Flows.
+ *
+ * <p>A Worker owns one tick loop. On each tick it:
+ *
+ * <ol>
+ *   <li>applies pending submits and cancels</li>
+ *   <li>ticks every active non-terminal Flow once</li>
+ *   <li>removes terminal Flows and fires listener events</li>
+ * </ol>
+ *
+ * <p>Flows are processed in submission order so the result of a tick is
+ * deterministic given the same inputs. {@link #tickOnce()} is public so
+ * tests can drive the Worker manually with {@link io.github.flowerjvm.flower.core.time.ManualClock}
+ * instead of the real scheduler.
+ */
+public final class Worker {
+
+    private final String name;
+    private final long intervalMillis;
+
+    // Mutated under stateLock. activeFlows uses LinkedHashMap for insertion-order iteration.
+    private final Map<FlowId, Flow> activeFlows = new LinkedHashMap<>();
+    private final Queue<Flow> pendingSubmits = new ConcurrentLinkedQueue<>();
+    private final Queue<FlowId> pendingCancels = new ConcurrentLinkedQueue<>();
+    private final Object stateLock = new Object();
+    // Serializes all direct Flow mutations: tick, active cancel, stop cleanup, and snapshots.
+    private final ReentrantLock executionLock = new ReentrantLock();
+
+    private volatile WorkerState state = WorkerState.CREATED;
+    private volatile DriveMode driveMode = DriveMode.NONE;
+
+    private Clock clock;
+    private EventBus eventBus;
+    private List<FlowerListener> listeners = Collections.emptyList();
+    private CheckpointCoordinator checkpointCoordinator;
+    private FlowOwnershipRegistry ownershipRegistry;
+
+    private ScheduledExecutorService scheduler;
+    private ScheduledFuture<?> tickFuture;
+
+    Worker(String name, long intervalMillis) {
+        this.name = name;
+        this.intervalMillis = intervalMillis;
+    }
+
+    public static WorkerBuilder builder(String name) {
+        return new WorkerBuilder(name);
+    }
+
+    public String name() {
+        return name;
+    }
+
+    public long intervalMillis() {
+        return intervalMillis;
+    }
+
+    public WorkerState state() {
+        return state;
+    }
+
+    public DriveMode driveMode() {
+        return driveMode;
+    }
+
+    /**
+     * Snapshot of currently-active flows. The returned list does not reflect
+     * later mutations.
+     */
+    public List<FlowSnapshot> snapshot() {
+        executionLock.lock();
+        try {
+            synchronized (stateLock) {
+                List<FlowSnapshot> out = new ArrayList<>(activeFlows.size());
+                for (Flow f : activeFlows.values()) {
+                    out.add(f.snapshot());
+                }
+                return out;
+            }
+        } finally {
+            executionLock.unlock();
+        }
+    }
+
+    /**
+     * Snapshot of currently-active flows including static Step definition
+     * metadata for admin/dump views. Listener callbacks use the lightweight
+     * variant so Worker tick events do not repeatedly materialize Step lists.
+     */
+    public List<FlowSnapshot> snapshotWithStepDefinitions() {
+        executionLock.lock();
+        try {
+            synchronized (stateLock) {
+                List<FlowSnapshot> out = new ArrayList<>(activeFlows.size());
+                for (Flow f : activeFlows.values()) {
+                    out.add(f.snapshotWithStepDefinitions());
+                }
+                return out;
+            }
+        } finally {
+            executionLock.unlock();
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // Engine-facing setup
+    // ------------------------------------------------------------------
+
+    /**
+     * Bind shared runtime services. Called by {@code Engine} before {@link #start()}.
+     */
+    public void attach(Clock clock, EventBus eventBus, List<FlowerListener> listeners) {
+        attach(clock, eventBus, listeners, FlowCheckpointStore.NOOP);
+    }
+
+    /**
+     * Bind shared runtime services and checkpoint storage. Called by
+     * {@code Engine} before {@link #start()}.
+     */
+    public void attach(
+            Clock clock,
+            EventBus eventBus,
+            List<FlowerListener> listeners,
+            FlowCheckpointStore checkpointStore) {
+        attach(clock, eventBus, listeners, checkpointStore, new FlowOwnershipRegistry());
+    }
+
+    public void attach(
+            Clock clock,
+            EventBus eventBus,
+            List<FlowerListener> listeners,
+            FlowCheckpointStore checkpointStore,
+            FlowOwnershipRegistry ownershipRegistry) {
+        if (clock == null) {
+            throw new IllegalArgumentException("clock must not be null");
+        }
+        if (ownershipRegistry == null) {
+            throw new IllegalArgumentException("ownershipRegistry must not be null");
+        }
+        synchronized (stateLock) {
+            if (state != WorkerState.CREATED) {
+                throw new IllegalStateException(
+                        "Worker " + name + " already attached, state=" + state);
+            }
+            this.clock = clock;
+            this.eventBus = eventBus;
+            this.listeners = listeners == null
+                    ? Collections.emptyList()
+                    : Collections.unmodifiableList(new ArrayList<>(listeners));
+            this.checkpointCoordinator = new CheckpointCoordinator(
+                    name,
+                    clock,
+                    checkpointStore == null ? FlowCheckpointStore.NOOP : checkpointStore,
+                    this::notifyWorkerError);
+            this.ownershipRegistry = ownershipRegistry;
+            this.state = WorkerState.ATTACHED;
+            this.driveMode = DriveMode.NONE;
+        }
+    }
+
+    /**
+     * Start the internal scheduler. Engine calls this; user code does not
+     * need to call it directly when using Engine. A paused Worker must be
+     * resumed with {@link #resume()}, not started again.
+     */
+    public void start() {
+        synchronized (stateLock) {
+            ensureAttached();
+            if (state == WorkerState.RUNNING) return;
+            if (state == WorkerState.PAUSED) {
+                throw new IllegalStateException(
+                        "Worker " + name + " is paused; call resume() instead of start()");
+            }
+            if (state == WorkerState.STOPPING || state == WorkerState.STOPPED) {
+                throw new IllegalStateException("Worker " + name + " already stopped");
+            }
+            if (state != WorkerState.ATTACHED) {
+                throw new IllegalStateException("Worker " + name + " cannot start from state=" + state);
+            }
+            if (driveMode == DriveMode.MANUAL) {
+                throw new IllegalStateException(
+                        "Worker " + name + " is already in manual drive mode");
+            }
+            driveMode = DriveMode.SCHEDULED;
+            state = WorkerState.RUNNING;
+            scheduler = Executors.newSingleThreadScheduledExecutor(threadFactory());
+            // flower-check:ignore FLOWER-CHECK-016 reason: Flower Worker owns the framework tick loop.
+            tickFuture = scheduler.scheduleWithFixedDelay(
+                    this::tickSafely, 0L, intervalMillis, TimeUnit.MILLISECONDS);
+        }
+    }
+
+    /**
+     * Stop the internal scheduler. Transient flows are cancelled. Durable
+     * flows are checkpointed and suspended so they can be rebuilt and resumed
+     * by the host application.
+     */
+    public void stop() {
+        ScheduledExecutorService toShutdown;
+        ScheduledFuture<?> toCancel;
+        synchronized (stateLock) {
+            if (state == WorkerState.STOPPED) return;
+            toShutdown = scheduler;
+            toCancel = tickFuture;
+            scheduler = null;
+            tickFuture = null;
+            state = WorkerState.STOPPING;
+        }
+        if (toCancel != null) toCancel.cancel(false);
+        if (toShutdown != null) toShutdown.shutdown();
+        if (executionLock.isHeldByCurrentThread()) {
+            return;
+        }
+        executionLock.lock();
+        try {
+            completeStopIfRequested();
+        } finally {
+            executionLock.unlock();
+        }
+    }
+
+    public void pause() {
+        synchronized (stateLock) {
+            if (state == WorkerState.RUNNING) {
+                state = WorkerState.PAUSED;
+            }
+        }
+    }
+
+    public void resume() {
+        synchronized (stateLock) {
+            if (state == WorkerState.PAUSED) {
+                state = WorkerState.RUNNING;
+            }
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // Submission API
+    // ------------------------------------------------------------------
+
+    public void submit(Flow flow) {
+        submit(flow, DuplicatePolicy.REJECT);
+    }
+
+    public void submit(Flow flow, DuplicatePolicy policy) {
+        if (flow == null) {
+            throw new IllegalArgumentException("flow must not be null");
+        }
+        if (policy == null) {
+            throw new IllegalArgumentException("policy must not be null");
+        }
+        synchronized (stateLock) {
+            ensureAttached();
+            if (state == WorkerState.STOPPING || state == WorkerState.STOPPED) {
+                throw new IllegalStateException("Worker " + name + " is stopped");
+            }
+            if (flow.persistence() == FlowPersistence.DURABLE
+                    && !checkpointCoordinator.supportsDurableFlows()) {
+                throw new IllegalStateException(
+                        "Durable Flow requires a durable FlowCheckpointStore: " + flow.flowId());
+            }
+            FlowId id = flow.flowId();
+            boolean duplicateActive = activeFlows.containsKey(id);
+            boolean duplicatePending = containsPending(id);
+            boolean duplicate = duplicateActive || duplicatePending;
+            if (duplicate) {
+                switch (policy) {
+                    case REJECT:
+                        throw new IllegalStateException(
+                                "Flow already submitted to worker " + name + ": " + id);
+                    case IGNORE:
+                        return;
+                    case REPLACE:
+                        if (duplicatePending) {
+                            cancelPendingSubmits(id);
+                        }
+                        if (duplicateActive) {
+                            pendingCancels.add(id);
+                        }
+                        break;
+                    default:
+                        throw new IllegalStateException("Unknown DuplicatePolicy: " + policy);
+                }
+            }
+            FlowOwnershipRegistry.Claim claim = ownershipRegistry.claim(id, name);
+            if (!claim.accepted()) {
+                if (policy == DuplicatePolicy.IGNORE) {
+                    return;
+                }
+                throw new IllegalStateException(
+                        "Flow " + id + " is already owned by worker " + claim.ownerName());
+            }
+            boolean submitted = false;
+            try {
+                // Attach now under lock so the Flow has clock+bus before reaching tick.
+                // Worker is responsible for a Flow's lifecycle from this point on.
+                flow.attach(clock, eventBus, observerFor(flow));
+                pendingSubmits.add(flow);
+                submitted = true;
+            } finally {
+                if (!submitted && claim.newlyClaimed()) {
+                    ownershipRegistry.release(id, name);
+                }
+            }
+        }
+    }
+
+    public boolean cancel(FlowId flowId) {
+        if (flowId == null) {
+            throw new IllegalArgumentException("flowId must not be null");
+        }
+        synchronized (stateLock) {
+            if (state == WorkerState.STOPPING || state == WorkerState.STOPPED) {
+                return false;
+            }
+            boolean active = activeFlows.containsKey(flowId);
+            boolean pending = cancelPendingSubmits(flowId);
+            if (!active && !pending) {
+                return false;
+            }
+            if (active) {
+                pendingCancels.add(flowId);
+            } else if (pending) {
+                ownershipRegistry.release(flowId, name);
+            }
+            return true;
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // Tick - public so tests can drive without start()
+    // ------------------------------------------------------------------
+
+    /**
+     * Run one Worker tick. Safe to call from tests in lieu of {@link #start()}.
+     * The first public tick selects manual drive mode. Throws if the Worker is
+     * already owned by the background scheduler.
+     */
+    public void tickOnce() {
+        tickOnce(false);
+    }
+
+    private void tickOnce(boolean scheduledTick) {
+        executionLock.lock();
+        try {
+            if (!prepareTick(scheduledTick)) {
+                return;
+            }
+            if (state == WorkerState.STOPPING) {
+                completeStopIfRequested();
+                return;
+            }
+            applyPendingChanges();
+            if (state == WorkerState.STOPPING) {
+                completeStopIfRequested();
+                return;
+            }
+            runFlows();
+            removeTerminated();
+            if (state == WorkerState.STOPPING) {
+                completeStopIfRequested();
+            }
+        } finally {
+            executionLock.unlock();
+        }
+    }
+
+    private boolean prepareTick(boolean scheduledTick) {
+        synchronized (stateLock) {
+            if (state == WorkerState.STOPPING) {
+                return true;
+            }
+            if (state == WorkerState.STOPPED) {
+                return false;
+            }
+            ensureAttached();
+            if (!scheduledTick && driveMode == DriveMode.SCHEDULED) {
+                throw new IllegalStateException(
+                        "Worker " + name + " is running in scheduled mode; do not call tickOnce()");
+            }
+            if (state == WorkerState.PAUSED) {
+                return false;
+            }
+            if (scheduledTick) {
+                return state == WorkerState.RUNNING && driveMode == DriveMode.SCHEDULED;
+            }
+            if (driveMode == DriveMode.NONE) {
+                driveMode = DriveMode.MANUAL;
+            }
+            if (driveMode != DriveMode.MANUAL) {
+                throw new IllegalStateException("Worker " + name + " cannot tick in drive mode " + driveMode);
+            }
+            return true;
+        }
+    }
+
+    private void tickSafely() {
+        try {
+            tickOnce(true);
+        } catch (Throwable t) {
+            // Don't let exceptions kill the scheduled task. The Flow runtime
+            // already converts step exceptions to FAIL results, so reaching
+            // this branch means a framework bug.
+            // (No SLF4J - core is dependency free. Fall back to System.err.)
+            notifyWorkerError(t);
+            System.err.println("[flower] worker " + name + " tick failed: " + t);
+            t.printStackTrace(System.err);
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // internals
+    // ------------------------------------------------------------------
+
+    private boolean containsPending(FlowId id) {
+        for (Flow f : pendingSubmits) {
+            if (id.equals(f.flowId())) return true;
+        }
+        return false;
+    }
+
+    private boolean hasNonTerminalLocalFlow(FlowId id) {
+        Flow active = activeFlows.get(id);
+        if (active != null && !active.state().isTerminal()) {
+            return true;
+        }
+        for (Flow pending : pendingSubmits) {
+            if (id.equals(pending.flowId()) && !pending.state().isTerminal()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private void releaseOwnershipIfIdle(Flow flow) {
+        FlowId id = flow.flowId();
+        synchronized (stateLock) {
+            if (hasNonTerminalLocalFlow(id)) {
+                return;
+            }
+            ownershipRegistry.release(id, name);
+        }
+    }
+
+    private void releaseOwnership(Flow flow) {
+        ownershipRegistry.release(flow.flowId(), name);
+    }
+
+    private void ensureAttached() {
+        if (clock == null) {
+            throw new IllegalStateException(
+                    "Worker " + name + " is not attached. Add it to an Engine before use.");
+        }
+    }
+
+    private void applyPendingChanges() {
+        synchronized (stateLock) {
+            // Cancels first, so REPLACE semantics work: cancel old, then add new.
+            FlowId cid;
+            while ((cid = pendingCancels.poll()) != null) {
+                Flow active = activeFlows.remove(cid);
+                if (active != null) {
+                    active.cancel();
+                    completeTerminalFlow(active);
+                }
+            }
+            Flow ps;
+            while ((ps = pendingSubmits.poll()) != null) {
+                FlowId id = ps.flowId();
+                if (activeFlows.containsKey(id)) {
+                    // Either REJECT slipped past (shouldn't happen) or duplicate-in-pending.
+                    // Skip silently; tests assert via state.
+                    continue;
+                }
+                activeFlows.put(id, ps);
+                fireFlowSubmitted(ps);
+                if (!checkpointCoordinator.saveActive(ps)) {
+                    fireFlowTerminated(ps);
+                }
+            }
+        }
+    }
+
+    private void runFlows() {
+        // Snapshot the active flows so concurrent submit/cancel during tick does
+        // not perturb the iteration. New submissions queued during this tick are
+        // applied at the start of the next tick.
+        List<Flow> snapshot;
+        synchronized (stateLock) {
+            snapshot = new ArrayList<>(activeFlows.values());
+        }
+        for (Flow flow : snapshot) {
+            if (state == WorkerState.STOPPING) break;
+            if (flow.state().isTerminal()) continue;
+            FlowState before = flow.state();
+            try {
+                flow.tick();
+            } catch (Throwable t) {
+                // Flow.tick already wraps step exceptions; reaching here is unexpected.
+                notifyWorkerError(t);
+                System.err.println("[flower] worker " + name + " flow " + flow.flowId() + " tick blew up: " + t);
+            }
+            if (flow.state().isTerminal()) {
+                if (!before.isTerminal()) {
+                    completeTerminalFlow(flow);
+                }
+            } else if (!checkpointCoordinator.saveActive(flow)) {
+                fireFlowTerminated(flow);
+            }
+        }
+    }
+
+    private void removeTerminated() {
+        synchronized (stateLock) {
+            Iterator<Map.Entry<FlowId, Flow>> it = activeFlows.entrySet().iterator();
+            while (it.hasNext()) {
+                Flow flow = it.next().getValue();
+                if (flow.state().isTerminal()) {
+                    it.remove();
+                    releaseOwnershipIfIdle(flow);
+                }
+            }
+        }
+    }
+
+    private boolean cancelPendingSubmits(FlowId id) {
+        List<Flow> removed = removePendingSubmits(id);
+        cancelAndNotify(removed);
+        return !removed.isEmpty();
+    }
+
+    private List<Flow> removePendingSubmits(FlowId id) {
+        List<Flow> removed = new ArrayList<>();
+        List<Flow> survivors = new ArrayList<>();
+        Flow flow;
+        while ((flow = pendingSubmits.poll()) != null) {
+            if (id.equals(flow.flowId())) {
+                removed.add(flow);
+            } else {
+                survivors.add(flow);
+            }
+        }
+        for (Flow survivor : survivors) {
+            pendingSubmits.add(survivor);
+        }
+        return removed;
+    }
+
+    private List<Flow> drainAllFlows() {
+        List<Flow> drained = new ArrayList<>(activeFlows.values());
+        activeFlows.clear();
+        Flow pending;
+        while ((pending = pendingSubmits.poll()) != null) {
+            drained.add(pending);
+        }
+        return drained;
+    }
+
+    private void completeStopIfRequested() {
+        List<Flow> flowsToStop;
+        synchronized (stateLock) {
+            if (state == WorkerState.STOPPED) {
+                return;
+            }
+            if (state != WorkerState.STOPPING) {
+                return;
+            }
+            flowsToStop = drainAllFlows();
+            pendingCancels.clear();
+        }
+        stopFlows(flowsToStop);
+        synchronized (stateLock) {
+            pendingCancels.clear();
+            driveMode = DriveMode.NONE;
+            state = WorkerState.STOPPED;
+        }
+    }
+
+    private void cancelAndNotify(List<Flow> flows) {
+        for (Flow flow : flows) {
+            if (flow.state().isTerminal()) {
+                continue;
+            }
+            flow.cancel();
+            completeTerminalFlow(flow);
+        }
+    }
+
+    private void stopFlows(List<Flow> flows) {
+        for (Flow flow : flows) {
+            if (flow.state().isTerminal()) {
+                checkpointCoordinator.forget(flow.flowId());
+                releaseOwnership(flow);
+                continue;
+            }
+            if (flow.persistence() == FlowPersistence.DURABLE) {
+                if (checkpointCoordinator.saveActive(flow)) {
+                    flow.suspend();
+                    checkpointCoordinator.forget(flow.flowId());
+                    releaseOwnership(flow);
+                } else {
+                    fireFlowTerminated(flow);
+                    checkpointCoordinator.forget(flow.flowId());
+                    releaseOwnership(flow);
+                }
+            } else {
+                flow.cancel();
+                completeTerminalFlow(flow);
+            }
+        }
+    }
+
+    private void completeTerminalFlow(Flow flow) {
+        if (checkpointCoordinator.saveTerminalTombstone(flow)) {
+            fireFlowTerminated(flow);
+            checkpointCoordinator.cleanupTerminalTombstoneBestEffort(flow);
+        } else {
+            fireFlowTerminated(flow);
+        }
+        releaseOwnershipIfIdle(flow);
+    }
+
+    // ------------------------------------------------------------------
+    // listener fanout
+    // ------------------------------------------------------------------
+
+    private void fireFlowSubmitted(Flow flow) {
+        FlowSnapshot snap = flow.snapshot();
+        for (FlowerListener l : listeners) {
+            try {
+                l.onFlowSubmitted(snap);
+            } catch (Throwable t) {
+                notifyListenerError(snap, "onFlowSubmitted", t);
+            }
+        }
+    }
+
+    private LifecycleObserver observerFor(Flow flow) {
+        return new LifecycleObserver() {
+            @Override
+            public void onStepEntered(String stepId) {
+                FlowSnapshot snap = flow.snapshot();
+                for (FlowerListener l : listeners) {
+                    try {
+                        l.onStepEntered(snap, stepId);
+                    } catch (Throwable t) {
+                        notifyListenerError(snap, "onStepEntered", t);
+                    }
+                }
+            }
+
+            @Override
+            public void onStepExited(String stepId) {
+                FlowSnapshot snap = flow.snapshot();
+                for (FlowerListener l : listeners) {
+                    try {
+                        l.onStepExited(snap, stepId);
+                    } catch (Throwable t) {
+                        notifyListenerError(snap, "onStepExited", t);
+                    }
+                }
+            }
+        };
+    }
+
+    private void fireFlowTerminated(Flow flow) {
+        FlowSnapshot snap = flow.snapshot();
+        switch (flow.state()) {
+            case FINISHED:
+                for (FlowerListener l : listeners) {
+                    try {
+                        l.onFlowFinished(snap);
+                    } catch (Throwable t) {
+                        notifyListenerError(snap, "onFlowFinished", t);
+                    }
+                }
+                break;
+            case FAILED:
+            case CHECKPOINT_FAILED:
+                Throwable cause = flow.failureCause();
+                for (FlowerListener l : listeners) {
+                    try {
+                        l.onFlowFailed(snap, cause);
+                    } catch (Throwable t) {
+                        notifyListenerError(snap, "onFlowFailed", t);
+                    }
+                }
+                break;
+            case CANCELLED:
+                for (FlowerListener l : listeners) {
+                    try {
+                        l.onFlowCancelled(snap);
+                    } catch (Throwable t) {
+                        notifyListenerError(snap, "onFlowCancelled", t);
+                    }
+                }
+                break;
+            default:
+                // not terminal - shouldn't happen
+        }
+    }
+
+    private void notifyListenerError(FlowSnapshot flow, String callbackName, Throwable cause) {
+        for (FlowerListener l : listeners) {
+            try {
+                l.onListenerError(flow, callbackName, cause);
+            } catch (Throwable ignored) {
+            }
+        }
+    }
+
+    private void notifyWorkerError(Throwable cause) {
+        for (FlowerListener l : listeners) {
+            try {
+                l.onWorkerError(name, cause);
+            } catch (Throwable ignored) {
+            }
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // ThreadFactory
+    // ------------------------------------------------------------------
+
+    private static final AtomicLong WORKER_THREAD_SEQ = new AtomicLong();
+
+    private ThreadFactory threadFactory() {
+        return r -> {
+            Thread t = new Thread(r, "flower-worker-" + name + "-" + WORKER_THREAD_SEQ.incrementAndGet());
+            t.setDaemon(true);
+            return t;
+        };
+    }
+}

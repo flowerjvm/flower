@@ -10,18 +10,18 @@ is truly intentional:
 
 ```xml
 <dependency>
-    <groupId>io.github.parkkevinsb.flower</groupId>
+    <groupId>io.github.flowerjvm</groupId>
     <artifactId>flower-check-annotations</artifactId>
-    <version>0.1.0-SNAPSHOT</version>
+    <version>0.1.0</version>
     <scope>provided</scope>
 </dependency>
 ```
 
 ```xml
 <plugin>
-    <groupId>io.github.parkkevinsb.flower</groupId>
+    <groupId>io.github.flowerjvm</groupId>
     <artifactId>flower-check-maven-plugin</artifactId>
-    <version>0.1.0-SNAPSHOT</version>
+    <version>0.1.0</version>
     <executions>
         <execution>
             <goals>
@@ -90,7 +90,7 @@ If Gradle is not on `PATH`, add
 Scheduler approval example:
 
 ```java
-import io.github.parkkevinsb.flower.check.annotation.FlowerSchedulerApproved;
+import io.github.flowerjvm.flower.check.annotation.FlowerSchedulerApproved;
 import org.springframework.scheduling.annotation.Scheduled;
 
 class ReconciliationJob {
