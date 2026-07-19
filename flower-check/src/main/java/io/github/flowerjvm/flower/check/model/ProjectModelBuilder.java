@@ -9,7 +9,11 @@ import com.github.javaparser.ast.body.ConstructorDeclaration;
 import com.github.javaparser.ast.body.FieldDeclaration;
 import com.github.javaparser.ast.body.MethodDeclaration;
 import com.github.javaparser.ast.body.VariableDeclarator;
+import com.github.javaparser.ast.expr.AssignExpr;
+import com.github.javaparser.ast.expr.BinaryExpr;
+import com.github.javaparser.ast.expr.EnclosedExpr;
 import com.github.javaparser.ast.expr.Expression;
+import com.github.javaparser.ast.expr.FieldAccessExpr;
 import com.github.javaparser.ast.expr.LambdaExpr;
 import com.github.javaparser.ast.expr.MethodCallExpr;
 import com.github.javaparser.ast.expr.MethodReferenceExpr;
@@ -17,7 +21,14 @@ import com.github.javaparser.ast.expr.NameExpr;
 import com.github.javaparser.ast.expr.ObjectCreationExpr;
 import com.github.javaparser.ast.expr.SimpleName;
 import com.github.javaparser.ast.expr.StringLiteralExpr;
+import com.github.javaparser.ast.expr.ThisExpr;
+import com.github.javaparser.ast.expr.UnaryExpr;
+import com.github.javaparser.ast.stmt.BlockStmt;
 import com.github.javaparser.ast.stmt.ForStmt;
+import com.github.javaparser.ast.stmt.IfStmt;
+import com.github.javaparser.ast.stmt.ReturnStmt;
+import com.github.javaparser.ast.stmt.Statement;
+import com.github.javaparser.ast.stmt.ThrowStmt;
 import com.github.javaparser.ast.stmt.WhileStmt;
 import com.github.javaparser.ast.type.ClassOrInterfaceType;
 import io.github.flowerjvm.flower.check.config.FlowerCheckConfig;
@@ -45,6 +56,10 @@ public final class ProjectModelBuilder {
             "onEnter", "onTick", "onExit", "onReset", "onResume"));
     private static final Set<String> FLOW_DRIVE_METHODS = new HashSet<>(Arrays.asList(
             "tick", "tickOnce", "start", "stop", "attach"));
+    private static final Set<String> FLOW_RUNTIME_TYPES = new HashSet<>(Arrays.asList(
+            "Flow", "Worker", "Engine", "EventWorker"));
+    private static final Set<String> OWNED_RUNTIME_TYPES = new HashSet<>(Arrays.asList(
+            "Worker", "Engine", "EventWorker"));
     private static final Set<String> TIMEOUT_METHODS = new HashSet<>(Arrays.asList(
             "startTimeout", "timedOut", "elapsedMillis"));
     private static final Set<String> SIGNAL_WAIT_METHODS = new HashSet<>(Arrays.asList(
@@ -281,7 +296,7 @@ public final class ProjectModelBuilder {
         Set<String> emitted = new LinkedHashSet<>();
         for (MethodDeclaration method : inScope) {
             for (MethodCallExpr call : method.findAll(MethodCallExpr.class)) {
-                String blocking = blockingCallName(call);
+                String blocking = blockingCallName(call, method, info, inScope);
                 if (blocking == null) {
                     continue;
                 }
@@ -353,21 +368,250 @@ public final class ProjectModelBuilder {
         return "this".equals(call.getScope().get().toString());
     }
 
-    private String blockingCallName(MethodCallExpr call) {
+    private String blockingCallName(MethodCallExpr call,
+                                    MethodDeclaration method,
+                                    ClassInfo info,
+                                    Set<MethodDeclaration> inScope) {
         String name = call.getNameAsString();
         if (BLOCKING_METHODS.contains(name)) {
             if ("sleep".equals(name) && !isScopeNamed(call, "Thread")) {
                 return null;
             }
+            if ("join".equals(name) && completionAlreadyObserved(call, method, info, inScope)) {
+                return null;
+            }
             return callLabel(call);
         }
         if ("get".equals(name) && call.getArguments().isEmpty() && looksLikeFutureGet(call)) {
+            if (completionAlreadyObserved(call, method, info, inScope)) {
+                return null;
+            }
             return callLabel(call);
         }
         if (looksLikeBlockingIo(call)) {
             return callLabel(call);
         }
         return null;
+    }
+
+    private boolean completionAlreadyObserved(MethodCallExpr blockingCall,
+                                              MethodDeclaration method,
+                                              ClassInfo info,
+                                              Set<MethodDeclaration> inScope) {
+        if (!blockingCall.getScope().isPresent()) {
+            return false;
+        }
+        Expression receiver = blockingCall.getScope().get();
+        if (completionKnownAt(receiver, blockingCall)) {
+            return true;
+        }
+
+        String receiverName = expressionKey(receiver);
+        int parameterIndex = -1;
+        for (int i = 0; i < method.getParameters().size(); i++) {
+            if (receiverName.equals(method.getParameter(i).getNameAsString())
+                    && looksLikeCompletionType(method.getParameter(i).getType().asString())) {
+                parameterIndex = i;
+                break;
+            }
+        }
+        if (parameterIndex < 0 || !method.isPrivate()
+                || hasAmbiguousOverload(info.declaration, method)) {
+            return false;
+        }
+        if (method.getBody().isPresent()
+                && writesTargetBefore(method.getBody().get(), blockingCall, receiverName)) {
+            return false;
+        }
+
+        boolean foundCallSite = false;
+        for (MethodDeclaration caller : inScope) {
+            for (MethodCallExpr invocation : caller.findAll(MethodCallExpr.class)) {
+                if (!method.getNameAsString().equals(invocation.getNameAsString())
+                        || invocation.getArguments().size() != method.getParameters().size()
+                        || !isLocalHelperCall(invocation)) {
+                    continue;
+                }
+                foundCallSite = true;
+                if (!completionKnownAt(invocation.getArgument(parameterIndex), invocation)) {
+                    return false;
+                }
+            }
+        }
+        return foundCallSite;
+    }
+
+    private boolean looksLikeCompletionType(String typeName) {
+        String simple = simpleType(typeName).toLowerCase(Locale.ROOT);
+        return simple.contains("future") || simple.contains("completionstage");
+    }
+
+    private boolean hasAmbiguousOverload(ClassOrInterfaceDeclaration declaration,
+                                         MethodDeclaration target) {
+        int matches = 0;
+        for (MethodDeclaration candidate : declaration.getMethods()) {
+            if (candidate.getNameAsString().equals(target.getNameAsString())
+                    && candidate.getParameters().size() == target.getParameters().size()) {
+                matches++;
+            }
+        }
+        return matches > 1;
+    }
+
+    private boolean completionKnownAt(Expression target, Node location) {
+        String targetKey = expressionKey(target);
+        Node child = location;
+        Optional<Node> parent = child.getParentNode();
+        while (parent.isPresent()) {
+            Node currentParent = parent.get();
+            if (currentParent instanceof IfStmt) {
+                IfStmt conditional = (IfStmt) currentParent;
+                if (conditional.getThenStmt() == child
+                        && conditionImpliesDone(conditional.getCondition(), targetKey, true)
+                        && !writesTargetBefore(conditional.getThenStmt(), location, targetKey)) {
+                    return true;
+                }
+                if (conditional.getElseStmt().isPresent()
+                        && conditional.getElseStmt().get() == child
+                        && conditionImpliesDone(conditional.getCondition(), targetKey, false)
+                        && !writesTargetBefore(conditional.getElseStmt().get(), location, targetKey)) {
+                    return true;
+                }
+            }
+            if (currentParent instanceof BlockStmt && child instanceof Statement
+                    && priorGuardImpliesDone((BlockStmt) currentParent, (Statement) child, targetKey)) {
+                return true;
+            }
+            child = currentParent;
+            parent = child.getParentNode();
+        }
+        return false;
+    }
+
+    private boolean priorGuardImpliesDone(BlockStmt block,
+                                          Statement location,
+                                          String targetKey) {
+        int index = block.getStatements().indexOf(location);
+        for (int i = index - 1; i >= 0; i--) {
+            Statement statement = block.getStatement(i);
+            if (statement instanceof IfStmt) {
+                IfStmt conditional = (IfStmt) statement;
+                if (alwaysExits(conditional.getThenStmt())
+                        && conditionImpliesDone(conditional.getCondition(), targetKey, false)) {
+                    return true;
+                }
+                if (conditional.getElseStmt().isPresent()
+                        && alwaysExits(conditional.getElseStmt().get())
+                        && conditionImpliesDone(conditional.getCondition(), targetKey, true)) {
+                    return true;
+                }
+            }
+            if (writesTarget(statement, targetKey)) {
+                return false;
+            }
+        }
+        return false;
+    }
+
+    private boolean writesTargetBefore(Node container, Node location, String targetKey) {
+        for (AssignExpr assignment : container.findAll(AssignExpr.class)) {
+            if (appearsBefore(assignment, location)
+                    && targetKey.equals(expressionKey(assignment.getTarget()))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean appearsBefore(Node candidate, Node location) {
+        return line(candidate) < line(location)
+                || (line(candidate) == line(location) && column(candidate) < column(location));
+    }
+
+    private boolean writesTarget(Node node, String targetKey) {
+        for (AssignExpr assignment : node.findAll(AssignExpr.class)) {
+            if (targetKey.equals(expressionKey(assignment.getTarget()))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean alwaysExits(Statement statement) {
+        if (statement instanceof ReturnStmt || statement instanceof ThrowStmt) {
+            return true;
+        }
+        if (statement instanceof BlockStmt) {
+            BlockStmt block = (BlockStmt) statement;
+            return !block.getStatements().isEmpty()
+                    && alwaysExits(block.getStatement(block.getStatements().size() - 1));
+        }
+        if (statement instanceof IfStmt) {
+            IfStmt conditional = (IfStmt) statement;
+            return conditional.getElseStmt().isPresent()
+                    && alwaysExits(conditional.getThenStmt())
+                    && alwaysExits(conditional.getElseStmt().get());
+        }
+        return false;
+    }
+
+    private boolean conditionImpliesDone(Expression condition,
+                                         String targetKey,
+                                         boolean conditionValue) {
+        if (condition instanceof EnclosedExpr) {
+            return conditionImpliesDone(((EnclosedExpr) condition).getInner(), targetKey, conditionValue);
+        }
+        if (condition instanceof UnaryExpr
+                && ((UnaryExpr) condition).getOperator() == UnaryExpr.Operator.LOGICAL_COMPLEMENT) {
+            return conditionImpliesDone(
+                    ((UnaryExpr) condition).getExpression(), targetKey, !conditionValue);
+        }
+        if (condition instanceof MethodCallExpr) {
+            MethodCallExpr call = (MethodCallExpr) condition;
+            return conditionValue
+                    && "isDone".equals(call.getNameAsString())
+                    && call.getArguments().isEmpty()
+                    && call.getScope().isPresent()
+                    && targetKey.equals(expressionKey(call.getScope().get()));
+        }
+        if (!(condition instanceof BinaryExpr)) {
+            return false;
+        }
+
+        BinaryExpr binary = (BinaryExpr) condition;
+        if (binary.getOperator() == BinaryExpr.Operator.AND) {
+            if (conditionValue) {
+                return conditionImpliesDone(binary.getLeft(), targetKey, true)
+                        || conditionImpliesDone(binary.getRight(), targetKey, true);
+            }
+            return conditionImpliesDone(binary.getLeft(), targetKey, false)
+                    && conditionImpliesDone(binary.getRight(), targetKey, false);
+        }
+        if (binary.getOperator() == BinaryExpr.Operator.OR) {
+            if (conditionValue) {
+                return conditionImpliesDone(binary.getLeft(), targetKey, true)
+                        && conditionImpliesDone(binary.getRight(), targetKey, true);
+            }
+            return conditionImpliesDone(binary.getLeft(), targetKey, false)
+                    || conditionImpliesDone(binary.getRight(), targetKey, false);
+        }
+        return false;
+    }
+
+    private String expressionKey(Expression expression) {
+        if (expression instanceof EnclosedExpr) {
+            return expressionKey(((EnclosedExpr) expression).getInner());
+        }
+        if (expression instanceof NameExpr) {
+            return ((NameExpr) expression).getNameAsString();
+        }
+        if (expression instanceof FieldAccessExpr) {
+            FieldAccessExpr field = (FieldAccessExpr) expression;
+            if (field.getScope() instanceof ThisExpr) {
+                return field.getNameAsString();
+            }
+        }
+        return expression.toString();
     }
 
     private boolean looksLikeFutureGet(MethodCallExpr call) {
@@ -684,15 +928,110 @@ public final class ProjectModelBuilder {
         if (!FLOW_DRIVE_METHODS.contains(call.getNameAsString())) {
             return false;
         }
-        if ("tick".equals(call.getNameAsString()) || "tickOnce".equals(call.getNameAsString())) {
-            return true;
-        }
         Optional<Expression> scope = call.getScope();
         if (!scope.isPresent()) {
             return false;
         }
-        String lower = scope.get().toString().toLowerCase(Locale.ROOT);
-        return lower.contains("engine") || lower.contains("worker");
+        Optional<String> type = declaredTypeOf(scope.get(), call);
+        return type.isPresent() && FLOW_RUNTIME_TYPES.contains(simpleType(type.get()));
+    }
+
+    private Optional<String> declaredTypeOf(Expression expression, Node location) {
+        if (expression instanceof EnclosedExpr) {
+            return declaredTypeOf(((EnclosedExpr) expression).getInner(), location);
+        }
+        if (expression instanceof ObjectCreationExpr) {
+            return Optional.of(((ObjectCreationExpr) expression).getType().asString());
+        }
+        if (expression instanceof NameExpr) {
+            String name = ((NameExpr) expression).getNameAsString();
+            if (FLOW_RUNTIME_TYPES.contains(simpleType(name))) {
+                return Optional.of(name);
+            }
+            return declaredVariableType(name, location);
+        }
+        if (expression instanceof FieldAccessExpr) {
+            FieldAccessExpr field = (FieldAccessExpr) expression;
+            if (field.getScope() instanceof ThisExpr) {
+                return declaredVariableType(field.getNameAsString(), location);
+            }
+        }
+        return Optional.empty();
+    }
+
+    private Optional<String> declaredVariableType(String name, Node location) {
+        Optional<MethodDeclaration> method = ancestor(location, MethodDeclaration.class);
+        if (method.isPresent()) {
+            Optional<String> local = localVariableType(method.get(), name, location);
+            if (local.isPresent()) {
+                return local;
+            }
+            for (int i = 0; i < method.get().getParameters().size(); i++) {
+                if (name.equals(method.get().getParameter(i).getNameAsString())) {
+                    return Optional.of(method.get().getParameter(i).getType().asString());
+                }
+            }
+        }
+
+        Optional<ConstructorDeclaration> constructor = ancestor(location, ConstructorDeclaration.class);
+        if (constructor.isPresent()) {
+            Optional<String> local = localVariableType(constructor.get(), name, location);
+            if (local.isPresent()) {
+                return local;
+            }
+            for (int i = 0; i < constructor.get().getParameters().size(); i++) {
+                if (name.equals(constructor.get().getParameter(i).getNameAsString())) {
+                    return Optional.of(constructor.get().getParameter(i).getType().asString());
+                }
+            }
+        }
+
+        Optional<ClassOrInterfaceDeclaration> owner = ancestor(location, ClassOrInterfaceDeclaration.class);
+        if (owner.isPresent()) {
+            for (FieldDeclaration field : owner.get().getFields()) {
+                for (VariableDeclarator variable : field.getVariables()) {
+                    if (name.equals(variable.getNameAsString())) {
+                        return Optional.of(declaredVariableType(variable));
+                    }
+                }
+            }
+        }
+        return Optional.empty();
+    }
+
+    private Optional<String> localVariableType(Node callable, String name, Node location) {
+        VariableDeclarator nearest = null;
+        for (VariableDeclarator variable : callable.findAll(VariableDeclarator.class)) {
+            if (!name.equals(variable.getNameAsString()) || line(variable) > line(location)) {
+                continue;
+            }
+            if (nearest == null || line(variable) > line(nearest)) {
+                nearest = variable;
+            }
+        }
+        return nearest == null
+                ? Optional.<String>empty()
+                : Optional.of(declaredVariableType(nearest));
+    }
+
+    private String declaredVariableType(VariableDeclarator variable) {
+        String type = variable.getType().asString();
+        if ("var".equals(type) && variable.getInitializer().isPresent()
+                && variable.getInitializer().get() instanceof ObjectCreationExpr) {
+            return ((ObjectCreationExpr) variable.getInitializer().get()).getType().asString();
+        }
+        return type;
+    }
+
+    private <T extends Node> Optional<T> ancestor(Node node, Class<T> type) {
+        Optional<Node> parent = node.getParentNode();
+        while (parent.isPresent()) {
+            if (type.isInstance(parent.get())) {
+                return Optional.of(type.cast(parent.get()));
+            }
+            parent = parent.get().getParentNode();
+        }
+        return Optional.empty();
     }
 
     private void analyzeSubscribeCallbacks(ClassInfo info, MethodDeclaration method, List<AnalysisFact> facts) {
@@ -737,10 +1076,27 @@ public final class ProjectModelBuilder {
     }
 
     private void analyzeRuntimeOwnership(ClassInfo info, List<AnalysisFact> facts) {
+        for (FieldDeclaration field : info.declaration.getFields()) {
+            for (VariableDeclarator variable : field.getVariables()) {
+                if (OWNED_RUNTIME_TYPES.contains(simpleType(declaredVariableType(variable)))) {
+                    facts.add(new AnalysisFact(
+                            AnalysisFact.RUNTIME_OWNERSHIP,
+                            info.file,
+                            line(variable),
+                            column(variable),
+                            info.simpleName,
+                            "Step stores Flower runtime infrastructure: " + variable.getType()));
+                }
+            }
+        }
         for (MethodCallExpr call : info.declaration.findAll(MethodCallExpr.class)) {
-            boolean builder = ("builder".equals(call.getNameAsString())
-                    && (isScopeNamed(call, "Engine") || isScopeNamed(call, "Worker")));
-            if (builder || isWorkerOrEngineControl(call)) {
+            Optional<String> scopeType = call.getScope().isPresent()
+                    ? declaredTypeOf(call.getScope().get(), call)
+                    : Optional.<String>empty();
+            boolean builder = "builder".equals(call.getNameAsString())
+                    && scopeType.isPresent()
+                    && OWNED_RUNTIME_TYPES.contains(simpleType(scopeType.get()));
+            if (builder) {
                 facts.add(new AnalysisFact(
                         AnalysisFact.RUNTIME_OWNERSHIP,
                         info.file,
@@ -748,6 +1104,17 @@ public final class ProjectModelBuilder {
                         column(call),
                         info.simpleName,
                         "Step creates or controls Flower runtime: " + call));
+            }
+        }
+        for (ObjectCreationExpr creation : info.declaration.findAll(ObjectCreationExpr.class)) {
+            if (OWNED_RUNTIME_TYPES.contains(simpleType(creation.getType().asString()))) {
+                facts.add(new AnalysisFact(
+                        AnalysisFact.RUNTIME_OWNERSHIP,
+                        info.file,
+                        line(creation),
+                        column(creation),
+                        info.simpleName,
+                        "Step creates Flower runtime infrastructure: " + creation.getType()));
             }
         }
     }

@@ -159,6 +159,98 @@ class FlowerCheckEngineTest {
     }
 
     @Test
+    void allowsFutureJoinAndGetAfterCompletionGuard(@TempDir Path root) throws IOException {
+        writeJava(root, "CompletedFutureStep.java",
+                "package demo;",
+                "class CompletedFutureStep extends Step {",
+                "    private java.util.concurrent.CompletableFuture<String> future;",
+                "    protected StepResult onTick(StepContext ctx) throws Exception {",
+                "        if (future == null || !future.isDone()) {",
+                "            return StepResult.stay();",
+                "        }",
+                "        future.join();",
+                "        future.get();",
+                "        return StepResult.done();",
+                "    }",
+                "}");
+
+        CheckResult result = FlowerCheckEngine.create(FlowerCheckConfig.defaults())
+                .run(Collections.singletonList(root.toString()));
+
+        assertThat(result.findings()).isEmpty();
+        assertThat(result.failed()).isFalse();
+    }
+
+    @Test
+    void allowsFutureJoinInHelperCalledFromCompletedBranch(@TempDir Path root) throws IOException {
+        writeJava(root, "CompletionObserverStep.java",
+                "package demo;",
+                "class CompletionObserverStep extends Step {",
+                "    private java.util.concurrent.CompletableFuture<String> future;",
+                "    protected StepResult onTick(StepContext ctx) {",
+                "        if (future.isDone()) {",
+                "            observe(future);",
+                "            return StepResult.done();",
+                "        }",
+                "        return StepResult.stay();",
+                "    }",
+                "    private static void observe(java.util.concurrent.CompletableFuture<String> completed) {",
+                "        completed.join();",
+                "    }",
+                "}");
+
+        CheckResult result = FlowerCheckEngine.create(FlowerCheckConfig.defaults())
+                .run(Collections.singletonList(root.toString()));
+
+        assertThat(result.findings()).isEmpty();
+        assertThat(result.failed()).isFalse();
+    }
+
+    @Test
+    void reportsFutureJoinWithoutCompletionGuard(@TempDir Path root) throws IOException {
+        writeJava(root, "UncheckedFutureStep.java",
+                "package demo;",
+                "class UncheckedFutureStep extends Step {",
+                "    private java.util.concurrent.CompletableFuture<String> future;",
+                "    protected StepResult onTick(StepContext ctx) {",
+                "        future.join();",
+                "        return StepResult.done();",
+                "    }",
+                "}");
+
+        CheckResult result = FlowerCheckEngine.create(FlowerCheckConfig.defaults())
+                .run(Collections.singletonList(root.toString()));
+
+        assertThat(result.findings())
+                .extracting(Finding::ruleId)
+                .containsExactly("FLOWER-CHECK-001");
+    }
+
+    @Test
+    void reportsFutureJoinWhenReferenceChangesAfterCompletionGuard(@TempDir Path root) throws IOException {
+        writeJava(root, "ReassignedFutureStep.java",
+                "package demo;",
+                "class ReassignedFutureStep extends Step {",
+                "    private java.util.concurrent.CompletableFuture<String> future;",
+                "    protected StepResult onTick(StepContext ctx) {",
+                "        if (!future.isDone()) {",
+                "            return StepResult.stay();",
+                "        }",
+                "        future = new java.util.concurrent.CompletableFuture<String>();",
+                "        future.join();",
+                "        return StepResult.done();",
+                "    }",
+                "}");
+
+        CheckResult result = FlowerCheckEngine.create(FlowerCheckConfig.defaults())
+                .run(Collections.singletonList(root.toString()));
+
+        assertThat(result.findings())
+                .extracting(Finding::ruleId)
+                .containsExactly("FLOWER-CHECK-001");
+    }
+
+    @Test
     void ignoresBlockingCallInConstructorOutsideStepLifecycle(@TempDir Path root) throws IOException {
         writeJava(root, "ConstructorWaitStep.java",
                 "package demo;",

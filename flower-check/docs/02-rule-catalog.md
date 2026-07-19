@@ -6,7 +6,7 @@ depends_on:
   - 00-INDEX.md
   - 01-architecture.md
 supersedes: []
-last_reviewed: 2026-06-10
+last_reviewed: 2026-07-17
 ---
 
 # 02. flower-check Rule Catalog
@@ -167,7 +167,10 @@ protected StepResult onTick(StepContext ctx) {
 ```
 
 Detection: AST scan of in-scope method bodies for the calls above. `Future.get`
-with an explicit timeout and a `try/catch(TimeoutException)` is allowed.
+with an explicit timeout is allowed. A no-argument `get()` or `join()` is also
+allowed when the same execution path first proves completion with `isDone()`;
+this includes a private completion-observer helper when every in-scope call
+site passes an argument from an `isDone()`-guarded path.
 
 ---
 
@@ -217,9 +220,11 @@ child Flow to a Worker and wait through state/event checks.
 **Fix:** `worker.submit(childFlow)` and then wait on a signal, an event, or
 durable domain state. Never tick or mutate another Flow inline.
 
-Detection: calls to `tick/tickOnce/attach/start/stop` on a `Worker`/`Engine`
-reference, and direct `onTick/onEnter` invocations, inside Step/FlowFactory
-sources.
+Detection: calls to `tick/tickOnce/attach/start/stop` on a statically declared
+Flower `Flow`/`Worker`/`Engine`/`EventWorker` reference, and direct
+`onTick/onEnter` invocations, inside Step/FlowFactory sources. An application
+helper that happens to expose a method with one of those names is not a Flower
+runtime control call.
 
 ---
 
@@ -353,8 +358,10 @@ Flow non-deterministic and untestable with `tickOnce()`.
 **Fix:** Build `Engine`/`Worker` in application wiring (or the Spring starter).
 Pass only domain services into Steps via constructors.
 
-Detection: `Engine.builder`/`Worker.builder`/engine lifecycle calls inside
-classes extending `Step`/`DurableStep`.
+Detection: runtime fields plus `Engine.builder`/`Worker.builder` and equivalent
+runtime construction inside classes extending `Step`/`DurableStep`. Runtime
+control calls are reported by FLOWER-CHECK-003 instead of being duplicated
+under this rule.
 
 ---
 

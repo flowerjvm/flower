@@ -45,6 +45,23 @@ class RuleCatalogTest {
     }
 
     @Test
+    void allowsApplicationTaskWithTickMethodInsideStep(@TempDir Path root) throws IOException {
+        writeJava(root, "TaskBackedStep.java",
+                "package demo;",
+                "class ApplicationTask {",
+                "    StepResult tick(StepContext ctx) { return StepResult.done(); }",
+                "}",
+                "class TaskBackedStep extends Step {",
+                "    private final ApplicationTask task = new ApplicationTask();",
+                "    protected StepResult onTick(StepContext ctx) {",
+                "        return task.tick(ctx);",
+                "    }",
+                "}");
+
+        assertThat(run(root).findings()).isEmpty();
+    }
+
+    @Test
     void detectsSignalWaitWithoutTimeoutWhenFiniteWaitIsObvious(@TempDir Path root) throws IOException {
         writeJava(root, "PaymentApprovalStep.java",
                 "package demo;",
