@@ -87,6 +87,17 @@ EventFlowCheckpointStore eventStore = JdbcEventFlowCheckpointStore.create(
         JdbcEventFlowCheckpointDialects.sqlite());
 ```
 
+Spring Boot applications using the core checkpoint store can select the same
+dialect declaratively:
+
+```yaml
+flower:
+  persistence:
+    type: jdbc
+    jdbc:
+      dialect: sqlite
+```
+
 Add the Xerial `org.xerial:sqlite-jdbc` driver to the host application. Apply
 the core schema, the event-loop schema, or both depending on which execution
 models the application uses. The Flower table names are separate from host

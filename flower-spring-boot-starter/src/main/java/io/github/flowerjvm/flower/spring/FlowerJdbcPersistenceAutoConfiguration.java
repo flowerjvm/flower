@@ -51,6 +51,8 @@ public class FlowerJdbcPersistenceAutoConfiguration {
                 return JdbcCheckpointDialects.oracle();
             case H2:
                 return JdbcCheckpointDialects.h2();
+            case SQLITE:
+                return JdbcCheckpointDialects.sqlite();
             default:
                 throw new IllegalStateException("Unsupported Flower JDBC dialect: " + dialect);
         }

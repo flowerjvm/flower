@@ -1,18 +1,18 @@
 # 🌸 Flower
 
 [![CI](https://github.com/flowerjvm/flower/actions/workflows/ci.yml/badge.svg)](https://github.com/flowerjvm/flower/actions/workflows/ci.yml)
-[![Maven Central](https://img.shields.io/maven-central/v/io.github.flowerjvm/flower-core.svg?label=Maven%20Central)](https://central.sonatype.com/artifact/io.github.flowerjvm/flower-core/0.1.0)
+[![Maven Central](https://img.shields.io/maven-central/v/io.github.flowerjvm/flower-core.svg?label=Maven%20Central)](https://central.sonatype.com/artifact/io.github.flowerjvm/flower-core/0.1.1)
 
 Flower -- the one that flows.
 
-Project status: `0.1.0`. The stable center is `flower-core`; modules
+Project status: `0.1.1`. The stable center is `flower-core`; modules
 marked MVP are usable but may change more quickly before a 1.0 release. See
 [CONTRIBUTING.md](CONTRIBUTING.md), [SECURITY.md](SECURITY.md), and
 [ROADMAP.md](ROADMAP.md) for project process and planned work.
 
 ## Install From Maven Central
 
-Flower `0.1.0` is published to Maven Central under the
+Flower `0.1.1` is published to Maven Central under the
 `io.github.flowerjvm` group. No custom repository or `mavenLocal()` is
 required.
 
@@ -22,7 +22,7 @@ Gradle Kotlin DSL:
 
 ```kotlin
 dependencies {
-    implementation("io.github.flowerjvm:flower-core:0.1.0")
+    implementation("io.github.flowerjvm:flower-core:0.1.1")
 }
 ```
 
@@ -32,7 +32,7 @@ Maven:
 <dependency>
     <groupId>io.github.flowerjvm</groupId>
     <artifactId>flower-core</artifactId>
-    <version>0.1.0</version>
+    <version>0.1.1</version>
 </dependency>
 ```
 
@@ -40,7 +40,7 @@ For Spring Boot applications, use the starter instead:
 
 ```kotlin
 dependencies {
-    implementation("io.github.flowerjvm:flower-spring-boot-starter:0.1.0")
+    implementation("io.github.flowerjvm:flower-spring-boot-starter:0.1.1")
 }
 ```
 
@@ -48,12 +48,12 @@ Add only the modules your application needs:
 
 | Use case | Artifact |
 | --- | --- |
-| Core Flow / Worker runtime | `io.github.flowerjvm:flower-core:0.1.0` |
-| Spring Boot auto-configuration | `io.github.flowerjvm:flower-spring-boot-starter:0.1.0` |
-| JDBC checkpoints | `io.github.flowerjvm:flower-persistence-jdbc:0.1.0` |
-| Logging, metrics, tracing, and dumps | `io.github.flowerjvm:flower-observability:0.1.0` |
-| Deterministic test helpers | `io.github.flowerjvm:flower-testkit:0.1.0` |
-| Event-driven execution | `io.github.flowerjvm:flower-eventloop:0.1.0` |
+| Core Flow / Worker runtime | `io.github.flowerjvm:flower-core:0.1.1` |
+| Spring Boot auto-configuration | `io.github.flowerjvm:flower-spring-boot-starter:0.1.1` |
+| JDBC checkpoints | `io.github.flowerjvm:flower-persistence-jdbc:0.1.1` |
+| Logging, metrics, tracing, and dumps | `io.github.flowerjvm:flower-observability:0.1.1` |
+| Deterministic test helpers | `io.github.flowerjvm:flower-testkit:0.1.1` |
+| Event-driven execution | `io.github.flowerjvm:flower-eventloop:0.1.1` |
 
 See [Modules And Maturity](#modules-and-maturity) before adopting an MVP
 module. The Bloom adapter is published separately as
@@ -1174,7 +1174,7 @@ Add it as a test dependency:
 <dependency>
     <groupId>io.github.flowerjvm</groupId>
     <artifactId>flower-testkit</artifactId>
-    <version>0.1.0</version>
+    <version>0.1.1</version>
     <scope>test</scope>
 </dependency>
 ```
@@ -1293,7 +1293,7 @@ mvn test
 mvn install
 ```
 
-Applications should normally consume the released `0.1.0` artifacts from
+Applications should normally consume the released `0.1.1` artifacts from
 Maven Central as shown in [Install From Maven Central](#install-from-maven-central).
 
 Release preparation and Maven Central publisher setup are documented in

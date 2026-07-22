@@ -129,6 +129,20 @@ class FlowerAutoConfigurationTest {
     }
 
     @Test
+    void jdbcPersistenceAcceptsSQLiteDialect() {
+        runner.withPropertyValues(
+                "flower.persistence.type=jdbc",
+                "flower.persistence.jdbc.dialect=sqlite"
+        ).withBean(DataSource.class, StubDataSource::new)
+                .run(ctx -> {
+                    assertThat(ctx).hasNotFailed();
+                    assertThat(ctx).hasSingleBean(FlowCheckpointStore.class);
+                    assertThat(ctx.getBean(FlowCheckpointStore.class))
+                            .isInstanceOf(JdbcFlowCheckpointStore.class);
+                });
+    }
+
+    @Test
     void jdbcPersistenceRequiresDataSource() {
         runner.withPropertyValues(
                 "flower.persistence.type=jdbc",

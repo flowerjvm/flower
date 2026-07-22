@@ -121,7 +121,8 @@ public class FlowerProperties {
         POSTGRESQL,
         MYSQL,
         ORACLE,
-        H2
+        H2,
+        SQLITE
     }
 
     public enum SchemaInitialization {

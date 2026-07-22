@@ -12,7 +12,7 @@ is truly intentional:
 <dependency>
     <groupId>io.github.flowerjvm</groupId>
     <artifactId>flower-check-annotations</artifactId>
-    <version>0.1.0</version>
+    <version>0.1.1</version>
     <scope>provided</scope>
 </dependency>
 ```
@@ -21,7 +21,7 @@ is truly intentional:
 <plugin>
     <groupId>io.github.flowerjvm</groupId>
     <artifactId>flower-check-maven-plugin</artifactId>
-    <version>0.1.0</version>
+    <version>0.1.1</version>
     <executions>
         <execution>
             <goals>
