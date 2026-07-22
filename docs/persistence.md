@@ -31,6 +31,7 @@ flower/persistence/jdbc/postgresql/schema.sql
 flower/persistence/jdbc/mysql/schema.sql
 flower/persistence/jdbc/oracle/schema.sql
 flower/persistence/jdbc/h2/schema.sql
+flower/persistence/jdbc/sqlite/schema.sql
 ```
 
 Apply the SQL yourself, or copy it into Flyway/Liquibase. The JDBC store does
@@ -60,7 +61,43 @@ flower/eventloop/persistence/jdbc/postgresql/schema.sql
 flower/eventloop/persistence/jdbc/mysql/schema.sql
 flower/eventloop/persistence/jdbc/oracle/schema.sql
 flower/eventloop/persistence/jdbc/h2/schema.sql
+flower/eventloop/persistence/jdbc/sqlite/schema.sql
 ```
+
+## SQLite for Embedded Agent Applications
+
+SQLite is intended for a locally installed application that wants to ship one
+database file with the application. The host application owns the SQLite JDBC
+driver, database path, connection configuration, and schema migration. Flower
+remains driver-neutral and only provides the dialect and schema SQL.
+
+For example, an agent application can use one `DataSource` for both its own
+tables and Flower checkpoints:
+
+```java
+SQLiteDataSource dataSource = new SQLiteDataSource();
+dataSource.setUrl("jdbc:sqlite:C:/ProgramData/MyAgent/agent.db");
+
+FlowCheckpointStore flowStore = JdbcFlowCheckpointStore.create(
+        dataSource,
+        JdbcCheckpointDialects.sqlite());
+
+EventFlowCheckpointStore eventStore = JdbcEventFlowCheckpointStore.create(
+        dataSource,
+        JdbcEventFlowCheckpointDialects.sqlite());
+```
+
+Add the Xerial `org.xerial:sqlite-jdbc` driver to the host application. Apply
+the core schema, the event-loop schema, or both depending on which execution
+models the application uses. The Flower table names are separate from host
+tables, so agent configuration, memory, and other domain data can live in the
+same database file.
+
+For a Windows desktop application or service, keep the database on a local
+disk and normally run one application process against it. Configure WAL mode
+and a busy timeout through the host's SQLite `DataSource`, and keep domain
+transactions short. SQLite permits multiple readers but serializes writes;
+sharing one file does not make Flower recovery safe across multiple processes.
 
 ## Execution Context Columns
 
@@ -84,6 +121,7 @@ flower/persistence/jdbc/postgresql/execution-context-migration.sql
 flower/persistence/jdbc/mysql/execution-context-migration.sql
 flower/persistence/jdbc/oracle/execution-context-migration.sql
 flower/persistence/jdbc/h2/execution-context-migration.sql
+flower/persistence/jdbc/sqlite/execution-context-migration.sql
 ```
 
 ## Recovery Boundary

@@ -30,22 +30,14 @@ public final class JdbcCheckpointDialects {
 
     public static JdbcCheckpointDialect postgresql() {
         return new StandardDialect(
-                "INSERT INTO " + TABLE + " (" + COLUMNS + ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
-                        + "ON CONFLICT (flow_type, flow_key) DO UPDATE SET "
-                        + "state = EXCLUDED.state, "
-                        + "current_step_id = EXCLUDED.current_step_id, "
-                        + "current_step_no = EXCLUDED.current_step_no, "
-                        + "current_step_entered = EXCLUDED.current_step_entered, "
-                        + "persistence = EXCLUDED.persistence, "
-                        + "worker_name = EXCLUDED.worker_name, "
-                        + "updated_at_millis = EXCLUDED.updated_at_millis, "
-                        + "definition_version = EXCLUDED.definition_version, "
-                        + "tenant_id = EXCLUDED.tenant_id, "
-                        + "user_id = EXCLUDED.user_id, "
-                        + "session_id = EXCLUDED.session_id, "
-                        + "run_id = EXCLUDED.run_id, "
-                        + "trace_id = EXCLUDED.trace_id, "
-                        + "correlation_id = EXCLUDED.correlation_id");
+                onConflictUpsertSql());
+    }
+
+    /**
+     * SQLite dialect for a local, file-backed checkpoint store.
+     */
+    public static JdbcCheckpointDialect sqlite() {
+        return new SQLiteDialect(onConflictUpsertSql());
     }
 
     public static JdbcCheckpointDialect mysql() {
@@ -105,6 +97,25 @@ public final class JdbcCheckpointDialects {
                         + "s.trace_id, s.correlation_id)");
     }
 
+    private static String onConflictUpsertSql() {
+        return "INSERT INTO " + TABLE + " (" + COLUMNS + ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
+                + "ON CONFLICT (flow_type, flow_key) DO UPDATE SET "
+                + "state = EXCLUDED.state, "
+                + "current_step_id = EXCLUDED.current_step_id, "
+                + "current_step_no = EXCLUDED.current_step_no, "
+                + "current_step_entered = EXCLUDED.current_step_entered, "
+                + "persistence = EXCLUDED.persistence, "
+                + "worker_name = EXCLUDED.worker_name, "
+                + "updated_at_millis = EXCLUDED.updated_at_millis, "
+                + "definition_version = EXCLUDED.definition_version, "
+                + "tenant_id = EXCLUDED.tenant_id, "
+                + "user_id = EXCLUDED.user_id, "
+                + "session_id = EXCLUDED.session_id, "
+                + "run_id = EXCLUDED.run_id, "
+                + "trace_id = EXCLUDED.trace_id, "
+                + "correlation_id = EXCLUDED.correlation_id";
+    }
+
     private static class StandardDialect implements JdbcCheckpointDialect {
         private final String upsertSql;
 
@@ -140,6 +151,22 @@ public final class JdbcCheckpointDialects {
 
     private static final class OracleDialect extends StandardDialect {
         OracleDialect(String upsertSql) {
+            super(upsertSql);
+        }
+
+        @Override
+        public void bindBoolean(PreparedStatement ps, int index, boolean value) throws SQLException {
+            ps.setInt(index, value ? 1 : 0);
+        }
+
+        @Override
+        public boolean readBoolean(ResultSet rs, String column) throws SQLException {
+            return rs.getInt(column) != 0;
+        }
+    }
+
+    private static final class SQLiteDialect extends StandardDialect {
+        SQLiteDialect(String upsertSql) {
             super(upsertSql);
         }
 

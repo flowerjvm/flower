@@ -20,6 +20,8 @@ class JdbcEventFlowCheckpointDialectsTest {
         assertThat(JdbcEventFlowCheckpointDialects.h2().upsertSql())
                 .contains("MERGE INTO")
                 .contains("KEY(flow_type, flow_key)");
+        assertThat(JdbcEventFlowCheckpointDialects.sqlite().upsertSql())
+                .contains("ON CONFLICT (flow_type, flow_key) DO UPDATE SET");
     }
 
     @Test

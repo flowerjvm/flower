@@ -977,8 +977,14 @@ Engine engine = Engine.builder()
 
 `flower-eventloop-persistence-jdbc` provides a separate JDBC implementation for
 event-loop checkpoints. Schema SQL is packaged for PostgreSQL, MySQL, Oracle,
-and H2. Apply the SQL yourself, or copy it into Flyway/Liquibase. The JDBC
-stores do not create tables automatically.
+H2, and SQLite. Apply the SQL yourself, or copy it into Flyway/Liquibase. The
+JDBC stores do not create tables automatically.
+
+SQLite support is aimed at embedded desktop and agent applications that ship a
+local database file. The host supplies the SQLite JDBC driver and may use the
+same `DataSource` for its own tables and both Flower checkpoint stores. See
+[Persistence](docs/persistence.md) for the SQLite dialect, schema paths, and
+single-process operating guidance.
 
 For dialect paths, execution-context columns, and migration notes, see
 [Persistence](docs/persistence.md).
@@ -1078,7 +1084,7 @@ Core:
 Persistence / integration:
 
 - `flower-persistence-jdbc`: JDBC `FlowCheckpointStore` plus schema SQL for
-  PostgreSQL, MySQL, Oracle, and H2.
+  PostgreSQL, MySQL, Oracle, H2, and SQLite.
 - `flower-spring-boot-starter`: Spring Boot auto-configuration for an `Engine`
   and optional checkpoint store wiring.
 
