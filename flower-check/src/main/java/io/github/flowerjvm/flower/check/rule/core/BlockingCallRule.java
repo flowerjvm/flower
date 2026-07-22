@@ -13,7 +13,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * FLOWER-CHECK-001 - No blocking on the Worker thread.
+ * FLOWER-CHECK-001 - No blocking on Flower execution threads.
  *
  * <p>Primary detection is AST-backed via {@link AnalysisFact#BLOCKING_CALL}.
  * The text scanner remains only as a conservative fallback for files that could
@@ -25,10 +25,10 @@ public final class BlockingCallRule extends AbstractRule {
     private static final Pattern CLASS_DECLARATION =
             Pattern.compile("\\bclass\\s+\\w+\\b[^\\{;]*\\bextends\\s+([^\\s\\{]+)");
     private static final Pattern LIFECYCLE_METHOD =
-            Pattern.compile("\\b(onEnter|onTick|onExit|onReset|onResume)\\s*\\(");
+            Pattern.compile("\\b(onEnter|onTick|onEvent|onTimeout|onRecover|onExit|onReset|onResume)\\s*\\(");
 
     public BlockingCallRule() {
-        super("FLOWER-CHECK-001", Severity.ERROR, "No blocking on the Worker thread");
+        super("FLOWER-CHECK-001", Severity.ERROR, "No blocking on Flower execution threads");
     }
 
     @Override
@@ -76,11 +76,11 @@ public final class BlockingCallRule extends AbstractRule {
     private Finding blockingFinding(RuleContext ctx, String file, int line, int column, String call) {
         return finding(ctx, file, line)
                 .column(column)
-                .what(call + " blocks the calling thread; inside a Step lifecycle method it freezes the Worker tick.")
-                .why("One Worker ticks every Flow it owns on a single thread. A blocking call stalls all "
-                        + "other Flows on that Worker until it returns. Flower relies on quick, repeatable ticks.")
-                .fix("Start the wait in onEnter (ctx.startTimeout / ctx.subscribe) and return "
-                        + "StepResult.stay() until a signal or ctx.timedOut() resolves it.")
+                .what(call + " blocks a Flower execution callback.")
+                .why("A Worker tick, EventWorker loop, or Guard check serializes progress on one thread. "
+                        + "A blocking callback stalls the other Flows owned by that worker.")
+                .fix("For a core Step, observe work across ticks with events/signals/timeouts. For an "
+                        + "EventStep, use runAsync/thenRunAsync and publish completion. Keep Guards read-only.")
                 .build();
     }
 
@@ -122,7 +122,8 @@ public final class BlockingCallRule extends AbstractRule {
             return false;
         }
         String extendedType = normalizeTypeName(matcher.group(1));
-        if ("Step".equals(extendedType) || "DurableStep".equals(extendedType)) {
+        if ("Step".equals(extendedType) || "DurableStep".equals(extendedType)
+                || "EventStep".equals(extendedType)) {
             return true;
         }
         for (String configured : ctx.config().stepBaseClasses()) {

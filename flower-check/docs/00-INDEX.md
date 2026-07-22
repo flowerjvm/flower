@@ -5,7 +5,7 @@ authority: doc-governance
 depends_on:
   - ../README.md
 supersedes: []
-last_reviewed: 2026-06-10
+last_reviewed: 2026-07-20
 ---
 
 # 00. flower-check Doc Index & Governance
@@ -51,7 +51,7 @@ L2  docs/01-architecture.md
       Checker pipeline, parser strategy, Rule SPI, findings, config.
 
 L3  docs/02-rule-catalog.md
-      The enforced rules (FLOWER-CHECK-001..015), each grounded and self-explaining.
+      The enforced rules (FLOWER-CHECK-001..019), each grounded and self-explaining.
 
 L3  docs/03-host-adoption.md
       How host projects adopt flower-check through Maven and CI templates.
@@ -71,8 +71,14 @@ the canonical Flower definition. These external sources outrank every
 2. flower/README.md     public Step Design Rules, Notes For AI Agents
 3. flower-dev-notes     design rationale and intentional exclusions
 4. flower-sample        known-good code = the zero-false-positive baseline
-5. archdox docs         real agent/harness usage (Tier 2 agent rules)
+5. flower-agent-skills  downstream app guidance consistency check
+6. archdox docs         real agent/harness usage (Tier 2 agent rules)
 ```
+
+`flower-agent-skills` is guidance downstream of the real Flower API. It is
+reviewed so the checker and the application guide do not contradict each
+other, but it never overrides `flower-core`, this repository's README, or the
+design rationale.
 
 In the normal development workspace, `flower-dev-notes` lives beside this repo:
 `../../flower-dev-notes` from `flower-check`. It is private rationale, but it is

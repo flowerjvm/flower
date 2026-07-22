@@ -24,6 +24,9 @@ public final class AnalysisFact {
     public static final String EXECUTION_CONTEXT_BUSINESS_USE = "execution-context-business-use";
     public static final String SHARED_STEP_INSTANCE = "shared-step-instance";
     public static final String UNAPPROVED_RECURRING_SCHEDULER = "unapproved-recurring-scheduler";
+    public static final String GUARD_SIDE_EFFECT = "guard-side-effect";
+    public static final String MISSING_EVENT_AWAIT_DEADLINE = "missing-event-await-deadline";
+    public static final String DURABLE_EVENT_STEP_NOT_RECOVERABLE = "durable-event-step-not-recoverable";
     public static final String AGENT_WRITE_BYPASS = "agent-write-bypass";
     public static final String AGENT_MISSING_AUDIT = "agent-missing-audit";
     public static final String APPROVAL_DIRECT_EXECUTION = "approval-direct-execution";

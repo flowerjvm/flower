@@ -32,7 +32,7 @@ source   load .java files                     - IO only
 parse    Parser SPI + AST/text impls          - no rule logic, no findings
 model    ProjectModel (pass 1 facts)          - shared read-only facts
 rule     Rule SPI, registry, context, severity - the extension surface
-rule.core   FLOWER-CHECK-001..005, 009..015
+rule.core   FLOWER-CHECK-001..005, 009..019
 rule.agent  FLOWER-CHECK-006..008 (opt-in)
 finding  Finding (what/why/fix), suppression  - no parser/AST types here
 report   Reporter SPI + PlainText/SARIF

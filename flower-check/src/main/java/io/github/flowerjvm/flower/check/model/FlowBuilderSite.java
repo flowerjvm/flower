@@ -20,6 +20,7 @@ public final class FlowBuilderSite {
     private final int line;
     private final String flowType;        // null when not a string literal
     private final boolean durable;
+    private final boolean eventDriven;
     private final List<String> declaredStepIds;
     private final Set<String> goToTargets;
     private final boolean allDurableStepsHaveRecoveryPolicy;
@@ -31,10 +32,23 @@ public final class FlowBuilderSite {
                            List<String> declaredStepIds,
                            Set<String> goToTargets,
                            boolean allDurableStepsHaveRecoveryPolicy) {
+        this(file, line, flowType, durable, false, declaredStepIds, goToTargets,
+                allDurableStepsHaveRecoveryPolicy);
+    }
+
+    public FlowBuilderSite(String file,
+                           int line,
+                           String flowType,
+                           boolean durable,
+                           boolean eventDriven,
+                           List<String> declaredStepIds,
+                           Set<String> goToTargets,
+                           boolean allDurableStepsHaveRecoveryPolicy) {
         this.file = Objects.requireNonNull(file, "file");
         this.line = line;
         this.flowType = flowType;
         this.durable = durable;
+        this.eventDriven = eventDriven;
         this.declaredStepIds = Collections.unmodifiableList(declaredStepIds);
         this.goToTargets = Collections.unmodifiableSet(new LinkedHashSet<>(goToTargets));
         this.allDurableStepsHaveRecoveryPolicy = allDurableStepsHaveRecoveryPolicy;
@@ -54,6 +68,10 @@ public final class FlowBuilderSite {
 
     public boolean durable() {
         return durable;
+    }
+
+    public boolean eventDriven() {
+        return eventDriven;
     }
 
     public List<String> declaredStepIds() {

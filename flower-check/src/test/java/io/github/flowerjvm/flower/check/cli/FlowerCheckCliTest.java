@@ -24,6 +24,7 @@ class FlowerCheckCliTest {
         assertThat(out.toString()).contains("flower-check rules:");
         assertThat(out.toString()).contains("FLOWER-CHECK-001");
         assertThat(out.toString()).contains("FLOWER-CHECK-016");
+        assertThat(out.toString()).contains("FLOWER-CHECK-019");
         assertThat(out.toString()).contains("opt-in");
         assertThat(err.toString()).isEmpty();
     }
@@ -48,7 +49,7 @@ class FlowerCheckCliTest {
         assertThat(out.toString()).containsPattern("FLOWER-CHECK-001\\s+ERROR\\s+disabled");
         assertThat(out.toString()).containsPattern("FLOWER-CHECK-004\\s+INFO\\s+enabled");
         assertThat(out.toString()).containsPattern("FLOWER-CHECK-006\\s+ERROR\\s+enabled");
-        assertThat(out.toString()).contains("flower-check: 16 rules.");
+        assertThat(out.toString()).contains("flower-check: 19 rules.");
         assertThat(err.toString()).isEmpty();
     }
 

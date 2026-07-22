@@ -17,3 +17,6 @@ io.github.flowerjvm.flower.check.rule.core.DuplicateStepIdRule
 io.github.flowerjvm.flower.check.rule.core.ExecutionContextRule
 io.github.flowerjvm.flower.check.rule.core.SharedStepInstanceRule
 io.github.flowerjvm.flower.check.rule.core.SchedulerApprovalRule
+io.github.flowerjvm.flower.check.rule.core.GuardSideEffectRule
+io.github.flowerjvm.flower.check.rule.core.EventAwaitDeadlineRule
+io.github.flowerjvm.flower.check.rule.core.DurableEventStepRecoveryRule

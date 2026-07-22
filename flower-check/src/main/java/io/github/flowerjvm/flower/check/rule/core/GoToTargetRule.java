@@ -14,7 +14,7 @@ public final class GoToTargetRule extends AbstractFactRule {
 
     @Override
     protected String what(AnalysisFact fact) {
-        return "StepResult.goTo(\"" + fact.subject() + "\") targets no declared step id found in analyzed flows.";
+        return "goTo(\"" + fact.subject() + "\") targets no declared step id found in analyzed flows.";
     }
 
     @Override

@@ -8,24 +8,24 @@ public final class ProviderCallRule extends AbstractFactRule {
 
     public ProviderCallRule() {
         super("FLOWER-CHECK-002", Severity.ERROR,
-                "No direct LLM/provider SDK calls in a Step",
+                "No direct LLM/provider SDK calls in Flower callbacks",
                 AnalysisFact.PROVIDER_CALL);
     }
 
     @Override
     protected String what(AnalysisFact fact) {
-        return "Step lifecycle directly calls a provider/model client: " + fact.detail();
+        return "Flower execution callback directly calls a provider/model client: " + fact.detail();
     }
 
     @Override
     protected String why(AnalysisFact fact) {
-        return "Model/provider calls are slow and failure-prone. Running them on a Worker tick "
-                + "blocks other Flows and hides retry/refine policy inside a Step.";
+        return "Model/provider calls are slow and failure-prone. Running them on a Worker tick, "
+                + "EventWorker loop, or Guard check blocks progress and hides retry/refine policy.";
     }
 
     @Override
     protected String fix(AnalysisFact fact) {
-        return "Submit provider work to an async service or harness in onEnter, then return "
-                + "StepResult.stay() until an event, signal, or timeout resolves it.";
+        return "Use an async service/harness. Core Steps observe completion across ticks; "
+                + "EventSteps use runAsync/thenRunAsync and publish a completion event.";
     }
 }

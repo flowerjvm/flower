@@ -6,7 +6,7 @@ depends_on:
   - 00-INDEX.md
   - ../README.md
 supersedes: []
-last_reviewed: 2026-06-10
+last_reviewed: 2026-07-20
 ---
 
 # 01. flower-check Architecture
@@ -68,7 +68,7 @@ io.github.flowerjvm.flower.check
   parse       Parser abstraction over JavaParser + text fallback
   model       ProjectModel, StepType, FlowBuilderSite, StepIdGraph
   rule        Rule SPI, RuleContext, RuleRegistry, Severity
-  rule.core   FLOWER-CHECK-001..005 (Step/Flow usage rules)
+  rule.core   FLOWER-CHECK-001..005, 009..019 (Flower usage rules)
   rule.agent  FLOWER-CHECK-006..008 (agent-runtime rules)
   finding     Finding, FindingCollector, suppression
   report      Reporter, PlainTextReporter, SarifReporter
@@ -112,27 +112,31 @@ not produce findings.
 
 ```text
 ProjectModel
-  stepTypes        : classes extending Step / DurableStep
-                     (name, file, onEnter/onTick/onExit/onReset methods)
-  flowBuilders     : Flow.builder(...) call sites
+  stepTypes        : classes extending Step / DurableStep / EventStep
+                     (runtime kind, name, file, lifecycle overrides)
+  flowBuilders     : Flow.builder(...) / EventFlow.builder(...) call sites
                      (flowType literal if present, durable? flag,
                       declared step ids, guard presence, recovery policies)
   stepIdGraph      : per flow builder, the set of declared step ids and the
                      set of goTo("...") / setNextSeq targets referenced
+  guardSites       : Guard implementations and inline builder guard callbacks
+                     (blocking/provider calls and obvious business side effects)
   agentActions     : classes/methods that look like agent write actions
                      (best-effort; see agent rules for the heuristic)
 ```
 
 Key model facts and how they are gathered:
 
-- **Is this class a Step?** `extends Step` or `extends DurableStep` by simple
-  name. Transitive subclassing (a project base class that extends `Step`) is
-  resolved within the analyzed source set; a Step base class from a dependency
-  is matched by configured names.
+- **Is this class a Step?** `extends Step`, `extends DurableStep`, or
+  `extends EventStep` by simple name. Transitive subclassing is resolved within
+  the analyzed source set; a core Step base class from a dependency is matched
+  by configured names. Tick-driven and event-driven lifecycle sets remain
+  distinct.
 - **Step bodies.** The overrides of `onEnter`, `onTick`, `onExit`, `onReset`
   are recorded so "in-Step" rules only scan inside those methods, not the whole
   class.
-- **Flow shape.** A `Flow.builder(type, key)` chain is followed through
+- **Flow shape.** A `Flow.builder(type, key)` or `EventFlow.builder(type, key)`
+  chain is followed through
   `.step(...)`, `.step(..., guard)`, `.durable()`, `.durableStep(...)`,
   `.executionContext(...)`, `.build()`. This yields the declared step-id set
   and whether the flow is durable — both needed by several rules.

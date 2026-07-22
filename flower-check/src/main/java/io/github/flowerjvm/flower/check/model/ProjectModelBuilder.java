@@ -52,8 +52,13 @@ import java.util.Set;
  */
 public final class ProjectModelBuilder {
 
-    private static final Set<String> LIFECYCLE_METHODS = new HashSet<>(Arrays.asList(
+    private static final Set<String> CORE_LIFECYCLE_METHODS = new HashSet<>(Arrays.asList(
             "onEnter", "onTick", "onExit", "onReset", "onResume"));
+    private static final Set<String> EVENT_LIFECYCLE_METHODS = new HashSet<>(Arrays.asList(
+            "onEnter", "onEvent", "onTimeout", "onRecover", "onExit"));
+    private static final Set<String> LIFECYCLE_METHODS = new HashSet<>(Arrays.asList(
+            "onEnter", "onTick", "onEvent", "onTimeout", "onRecover",
+            "onExit", "onReset", "onResume"));
     private static final Set<String> FLOW_DRIVE_METHODS = new HashSet<>(Arrays.asList(
             "tick", "tickOnce", "start", "stop", "attach"));
     private static final Set<String> FLOW_RUNTIME_TYPES = new HashSet<>(Arrays.asList(
@@ -72,6 +77,13 @@ public final class ProjectModelBuilder {
             "send", "create", "write", "mutate"));
     private static final Set<String> BLOCKING_METHODS = new HashSet<>(Arrays.asList(
             "sleep", "wait", "join"));
+    private static final Set<String> ASYNC_BOUNDARY_METHODS = new HashSet<>(Arrays.asList(
+            "runAsync", "supplyAsync", "thenRunAsync"));
+    private static final Set<String> GUARD_SIDE_EFFECT_METHODS = new HashSet<>(Arrays.asList(
+            "save", "saveAll", "update", "delete", "deleteAll", "insert", "execute",
+            "dispatch", "publish", "send", "submit", "schedule", "subscribe", "signal",
+            "cancel", "startTimeout", "setStepNo", "runAsync", "supplyAsync",
+            "thenRun", "thenRunAsync"));
     private static final Set<String> SCHEDULER_ANNOTATIONS = new HashSet<>(Arrays.asList(
             "Scheduled", "Schedules", "EnableScheduling"));
     private static final Set<String> RECURRING_SCHEDULER_METHODS = new HashSet<>(Arrays.asList(
@@ -101,6 +113,7 @@ public final class ProjectModelBuilder {
             Map<String, String> constants = collectStringConstants(ast.compilationUnit);
             constantsByFile.put(ast.file, new LinkedHashSet<>(constants.values()));
             analyzeStepClasses(ast, classesByName, facts);
+            analyzeGuardClasses(ast, classesByName, facts);
             analyzeFlowFactories(ast, classesByName, constants, flowBuilders, facts);
             analyzeSharedStepInstances(ast, facts);
             analyzeSchedulerUsage(ast, facts);
@@ -131,6 +144,9 @@ public final class ProjectModelBuilder {
                 for (ClassOrInterfaceType extended : declaration.getExtendedTypes()) {
                     info.extendedSimpleNames.add(simpleType(extended.getNameAsString()));
                 }
+                for (ClassOrInterfaceType implemented : declaration.getImplementedTypes()) {
+                    info.implementedSimpleNames.add(simpleType(implemented.getNameAsString()));
+                }
                 classes.add(info);
             }
         }
@@ -143,24 +159,66 @@ public final class ProjectModelBuilder {
         do {
             changed = false;
             for (ClassInfo info : classes) {
-                boolean step = info.step || extendsKnownStep(info, byName);
+                boolean coreStep = info.coreStep || extendsKnownCoreStep(info, byName);
+                boolean eventStep = info.eventStep || extendsKnownEventStep(info, byName);
                 boolean durable = info.durable || extendsKnownDurableStep(info, byName);
-                if (step != info.step || durable != info.durable) {
+                boolean guard = info.guard || implementsKnownGuard(info, byName);
+                boolean step = coreStep || eventStep;
+                if (step != info.step || coreStep != info.coreStep || eventStep != info.eventStep
+                        || durable != info.durable || guard != info.guard) {
                     info.step = step;
+                    info.coreStep = coreStep;
+                    info.eventStep = eventStep;
                     info.durable = durable;
+                    info.guard = guard;
                     changed = true;
                 }
             }
         } while (changed);
     }
 
-    private boolean extendsKnownStep(ClassInfo info, Map<String, ClassInfo> byName) {
+    private boolean extendsKnownCoreStep(ClassInfo info, Map<String, ClassInfo> byName) {
         for (String extended : info.extendedSimpleNames) {
             if ("Step".equals(extended) || "DurableStep".equals(extended) || isConfiguredStepBase(extended)) {
                 return true;
             }
             ClassInfo parent = byName.get(extended);
-            if (parent != null && parent.step) {
+            if (parent != null && parent.coreStep) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean extendsKnownEventStep(ClassInfo info, Map<String, ClassInfo> byName) {
+        for (String extended : info.extendedSimpleNames) {
+            if ("EventStep".equals(extended)) {
+                return true;
+            }
+            ClassInfo parent = byName.get(extended);
+            if (parent != null && parent.eventStep) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean implementsKnownGuard(ClassInfo info, Map<String, ClassInfo> byName) {
+        if (info.implementedSimpleNames.contains("Guard")) {
+            return true;
+        }
+        for (String implemented : info.implementedSimpleNames) {
+            ClassInfo parent = byName.get(implemented);
+            if (parent != null && parent.guard) {
+                return true;
+            }
+        }
+        for (String extended : info.extendedSimpleNames) {
+            if ("Guard".equals(extended)) {
+                return true;
+            }
+            ClassInfo parent = byName.get(extended);
+            if (parent != null && parent.guard) {
                 return true;
             }
         }
@@ -206,13 +264,18 @@ public final class ProjectModelBuilder {
             }
             Set<String> lifecycle = new LinkedHashSet<>();
             for (MethodDeclaration method : info.declaration.getMethods()) {
-                if (LIFECYCLE_METHODS.contains(method.getNameAsString())) {
+                if (lifecycleMethods(info).contains(method.getNameAsString())) {
                     lifecycle.add(method.getNameAsString());
                 }
             }
-            stepTypes.add(new StepType(info.simpleName, info.file, info.durable, lifecycle));
+            stepTypes.add(new StepType(
+                    info.simpleName, info.file, info.durable, info.eventStep, lifecycle));
         }
         return stepTypes;
+    }
+
+    private Set<String> lifecycleMethods(ClassInfo info) {
+        return info.eventStep ? EVENT_LIFECYCLE_METHODS : CORE_LIFECYCLE_METHODS;
     }
 
     private Map<String, String> collectStringConstants(CompilationUnit compilationUnit) {
@@ -234,10 +297,14 @@ public final class ProjectModelBuilder {
                 continue;
             }
             analyzeBlockingCalls(info, facts);
-            analyzeStepWait(info, facts);
+            if (info.eventStep) {
+                analyzeEventStepWait(info, facts);
+            } else {
+                analyzeStepWait(info, facts);
+            }
             analyzeRuntimeOwnership(info, facts);
             for (MethodDeclaration method : declaration.getMethods()) {
-                if (!LIFECYCLE_METHODS.contains(method.getNameAsString())) {
+                if (!lifecycleMethods(info).contains(method.getNameAsString())) {
                     continue;
                 }
                 analyzeProviderCalls(info, method, facts);
@@ -252,6 +319,112 @@ public final class ProjectModelBuilder {
         }
     }
 
+    private void analyzeGuardClasses(UnitAst ast,
+                                     Map<String, ClassInfo> classesByName,
+                                     List<AnalysisFact> facts) {
+        for (ClassOrInterfaceDeclaration declaration
+                : ast.compilationUnit.findAll(ClassOrInterfaceDeclaration.class)) {
+            ClassInfo info = classesByName.get(declaration.getNameAsString());
+            if (info == null || !info.guard || declaration.isInterface()) {
+                continue;
+            }
+            Set<MethodDeclaration> inScope = methodsAndPrivateHelpers(
+                    info, Collections.singleton("check"));
+            analyzeBlockingCalls(info, inScope, facts);
+            Set<String> fieldNames = fieldNames(declaration);
+            for (MethodDeclaration method : inScope) {
+                analyzeProviderCalls(info, method, facts);
+                analyzeGuardSideEffects(
+                        info.file, info.simpleName, method, fieldNames, true, facts);
+            }
+        }
+    }
+
+    private Set<String> fieldNames(ClassOrInterfaceDeclaration declaration) {
+        Set<String> names = new LinkedHashSet<>();
+        for (FieldDeclaration field : declaration.getFields()) {
+            for (VariableDeclarator variable : field.getVariables()) {
+                names.add(variable.getNameAsString());
+            }
+        }
+        return names;
+    }
+
+    private void analyzeGuardSideEffects(String file,
+                                         String owner,
+                                         Node body,
+                                         Set<String> fieldNames,
+                                         boolean allowOwnerFieldMutation,
+                                         List<AnalysisFact> facts) {
+        Set<String> emitted = new LinkedHashSet<>();
+        for (MethodCallExpr call : body.findAll(MethodCallExpr.class)) {
+            String name = call.getNameAsString();
+            if (!GUARD_SIDE_EFFECT_METHODS.contains(name) && !looksLikeSetter(name)) {
+                continue;
+            }
+            addGuardSideEffect(file, owner, call, call.toString(), emitted, facts);
+        }
+        for (AssignExpr assignment : body.findAll(AssignExpr.class)) {
+            if (isNonLocalGuardTarget(
+                    assignment.getTarget(), fieldNames, allowOwnerFieldMutation)) {
+                addGuardSideEffect(
+                        file, owner, assignment, assignment.toString(), emitted, facts);
+            }
+        }
+        for (UnaryExpr unary : body.findAll(UnaryExpr.class)) {
+            if (isIncrementOrDecrement(unary)
+                    && isNonLocalGuardTarget(
+                    unary.getExpression(), fieldNames, allowOwnerFieldMutation)) {
+                addGuardSideEffect(file, owner, unary, unary.toString(), emitted, facts);
+            }
+        }
+    }
+
+    private boolean looksLikeSetter(String methodName) {
+        return methodName.length() > 3
+                && methodName.startsWith("set")
+                && Character.isUpperCase(methodName.charAt(3));
+    }
+
+    private boolean isNonLocalGuardTarget(Expression target,
+                                          Set<String> fieldNames,
+                                          boolean allowOwnerFieldMutation) {
+        if (target instanceof FieldAccessExpr) {
+            FieldAccessExpr field = (FieldAccessExpr) target;
+            return !allowOwnerFieldMutation || !field.getScope().isThisExpr();
+        }
+        return target instanceof NameExpr
+                && fieldNames.contains(((NameExpr) target).getNameAsString())
+                && !allowOwnerFieldMutation;
+    }
+
+    private boolean isIncrementOrDecrement(UnaryExpr unary) {
+        UnaryExpr.Operator operator = unary.getOperator();
+        return operator == UnaryExpr.Operator.PREFIX_INCREMENT
+                || operator == UnaryExpr.Operator.PREFIX_DECREMENT
+                || operator == UnaryExpr.Operator.POSTFIX_INCREMENT
+                || operator == UnaryExpr.Operator.POSTFIX_DECREMENT;
+    }
+
+    private void addGuardSideEffect(String file,
+                                    String owner,
+                                    Node node,
+                                    String operation,
+                                    Set<String> emitted,
+                                    List<AnalysisFact> facts) {
+        String key = line(node) + ":" + column(node);
+        if (!emitted.add(key)) {
+            return;
+        }
+        facts.add(new AnalysisFact(
+                AnalysisFact.GUARD_SIDE_EFFECT,
+                file,
+                line(node),
+                column(node),
+                owner,
+                operation));
+    }
+
     private void analyzeStepWait(ClassInfo info, List<AnalysisFact> facts) {
         boolean hasStay = false;
         boolean hasSignalWait = false;
@@ -260,7 +433,7 @@ public final class ProjectModelBuilder {
         int line = line(info.declaration);
 
         for (MethodDeclaration method : info.declaration.getMethods()) {
-            if (!LIFECYCLE_METHODS.contains(method.getNameAsString())) {
+            if (!CORE_LIFECYCLE_METHODS.contains(method.getNameAsString())) {
                 continue;
             }
             String text = method.toString();
@@ -291,8 +464,62 @@ public final class ProjectModelBuilder {
         }
     }
 
+    private void analyzeEventStepWait(ClassInfo info, List<AnalysisFact> facts) {
+        for (MethodDeclaration method : info.declaration.getMethods()) {
+            if (!EVENT_LIFECYCLE_METHODS.contains(method.getNameAsString())) {
+                continue;
+            }
+            boolean finiteHint = hasFiniteWaitHint(info.simpleName) || hasFiniteWaitHint(method.toString());
+            if (!finiteHint) {
+                continue;
+            }
+            for (MethodCallExpr call : method.findAll(MethodCallExpr.class)) {
+                if (!isResultCall(call, "EventStepResult", "await")) {
+                    continue;
+                }
+                boolean externalWait = containsAwaitCondition(call, "event")
+                        || containsAwaitCondition(call, "signal");
+                boolean deadline = containsAwaitCondition(call, "deadlineIn");
+                if (externalWait && !deadline) {
+                    facts.add(new AnalysisFact(
+                            AnalysisFact.MISSING_EVENT_AWAIT_DEADLINE,
+                            info.file,
+                            line(call),
+                            column(call),
+                            info.simpleName,
+                            "finite EventStep await has no AwaitCondition.deadlineIn(...)"));
+                }
+            }
+        }
+    }
+
+    private boolean containsAwaitCondition(MethodCallExpr awaitCall, String conditionName) {
+        for (Expression argument : awaitCall.getArguments()) {
+            if (argument instanceof MethodCallExpr) {
+                MethodCallExpr direct = (MethodCallExpr) argument;
+                if (conditionName.equals(direct.getNameAsString())
+                        && isScopeNamed(direct, "AwaitCondition")) {
+                    return true;
+                }
+            }
+            for (MethodCallExpr nested : argument.findAll(MethodCallExpr.class)) {
+                if (conditionName.equals(nested.getNameAsString())
+                        && isScopeNamed(nested, "AwaitCondition")) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
     private void analyzeBlockingCalls(ClassInfo info, List<AnalysisFact> facts) {
-        Set<MethodDeclaration> inScope = lifecycleAndPrivateHelpers(info);
+        Set<MethodDeclaration> inScope = methodsAndPrivateHelpers(info, lifecycleMethods(info));
+        analyzeBlockingCalls(info, inScope, facts);
+    }
+
+    private void analyzeBlockingCalls(ClassInfo info,
+                                      Set<MethodDeclaration> inScope,
+                                      List<AnalysisFact> facts) {
         Set<String> emitted = new LinkedHashSet<>();
         for (MethodDeclaration method : inScope) {
             for (MethodCallExpr call : method.findAll(MethodCallExpr.class)) {
@@ -313,7 +540,7 @@ public final class ProjectModelBuilder {
                         "blocking call in " + info.simpleName + "." + method.getNameAsString()));
             }
             for (WhileStmt loop : method.findAll(WhileStmt.class)) {
-                if (looksLikeBusyWait(loop)) {
+                if (looksLikeBusyWait(loop) && !isInsideAsyncBoundary(loop)) {
                     facts.add(new AnalysisFact(
                             AnalysisFact.BLOCKING_CALL,
                             info.file,
@@ -324,7 +551,7 @@ public final class ProjectModelBuilder {
                 }
             }
             for (ForStmt loop : method.findAll(ForStmt.class)) {
-                if (looksLikeBusyWait(loop)) {
+                if (looksLikeBusyWait(loop) && !isInsideAsyncBoundary(loop)) {
                     facts.add(new AnalysisFact(
                             AnalysisFact.BLOCKING_CALL,
                             info.file,
@@ -337,14 +564,60 @@ public final class ProjectModelBuilder {
         }
     }
 
-    private Set<MethodDeclaration> lifecycleAndPrivateHelpers(ClassInfo info) {
+    private void analyzeBlockingNode(String file,
+                                     String owner,
+                                     Node body,
+                                     List<AnalysisFact> facts) {
+        Set<String> emitted = new LinkedHashSet<>();
+        for (MethodCallExpr call : body.findAll(MethodCallExpr.class)) {
+            String blocking = blockingCallName(
+                    call, null, null, Collections.<MethodDeclaration>emptySet());
+            if (blocking == null) {
+                continue;
+            }
+            String key = line(call) + ":" + column(call) + ":" + blocking;
+            if (emitted.add(key)) {
+                facts.add(new AnalysisFact(
+                        AnalysisFact.BLOCKING_CALL,
+                        file,
+                        line(call),
+                        column(call),
+                        blocking,
+                        "blocking call in " + owner));
+            }
+        }
+        for (WhileStmt loop : body.findAll(WhileStmt.class)) {
+            if (looksLikeBusyWait(loop) && !isInsideAsyncBoundary(loop)) {
+                facts.add(new AnalysisFact(
+                        AnalysisFact.BLOCKING_CALL,
+                        file,
+                        line(loop),
+                        column(loop),
+                        "busy wait loop",
+                        "busy-wait loop in " + owner));
+            }
+        }
+        for (ForStmt loop : body.findAll(ForStmt.class)) {
+            if (looksLikeBusyWait(loop) && !isInsideAsyncBoundary(loop)) {
+                facts.add(new AnalysisFact(
+                        AnalysisFact.BLOCKING_CALL,
+                        file,
+                        line(loop),
+                        column(loop),
+                        "busy wait loop",
+                        "busy-wait loop in " + owner));
+            }
+        }
+    }
+
+    private Set<MethodDeclaration> methodsAndPrivateHelpers(ClassInfo info, Set<String> entryMethodNames) {
         Map<String, MethodDeclaration> privateMethods = new HashMap<>();
         Set<MethodDeclaration> inScope = new LinkedHashSet<>();
         for (MethodDeclaration method : info.declaration.getMethods()) {
             if (method.isPrivate()) {
                 privateMethods.put(method.getNameAsString(), method);
             }
-            if (LIFECYCLE_METHODS.contains(method.getNameAsString())) {
+            if (entryMethodNames.contains(method.getNameAsString())) {
                 inScope.add(method);
             }
         }
@@ -372,6 +645,9 @@ public final class ProjectModelBuilder {
                                     MethodDeclaration method,
                                     ClassInfo info,
                                     Set<MethodDeclaration> inScope) {
+        if (isInsideAsyncBoundary(call)) {
+            return null;
+        }
         String name = call.getNameAsString();
         if (BLOCKING_METHODS.contains(name)) {
             if ("sleep".equals(name) && !isScopeNamed(call, "Thread")) {
@@ -394,6 +670,20 @@ public final class ProjectModelBuilder {
         return null;
     }
 
+    private boolean isInsideAsyncBoundary(Node node) {
+        Optional<Node> parent = node.getParentNode();
+        while (parent.isPresent()) {
+            Node candidate = parent.get();
+            if (candidate instanceof MethodCallExpr
+                    && ASYNC_BOUNDARY_METHODS.contains(
+                    ((MethodCallExpr) candidate).getNameAsString())) {
+                return true;
+            }
+            parent = candidate.getParentNode();
+        }
+        return false;
+    }
+
     private boolean completionAlreadyObserved(MethodCallExpr blockingCall,
                                               MethodDeclaration method,
                                               ClassInfo info,
@@ -404,6 +694,9 @@ public final class ProjectModelBuilder {
         Expression receiver = blockingCall.getScope().get();
         if (completionKnownAt(receiver, blockingCall)) {
             return true;
+        }
+        if (method == null || info == null) {
+            return false;
         }
 
         String receiverName = expressionKey(receiver);
@@ -684,26 +977,33 @@ public final class ProjectModelBuilder {
     }
 
     private void analyzeProviderCalls(ClassInfo info, MethodDeclaration method, List<AnalysisFact> facts) {
+        analyzeProviderCalls(info.file, method, facts);
+    }
+
+    private void analyzeProviderCalls(String file, Node body, List<AnalysisFact> facts) {
         List<String> providerNames = providerNames();
         if (providerNames.isEmpty()) {
             return;
         }
-        for (MethodCallExpr call : method.findAll(MethodCallExpr.class)) {
-            if (matchesAnyProvider(call.toString(), providerNames)) {
+        for (MethodCallExpr call : body.findAll(MethodCallExpr.class)) {
+            if (!ASYNC_BOUNDARY_METHODS.contains(call.getNameAsString())
+                    && !isInsideAsyncBoundary(call)
+                    && matchesAnyProvider(call.toString(), providerNames)) {
                 facts.add(new AnalysisFact(
                         AnalysisFact.PROVIDER_CALL,
-                        info.file,
+                        file,
                         line(call),
                         column(call),
                         call.getNameAsString(),
                         call.toString()));
             }
         }
-        for (ObjectCreationExpr creation : method.findAll(ObjectCreationExpr.class)) {
-            if (matchesAnyProvider(creation.getType().asString(), providerNames)) {
+        for (ObjectCreationExpr creation : body.findAll(ObjectCreationExpr.class)) {
+            if (!isInsideAsyncBoundary(creation)
+                    && matchesAnyProvider(creation.getType().asString(), providerNames)) {
                 facts.add(new AnalysisFact(
                         AnalysisFact.PROVIDER_CALL,
-                        info.file,
+                        file,
                         line(creation),
                         column(creation),
                         creation.getType().asString(),
@@ -757,6 +1057,7 @@ public final class ProjectModelBuilder {
                     line(chain.builderCall),
                     chain.flowType,
                     chain.durable,
+                    chain.eventDriven,
                     chain.declaredStepIds,
                     Collections.<String>emptySet(),
                     chain.allDurableStepsRecoverable));
@@ -771,7 +1072,8 @@ public final class ProjectModelBuilder {
         while (cursor instanceof MethodCallExpr) {
             MethodCallExpr current = (MethodCallExpr) cursor;
             reversed.add(current);
-            if ("builder".equals(current.getNameAsString()) && isScopeNamed(current, "Flow")) {
+            if ("builder".equals(current.getNameAsString())
+                    && (isScopeNamed(current, "Flow") || isScopeNamed(current, "EventFlow"))) {
                 builder = current;
                 break;
             }
@@ -786,6 +1088,7 @@ public final class ProjectModelBuilder {
         }
         Collections.reverse(reversed);
         FlowChain chain = new FlowChain(builder);
+        chain.eventDriven = isScopeNamed(builder, "EventFlow");
         if (!builder.getArguments().isEmpty()) {
             chain.flowType = stringValue(builder.getArgument(0), constants);
         }
@@ -822,9 +1125,14 @@ public final class ProjectModelBuilder {
                         stepCall.stepId,
                         "duplicate step id in one Flow.builder chain"));
             }
+            analyzeInlineGuard(file, stepCall, facts);
         }
 
         if (!chain.durable) {
+            return;
+        }
+        if (chain.eventDriven) {
+            addDurableEventStepFacts(file, chain, classesByName, facts);
             return;
         }
         for (StepCall stepCall : chain.stepCalls) {
@@ -885,7 +1193,7 @@ public final class ProjectModelBuilder {
             }
             constants.putAll(collectStringConstants(ast.compilationUnit));
             for (MethodCallExpr call : ast.compilationUnit.findAll(MethodCallExpr.class)) {
-                if (!isStepResultCall(call, "goTo") || call.getArguments().isEmpty()) {
+                if (!isFlowerResultCall(call, "goTo") || call.getArguments().isEmpty()) {
                     continue;
                 }
                 String target = stringValue(call.getArgument(0), constants);
@@ -921,7 +1229,15 @@ public final class ProjectModelBuilder {
     }
 
     private boolean isDirectLifecycleInvocation(MethodCallExpr call) {
-        return LIFECYCLE_METHODS.contains(call.getNameAsString());
+        if (!LIFECYCLE_METHODS.contains(call.getNameAsString())
+                || !call.getScope().isPresent()) {
+            return false;
+        }
+        if (call.getScope().get() instanceof ThisExpr) {
+            return true;
+        }
+        Optional<String> type = declaredTypeOf(call.getScope().get(), call);
+        return type.isPresent() && looksLikeStepType(type.get());
     }
 
     private boolean isWorkerOrEngineControl(MethodCallExpr call) {
@@ -1119,6 +1435,176 @@ public final class ProjectModelBuilder {
         }
     }
 
+    private void analyzeInlineGuard(String file, StepCall stepCall, List<AnalysisFact> facts) {
+        Optional<Expression> guard = guardArgument(stepCall);
+        if (!guard.isPresent()
+                || (!(guard.get() instanceof LambdaExpr)
+                && !(guard.get() instanceof ObjectCreationExpr))) {
+            return;
+        }
+        String owner = "inline Guard for step '" + stepCall.stepId + "'";
+        analyzeBlockingNode(file, owner, guard.get(), facts);
+        analyzeProviderCalls(file, guard.get(), facts);
+        Optional<ClassOrInterfaceDeclaration> enclosing = ancestor(
+                guard.get(), ClassOrInterfaceDeclaration.class);
+        Set<String> fields = enclosing.isPresent()
+                ? fieldNames(enclosing.get())
+                : Collections.<String>emptySet();
+        analyzeGuardSideEffects(file, owner, guard.get(), fields, false, facts);
+    }
+
+    private Optional<Expression> guardArgument(StepCall stepCall) {
+        int expectedArguments = "durableStep".equals(stepCall.methodName) ? 4 : 3;
+        if (stepCall.call.getArguments().size() < expectedArguments) {
+            return Optional.empty();
+        }
+        return Optional.of(stepCall.call.getArgument(2));
+    }
+
+    private void addDurableEventStepFacts(String file,
+                                          FlowChain chain,
+                                          Map<String, ClassInfo> classesByName,
+                                          List<AnalysisFact> facts) {
+        for (StepCall stepCall : chain.stepCalls) {
+            EventStepShape shape = eventStepShape(stepCall.call, classesByName);
+            if (!shape.known || !shape.awaits) {
+                continue;
+            }
+            if (!shape.recovers) {
+                chain.allDurableStepsRecoverable = false;
+                facts.add(new AnalysisFact(
+                        AnalysisFact.DURABLE_EVENT_STEP_NOT_RECOVERABLE,
+                        file,
+                        line(stepCall.call),
+                        column(stepCall.call),
+                        stepCall.stepId,
+                        "awaiting EventStep does not override onRecover(...)"));
+            }
+            if (shape.predicateAwait) {
+                chain.allDurableStepsRecoverable = false;
+                facts.add(new AnalysisFact(
+                        AnalysisFact.DURABLE_EVENT_STEP_NOT_RECOVERABLE,
+                        file,
+                        line(stepCall.call),
+                        column(stepCall.call),
+                        stepCall.stepId,
+                        "durable EventStep uses predicate-based AwaitCondition.event(...)"));
+            }
+        }
+    }
+
+    private EventStepShape eventStepShape(MethodCallExpr stepCall,
+                                          Map<String, ClassInfo> classesByName) {
+        if (stepCall.getArguments().size() < 2
+                || !(stepCall.getArgument(1) instanceof ObjectCreationExpr)) {
+            return EventStepShape.unknown();
+        }
+        ObjectCreationExpr creation = (ObjectCreationExpr) stepCall.getArgument(1);
+        String typeName = simpleType(creation.getType().asString());
+        boolean known = "EventStep".equals(typeName);
+        boolean awaits = containsEventAwait(creation);
+        boolean recovers = overridesMethod(creation, "onRecover");
+        boolean predicateAwait = containsPredicateEventAwait(creation);
+
+        ClassInfo info = classesByName.get(typeName);
+        if (info != null && info.eventStep) {
+            known = true;
+            awaits = awaits || hierarchyContainsEventAwait(info, classesByName, new HashSet<String>());
+            recovers = recovers || hierarchyOverridesMethod(
+                    info, "onRecover", classesByName, new HashSet<String>());
+            predicateAwait = predicateAwait || hierarchyContainsPredicateEventAwait(
+                    info, classesByName, new HashSet<String>());
+        }
+        return new EventStepShape(known, awaits, recovers, predicateAwait);
+    }
+
+    private boolean hierarchyContainsEventAwait(ClassInfo info,
+                                                Map<String, ClassInfo> classesByName,
+                                                Set<String> visited) {
+        if (!visited.add(info.simpleName)) {
+            return false;
+        }
+        if (containsEventAwait(info.declaration)) {
+            return true;
+        }
+        for (String parentName : info.extendedSimpleNames) {
+            ClassInfo parent = classesByName.get(parentName);
+            if (parent != null && hierarchyContainsEventAwait(parent, classesByName, visited)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean hierarchyOverridesMethod(ClassInfo info,
+                                             String methodName,
+                                             Map<String, ClassInfo> classesByName,
+                                             Set<String> visited) {
+        if (!visited.add(info.simpleName)) {
+            return false;
+        }
+        if (overridesMethod(info.declaration, methodName)) {
+            return true;
+        }
+        for (String parentName : info.extendedSimpleNames) {
+            ClassInfo parent = classesByName.get(parentName);
+            if (parent != null
+                    && hierarchyOverridesMethod(parent, methodName, classesByName, visited)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean hierarchyContainsPredicateEventAwait(
+            ClassInfo info,
+            Map<String, ClassInfo> classesByName,
+            Set<String> visited) {
+        if (!visited.add(info.simpleName)) {
+            return false;
+        }
+        if (containsPredicateEventAwait(info.declaration)) {
+            return true;
+        }
+        for (String parentName : info.extendedSimpleNames) {
+            ClassInfo parent = classesByName.get(parentName);
+            if (parent != null
+                    && hierarchyContainsPredicateEventAwait(parent, classesByName, visited)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean containsEventAwait(Node node) {
+        for (MethodCallExpr call : node.findAll(MethodCallExpr.class)) {
+            if (isResultCall(call, "EventStepResult", "await")) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean containsPredicateEventAwait(Node node) {
+        for (MethodCallExpr call : node.findAll(MethodCallExpr.class)) {
+            if (isScopeNamed(call, "AwaitCondition")
+                    && "event".equals(call.getNameAsString())
+                    && call.getArguments().size() > 1) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean overridesMethod(Node node, String methodName) {
+        for (MethodDeclaration method : node.findAll(MethodDeclaration.class)) {
+            if (methodName.equals(method.getNameAsString())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     private void analyzeRawSubscriptions(ClassInfo info, MethodDeclaration method, List<AnalysisFact> facts) {
         for (MethodCallExpr call : method.findAll(MethodCallExpr.class)) {
             if (!"subscribe".equals(call.getNameAsString())) {
@@ -1133,7 +1619,8 @@ public final class ProjectModelBuilder {
                         line(call),
                         column(call),
                         info.simpleName,
-                        "Step subscribes through ctx.eventBus().subscribe(...)"));
+                        (info.eventStep ? "EventStep" : "Step")
+                                + " subscribes through ctx.eventBus().subscribe(...)"));
             }
         }
     }
@@ -1404,10 +1891,20 @@ public final class ProjectModelBuilder {
     }
 
     private boolean isStepResultCall(MethodCallExpr call, String expectedName) {
+        return isResultCall(call, "StepResult", expectedName);
+    }
+
+    private boolean isFlowerResultCall(MethodCallExpr call, String expectedName) {
+        return isResultCall(call, "StepResult", expectedName)
+                || isResultCall(call, "EventStepResult", expectedName)
+                || isResultCall(call, "GuardResult", expectedName);
+    }
+
+    private boolean isResultCall(MethodCallExpr call, String resultType, String expectedName) {
         if (expectedName != null && !expectedName.equals(call.getNameAsString())) {
             return false;
         }
-        return isScopeNamed(call, "StepResult");
+        return isScopeNamed(call, resultType);
     }
 
     private boolean isScopeNamed(MethodCallExpr call, String name) {
@@ -1451,8 +1948,12 @@ public final class ProjectModelBuilder {
         private final ClassOrInterfaceDeclaration declaration;
         private final String simpleName;
         private final Set<String> extendedSimpleNames = new LinkedHashSet<>();
+        private final Set<String> implementedSimpleNames = new LinkedHashSet<>();
         private boolean step;
+        private boolean coreStep;
+        private boolean eventStep;
         private boolean durable;
+        private boolean guard;
 
         private ClassInfo(String file, ClassOrInterfaceDeclaration declaration) {
             this.file = file;
@@ -1461,10 +1962,32 @@ public final class ProjectModelBuilder {
         }
     }
 
+    private static final class EventStepShape {
+        private final boolean known;
+        private final boolean awaits;
+        private final boolean recovers;
+        private final boolean predicateAwait;
+
+        private EventStepShape(boolean known,
+                               boolean awaits,
+                               boolean recovers,
+                               boolean predicateAwait) {
+            this.known = known;
+            this.awaits = awaits;
+            this.recovers = recovers;
+            this.predicateAwait = predicateAwait;
+        }
+
+        private static EventStepShape unknown() {
+            return new EventStepShape(false, false, false, false);
+        }
+    }
+
     private static final class FlowChain {
         private final MethodCallExpr builderCall;
         private String flowType;
         private boolean durable;
+        private boolean eventDriven;
         private boolean allDurableStepsRecoverable = true;
         private final List<String> declaredStepIds = new ArrayList<>();
         private final List<StepCall> stepCalls = new ArrayList<>();

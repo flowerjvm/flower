@@ -6,7 +6,7 @@ depends_on:
   - 00-INDEX.md
   - 01-architecture.md
 supersedes: []
-last_reviewed: 2026-07-17
+last_reviewed: 2026-07-20
 ---
 
 # 02. flower-check Rule Catalog
@@ -59,6 +59,16 @@ Use this map before adding or tightening a rule:
   - testkit is outside core and depends on core only
   - deterministic Flow tests should use harness-style tick/assert helpers
 
+10-flower-eventloop.md
+  - EventWorker / EventFlow / EventStep is a separate event-driven line
+  - every EventStep callback and synchronous EventEffect runs on the loop thread
+  - durable waits must be recreated by onRecover and be checkpointable
+
+flower-agent-skills application guidance
+  - Guards are quick, deterministic, non-blocking pre-step decisions
+  - EventStep blocking work goes through runAsync / thenRunAsync
+  - finite EventStep waits declare deadlines
+
 User scheduler approval requirement
   - recurring Spring/Java schedulers must not be introduced as an AI shortcut
   - every recurring scheduler must carry an explicit user-approval annotation
@@ -70,7 +80,8 @@ code, do not enable it by default.
 
 ## Core API Baseline
 
-This catalog was reconfirmed against `flower-core` on 2026-06-10. Rule
+This catalog was reconfirmed against `flower-core` and `flower-eventloop` on
+2026-07-20. Rule
 implementations must use these current API facts, even when older design notes
 show earlier names:
 
@@ -96,6 +107,24 @@ FlowBuilder durable API:
   step(String, Step, Guard)
   durableStep(String, Step, RecoveryPolicy)
   durableStep(String, Step, Guard, RecoveryPolicy)
+
+EventStep lifecycle:
+  EventStep.onEnter(ctx)
+  EventStep.onEvent(ctx, event)
+  EventStep.onTimeout(ctx)
+  EventStep.onRecover(ctx, recovery)
+  EventStep.onExit(ctx)
+
+EventStepResult / EventFlow API:
+  await(AwaitCondition...)
+  next()
+  goTo(String stepId)
+  finish()
+  fail(Throwable cause)
+  EventFlow.builder(type, key).step(String, EventStep)
+
+Guard callback:
+  Guard.check(StepContext)
 ```
 
 There is no current public `StepResult.advance()`, `StepResult.defer()`,
@@ -103,7 +132,7 @@ There is no current public `StepResult.advance()`, `StepResult.defer()`,
 `RecoveryPolicy`. A rule should not search for APIs that cannot compile in the
 current core unless it is explicitly a migration rule and is opt-in.
 
-## Scope Of A "Step Lifecycle Method"
+## Scope Of A Flower Execution Callback
 
 Several rules apply *inside Step lifecycle methods*. That means the bodies of
 methods that override, in a class extending `Step` or `DurableStep`:
@@ -116,19 +145,34 @@ onReset(StepContext)
 onResume(StepContext)   // DurableStep
 ```
 
+For a class extending `EventStep`, the execution callbacks are:
+
+```text
+onEnter(EventStepContext)
+onEvent(EventStepContext, Object)
+onTimeout(EventStepContext)
+onRecover(EventStepContext, EventRecoveryContext)
+onExit(EventStepContext)
+```
+
+`Guard.check(StepContext)` and an inline Guard lambda passed to a Flow builder
+also run on the Worker tick boundary. Blocking/provider rules therefore apply
+to them, while FLOWER-CHECK-017 additionally rejects business side effects
+hidden in a Guard. Guard-owned bookkeeping state is allowed.
+
 and any private helper reached only from those methods within the same class.
 It does **not** mean the whole class — constructors and unrelated helpers are
 out of scope, because Flower's threading contract is about what runs *on the
 Worker tick*, not about the class as a whole.
 
-Grounding: `flower-core` runs every Flow on a single Worker thread, one tick at
-a time (`02-core-architecture.md`, `04-events-bloom-and-threading.md`). The
-Worker calls these methods. Anything slow or control-stealing here corrupts
-every other Flow on that Worker.
+Grounding: `flower-core` runs every Flow on one Worker thread and
+`flower-eventloop` runs callbacks and synchronous effects on one event-loop
+thread. Anything slow or control-stealing in either execution line stalls the
+other Flows owned by that worker.
 
 ---
 
-## Tier 1 — Step / Flow Usage (FLOWER-CHECK-001..005, 009..016)
+## Tier 1 — Flower Usage (FLOWER-CHECK-001..005, 009..019)
 
 ### FLOWER-CHECK-001 — No blocking on the Worker thread
 
@@ -496,6 +540,75 @@ Instant)` are not flagged; they are not periodic work.
 
 ---
 
+### FLOWER-CHECK-017 — A Guard must not perform business side effects
+
+**Severity:** ERROR
+
+**What:** A named `Guard.check(...)` implementation or inline Flow-builder
+Guard mutates external state or starts business work, for example through `save`, `update`,
+`delete`, `publish`, `send`, `submit`, `schedule`, `subscribe`, `signal`,
+`cancel`, or a non-local assignment. State owned by a named Guard, such as a
+small attempt counter, is not reported.
+
+**Why:** Flower evaluates a Guard before entry and before every tick of the
+guarded Step. A side effect hidden there may repeat on every Worker tick and
+has no Step lifecycle, timeout, retry, or progress boundary.
+
+**Fix:** Let the Guard only read readiness/domain state and return
+`pass/hold/goTo/fail`. Move writes, publication, dispatch, and user-visible
+handling into a Step or application service invoked by a Step.
+
+Detection: AST scan of classes implementing `Guard` plus inline lambda or
+anonymous Guard arguments in `step(...)`/`durableStep(...)`. Only explicit
+mutation/dispatch method names and external assignments are flagged. Mutations
+of fields owned by a named Guard are ignored. Blocking and provider calls are
+reported by FLOWER-CHECK-001 and 002.
+
+---
+
+### FLOWER-CHECK-018 — A finite EventStep await should declare a deadline
+
+**Severity:** WARNING
+
+**What:** A finite-looking `EventStep` returns `EventStepResult.await(...)` for
+an event or signal but the same await declaration has no
+`AwaitCondition.deadlineIn(...)`.
+
+**Why:** An event-loop Flow has no periodic tick that can discover a lost
+response. Without an event or deadline, the Flow can remain asleep forever.
+
+**Fix:** Add a deadline condition and handle `onTimeout(...)` with an explicit
+failure, fallback `goTo`, or recovery decision. Truly long-lived monitors may
+use a reasoned suppression.
+
+Detection: event/signal await calls in EventStep execution callbacks, using the
+same conservative finite-work hints as FLOWER-CHECK-004.
+
+---
+
+### FLOWER-CHECK-019 — Durable EventStep awaits must be recoverable
+
+**Severity:** ERROR
+
+**What:** A statically known Step in a durable `EventFlow` can await but does
+not override `onRecover(...)`, or declares a predicate-based event await that
+the current checkpoint format cannot serialize.
+
+**Why:** `EventStep.onRecover` defaults to failure so one-shot request effects
+are not repeated. Predicate lambdas are runtime objects and are explicitly
+rejected by the event-loop checkpoint coordinator.
+
+**Fix:** Override `onRecover(...)` to recreate only the pending await state
+without repeating one-shot effects. Use exact event waits or durable signal
+name/key correlation instead of predicate-based event waits in durable flows.
+
+Detection: `EventFlow.builder(...).durable()` chains and statically known named
+or anonymous EventStep bodies. Unknown variable/factory-produced Step types are
+not failed, following the checker rule to prefer a missed violation over a
+false positive.
+
+---
+
 ## Tier 2 — Agent Runtime (FLOWER-CHECK-006..008)
 
 These target the future agent/harness layer described as outside `flower-core`
@@ -576,6 +689,9 @@ FLOWER-CHECK-013  ERROR    Step ids must be unique within a Flow
 FLOWER-CHECK-014  WARNING  ExecutionContext is not a business context
 FLOWER-CHECK-015  WARNING  Do not share a Step instance across Flows
 FLOWER-CHECK-016  ERROR    Recurring schedulers require user approval
+FLOWER-CHECK-017  ERROR    A Guard must not perform business side effects
+FLOWER-CHECK-018  WARNING  A finite EventStep await should declare a deadline
+FLOWER-CHECK-019  ERROR    Durable EventStep awaits must be recoverable
 ```
 
 ## False-Positive Baseline

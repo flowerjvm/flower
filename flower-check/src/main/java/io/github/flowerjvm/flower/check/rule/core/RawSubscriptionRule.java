@@ -25,6 +25,9 @@ public final class RawSubscriptionRule extends AbstractFactRule {
 
     @Override
     protected String fix(AnalysisFact fact) {
+        if (fact.detail().startsWith("EventStep")) {
+            return "Declare inbound wakeups with EventStepResult.await(AwaitCondition.event/signal/deadline).";
+        }
         return "Use ctx.subscribe(...). If raw eventBus() access is required, store the "
                 + "Subscription and unsubscribe it in onExit/onReset.";
     }
