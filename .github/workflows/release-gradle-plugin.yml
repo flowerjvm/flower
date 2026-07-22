@@ -7,9 +7,11 @@ on:
         description: Release version already committed in pom.xml (for example, 0.1.0)
         required: true
         type: string
-  release:
+  workflow_run:
+    workflows:
+      - Publish Release to Maven Central
     types:
-      - published
+      - completed
 
 permissions:
   contents: read
@@ -20,11 +22,14 @@ concurrency:
 
 jobs:
   publish:
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_branch || github.ref }}
 
       - name: Check required release secrets
         shell: bash
@@ -60,10 +65,10 @@ jobs:
         shell: bash
         env:
           REQUESTED_VERSION: ${{ github.event.inputs.version }}
-          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          MAVEN_RELEASE_REF: ${{ github.event.workflow_run.head_branch }}
         run: |
-          if [ "$GITHUB_EVENT_NAME" = "release" ]; then
-            release_version="${RELEASE_TAG#v}"
+          if [ "$GITHUB_EVENT_NAME" = "workflow_run" ]; then
+            release_version="${MAVEN_RELEASE_REF#v}"
           else
             release_version="$REQUESTED_VERSION"
           fi

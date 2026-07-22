@@ -148,7 +148,8 @@ io.github.flowerjvm:flower-check-gradle-plugin:<version>
 io.github.flowerjvm.flower-check:io.github.flowerjvm.flower-check.gradle.plugin:<version>
 ```
 
-The second coordinate is the marker used by Gradle's `plugins {}` DSL. The
+The second coordinate is the marker used by Gradle's `plugins {}` DSL. After
+the Maven reactor release workflow succeeds, the
 `Publish Gradle Plugin Release to Maven Central` workflow stages the plugin
 JAR, sources, Javadocs, and marker POM, then signs and publishes the bundle.
 For a release created before this workflow existed, run it manually with the
