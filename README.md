@@ -10,6 +10,13 @@ marked MVP are usable but may change more quickly before a 1.0 release. See
 [CONTRIBUTING.md](CONTRIBUTING.md), [SECURITY.md](SECURITY.md), and
 [ROADMAP.md](ROADMAP.md) for project process and planned work.
 
+## Use Flower with ChatGPT and Codex
+
+Install the [Flower plugin for ChatGPT and Codex](https://chatgpt.com/plugins/plugins_6a6b70b4903081918ec3eb37651cf01f).
+Coding agents can build, verify, and maintain Flower workflows directly in
+your Java project. The plugin includes guidance for Flower application
+workflows and governed actions with Flower Action Runtime.
+
 ## Install From Maven Central
 
 Flower `0.1.1` is published to Maven Central under the
