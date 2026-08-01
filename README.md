@@ -3,19 +3,184 @@
 [![CI](https://github.com/flowerjvm/flower/actions/workflows/ci.yml/badge.svg)](https://github.com/flowerjvm/flower/actions/workflows/ci.yml)
 [![Maven Central](https://img.shields.io/maven-central/v/io.github.flowerjvm/flower-core.svg?label=Maven%20Central)](https://central.sonatype.com/artifact/io.github.flowerjvm/flower-core/0.1.1)
 
-Flower -- the one that flows.
+Flower is a small in-JVM orchestration runtime that makes long-running Java
+and Spring application flows explicit, testable, observable, and operable.
+
+```text
+Engine -> Worker -> Flow -> Step -> StepResult
+```
 
 Project status: `0.1.1`. The stable center is `flower-core`; modules
 marked MVP are usable but may change more quickly before a 1.0 release. See
 [CONTRIBUTING.md](CONTRIBUTING.md), [SECURITY.md](SECURITY.md), and
 [ROADMAP.md](ROADMAP.md) for project process and planned work.
 
-## Use Flower with ChatGPT and Codex
+## The Flow Is Already There
 
-Install the [Flower plugin for ChatGPT and Codex](https://chatgpt.com/plugins/plugins_6a6b70b4903081918ec3eb37651cf01f).
-Coding agents can build, verify, and maintain Flower workflows directly in
-your Java project. The plugin includes guidance for Flower application
-workflows and governed actions with Flower Action Runtime.
+Your app has flows. You just cannot see them yet.
+
+Hand your service to a new engineer and watch where they get stuck. Not on the
+class diagram. That part may be clean. They get stuck on one question no diagram
+answers: when a request comes in, what actually happens, and in what order?
+
+Because the answer is not in any single place. It is spread across a poller, a
+background thread, an event listener, a shared flag, and a catch-all service
+class that quietly became the home for leftover orchestration.
+
+The person who knows the whole sequence will eventually move on, and the flow
+moves with them.
+
+Flower is how you write that flow down before that happens: one flow, small
+steps, explicit transitions, and one place to look.
+
+## Flower, In One Screen
+
+Flower is a tiny in-JVM runtime for long-running Spring application flows. It
+gives application code an explicit, testable, human-operable execution shape
+inside one JVM, without replacing your application framework or your domain
+model.
+
+```text
+Engine
+  -> Worker
+      -> Flow
+          -> Step
+              -> StepResult
+```
+
+A flow has a current step. A step returns an explicit result. Waiting is
+modeled through events, signals, timeouts, or durable domain state instead of
+hidden sleeps and ad-hoc polling loops.
+
+That is the whole discipline, borrowed from equipment-control software where
+long-running work has always been modeled this way: make the current state
+visible, make every transition explicit, keep each unit small, and leave a
+trace a human can inspect.
+
+## Why And When To Use It
+
+Use Flower when application work has multiple phases and should progress over
+time or in response to events:
+
+- order processing that waits for payment, inventory, or fulfillment signals
+- game turns where a flow waits for player input and animation completion
+- logistics or device workflows where each unit of work moves through zones
+- retryable background coordination that should remain testable
+- AI-assisted work that waits for model, tool, approval, or action results
+- demos and simulations that need deterministic manual ticks
+
+Flower makes this kind of logic easier to reason about because every flow has a
+current step, every step returns an explicit result, and time/event waiting is
+represented by `StepContext` instead of ad-hoc threads and sleeps.
+
+## AI Automation And AI-Assisted Development
+
+Flower is not an LLM SDK, but it provides a useful execution structure around
+AI work. Model calls, tool waits, validation, approvals, governed actions, and
+operator intervention can be represented as visible Flow phases instead of a
+hidden callback chain:
+
+```text
+prepare context
+  -> run model or agent
+  -> wait for tools
+  -> validate result
+  -> request approval when required
+  -> execute governed action
+  -> observe final state
+```
+
+The wider Flower JVM ecosystem keeps those responsibilities separate:
+
+| Project | AI automation responsibility |
+| --- | --- |
+| Flower | Runs the surrounding application Flow and explicit waits. |
+| [Flower Agent](https://github.com/flowerjvm/flower-agent) | Owns AgentRun, model turns, transcripts, tool calls, budgets, and completion. |
+| [Flower AI Harness](https://github.com/flowerjvm/flower-ai-harness) | Validates final structured output and controls whole-task refinement or retry. |
+| [Flower Action Runtime](https://github.com/flowerjvm/flower-action-runtime) | Governs mutating actions with policy, approval, idempotency, and audit. |
+
+See [Flower Agent Samples](https://github.com/flowerjvm/flower-agent-samples)
+for a runnable Spring Boot application that combines these layers with an
+OpenAI-compatible cloud or local model.
+
+Flower also helps when coding agents generate ordinary application code. The
+small `Flow -> Step -> StepResult` contract gives human reviewers and coding
+agents one execution shape to inspect. The Flower plugin provides guidance
+before generation, `flower-check` detects known misuse during the build, and
+deterministic tests verify behavior afterward. Flower structures the generated
+or hand-written orchestration; it does not replace the coding agent itself.
+
+## Quick Start
+
+```java
+import io.github.flowerjvm.flower.core.engine.Engine;
+import io.github.flowerjvm.flower.core.event.InMemoryEventBus;
+import io.github.flowerjvm.flower.core.flow.Flow;
+import io.github.flowerjvm.flower.core.step.Step;
+import io.github.flowerjvm.flower.core.step.StepContext;
+import io.github.flowerjvm.flower.core.step.StepResult;
+import io.github.flowerjvm.flower.core.time.SystemClock;
+import io.github.flowerjvm.flower.core.worker.Worker;
+
+public final class FlowerQuickStart {
+
+    static final class PrepareOrderStep extends Step {
+        @Override
+        protected StepResult onTick(StepContext ctx) {
+            System.out.println("prepare " + ctx.flowId());
+            return StepResult.done();
+        }
+    }
+
+    static final class CompleteOrderStep extends Step {
+        @Override
+        protected StepResult onTick(StepContext ctx) {
+            System.out.println("complete " + ctx.flowId());
+            return StepResult.done();
+        }
+    }
+
+    public static void main(String[] args) throws Exception {
+        Worker worker = Worker.builder("orders")
+                .intervalMillis(100)
+                .build();
+
+        Engine engine = Engine.builder()
+                .clock(SystemClock.INSTANCE)
+                .eventBus(InMemoryEventBus.create())
+                .worker(worker)
+                .build();
+
+        Flow flow = Flow.builder("order", "order-1")
+                .step("prepare", new PrepareOrderStep())
+                .step("complete", new CompleteOrderStep())
+                .build();
+
+        engine.start();
+        worker.submit(flow);
+
+        Thread.sleep(500);
+        engine.stop();
+    }
+}
+```
+
+For deterministic tests, use `engine.attach()` and `worker.tickOnce()` instead
+of starting the scheduler.
+
+```java
+Worker worker = Worker.builder("test").build();
+Engine engine = Engine.builder()
+        .eventBus(InMemoryEventBus.create())
+        .worker(worker)
+        .build();
+
+engine.attach();
+worker.submit(flow);
+
+worker.tickOnce();
+worker.tickOnce();
+```
 
 ## Install From Maven Central
 
@@ -66,47 +231,12 @@ See [Modules And Maturity](#modules-and-maturity) before adopting an MVP
 module. The Bloom adapter is published separately as
 `io.github.flowerjvm:bloom-flower-adapter:0.1.0`.
 
-## The Flow Is Already There
+## Use Flower With ChatGPT And Codex
 
-Your app has flows. You just cannot see them yet.
-
-Hand your service to a new engineer and watch where they get stuck. Not on the
-class diagram. That part may be clean. They get stuck on one question no diagram
-answers: when a request comes in, what actually happens, and in what order?
-
-Because the answer is not in any single place. It is spread across a poller, a
-background thread, an event listener, a shared flag, and a catch-all service
-class that quietly became the home for leftover orchestration.
-
-The person who knows the whole sequence will eventually move on, and the flow
-moves with them.
-
-Flower is how you write that flow down before that happens: one flow, small
-steps, explicit transitions, and one place to look.
-
-## Flower, In One Screen
-
-Flower is a tiny in-JVM runtime for long-running Spring application flows. It
-gives application code an explicit, testable, human-operable execution shape
-inside one JVM, without replacing your application framework or your domain
-model.
-
-```text
-Engine
-  -> Worker
-      -> Flow
-          -> Step
-              -> StepResult
-```
-
-A flow has a current step. A step returns an explicit result. Waiting is
-modeled through events, signals, timeouts, or durable domain state instead of
-hidden sleeps and ad-hoc polling loops.
-
-That is the whole discipline, borrowed from equipment-control software where
-long-running work has always been modeled this way: make the current state
-visible, make every transition explicit, keep each unit small, and leave a
-trace a human can inspect.
+Install the [Flower plugin for ChatGPT and Codex](https://chatgpt.com/plugins/plugins_6a6b70b4903081918ec3eb37651cf01f).
+Coding agents can build, verify, and maintain Flower workflows directly in
+your Java project. The plugin includes guidance for Flower application
+workflows and governed actions with Flower Action Runtime.
 
 ## Before / After
 
@@ -212,21 +342,6 @@ observable execution logs.
 Flower brings that discipline to ordinary Java application code: make the
 current state visible, make transitions explicit, keep each unit small, and
 leave a trace a human can inspect.
-
-## Why And When To Use It
-
-Use Flower when application work has multiple phases and should progress over
-time or in response to events:
-
-- order processing that waits for payment, inventory, or fulfillment signals
-- game turns where a flow waits for player input and animation completion
-- logistics or device workflows where each unit of work moves through zones
-- retryable background coordination that should remain testable
-- demos and simulations that need deterministic manual ticks
-
-Flower makes this kind of logic easier to reason about because every flow has a
-current step, every step returns an explicit result, and time/event waiting is
-represented by `StepContext` instead of ad-hoc threads and sleeps.
 
 ## What Flower Is Not
 
@@ -419,78 +534,6 @@ Engine
 - `stepId`: a stable flow-level string id used by `goTo`, dumps, checkpoints,
   and admin views.
 - `stepNo`: optional step-local cursor for tiny sub-state inside one step.
-
-## Quick Start
-
-```java
-import io.github.flowerjvm.flower.core.engine.Engine;
-import io.github.flowerjvm.flower.core.event.InMemoryEventBus;
-import io.github.flowerjvm.flower.core.flow.Flow;
-import io.github.flowerjvm.flower.core.step.Step;
-import io.github.flowerjvm.flower.core.step.StepContext;
-import io.github.flowerjvm.flower.core.step.StepResult;
-import io.github.flowerjvm.flower.core.time.SystemClock;
-import io.github.flowerjvm.flower.core.worker.Worker;
-
-public final class FlowerQuickStart {
-
-    static final class PrepareOrderStep extends Step {
-        @Override
-        protected StepResult onTick(StepContext ctx) {
-            System.out.println("prepare " + ctx.flowId());
-            return StepResult.done();
-        }
-    }
-
-    static final class CompleteOrderStep extends Step {
-        @Override
-        protected StepResult onTick(StepContext ctx) {
-            System.out.println("complete " + ctx.flowId());
-            return StepResult.done();
-        }
-    }
-
-    public static void main(String[] args) throws Exception {
-        Worker worker = Worker.builder("orders")
-                .intervalMillis(100)
-                .build();
-
-        Engine engine = Engine.builder()
-                .clock(SystemClock.INSTANCE)
-                .eventBus(InMemoryEventBus.create())
-                .worker(worker)
-                .build();
-
-        Flow flow = Flow.builder("order", "order-1")
-                .step("prepare", new PrepareOrderStep())
-                .step("complete", new CompleteOrderStep())
-                .build();
-
-        engine.start();
-        worker.submit(flow);
-
-        Thread.sleep(500);
-        engine.stop();
-    }
-}
-```
-
-For deterministic tests, use `engine.attach()` and `worker.tickOnce()` instead
-of starting the scheduler.
-
-```java
-Worker worker = Worker.builder("test").build();
-Engine engine = Engine.builder()
-        .eventBus(InMemoryEventBus.create())
-        .worker(worker)
-        .build();
-
-engine.attach();
-worker.submit(flow);
-
-worker.tickOnce();
-worker.tickOnce();
-```
 
 ## Structure For Generated Code
 
