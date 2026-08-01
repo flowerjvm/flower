@@ -1126,6 +1126,10 @@ or serve source code. Use the optional development-only graph starter to manage
 the loopback server with the Spring lifecycle, or run the Maven plugin or CLI
 separately. Set `flow-graph-url` to an empty string to hide the button.
 
+Example runtime view:
+
+![Flower Spring Boot Console showing Workers, active Flows, current Steps, and execution context](assets/flower-console-runtime.png)
+
 To start the local graph with a Spring Boot development profile, add the
 separate Flower Flow Graph starter:
 
