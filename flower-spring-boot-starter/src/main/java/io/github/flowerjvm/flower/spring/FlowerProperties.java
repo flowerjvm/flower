@@ -278,6 +278,8 @@ public class FlowerProperties {
      */
     public static class Console {
 
+        private static final String DEFAULT_FLOW_GRAPH_URL = "http://localhost:8790/";
+
         /**
          * Enables the console page when this application is a Spring MVC web
          * application. Default false.
@@ -298,6 +300,13 @@ public class FlowerProperties {
          * Initial polling interval shown in the console UI.
          */
         private long pollIntervalMs = 3000L;
+
+        /**
+         * Optional local Flower Flow Graph URL opened from the console. An
+         * empty value hides the button. The console never starts a process or
+         * serves application source code itself.
+         */
+        private String flowGraphUrl = DEFAULT_FLOW_GRAPH_URL;
 
         public boolean isEnabled() {
             return enabled;
@@ -333,6 +342,27 @@ public class FlowerProperties {
 
         public void setPollIntervalMs(long pollIntervalMs) {
             this.pollIntervalMs = pollIntervalMs > 0L ? pollIntervalMs : 3000L;
+        }
+
+        public String getFlowGraphUrl() {
+            return flowGraphUrl;
+        }
+
+        public void setFlowGraphUrl(String flowGraphUrl) {
+            String normalized = flowGraphUrl == null
+                    ? DEFAULT_FLOW_GRAPH_URL
+                    : flowGraphUrl.trim();
+            if (!normalized.isEmpty() && !isAllowedFlowGraphUrl(normalized)) {
+                throw new IllegalArgumentException(
+                        "flower.admin.console.flow-graph-url must use http, https, or an absolute path");
+            }
+            this.flowGraphUrl = normalized;
+        }
+
+        private static boolean isAllowedFlowGraphUrl(String value) {
+            return value.regionMatches(true, 0, "http://", 0, 7)
+                    || value.regionMatches(true, 0, "https://", 0, 8)
+                    || (value.startsWith("/") && !value.startsWith("//"));
         }
     }
 

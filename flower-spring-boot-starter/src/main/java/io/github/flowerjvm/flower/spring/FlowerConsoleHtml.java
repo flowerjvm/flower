@@ -8,7 +8,7 @@ final class FlowerConsoleHtml {
     private FlowerConsoleHtml() {
     }
 
-    static String render(String apiPath, long initialPollIntervalMs) {
+    static String render(String apiPath, long initialPollIntervalMs, String flowGraphUrl) {
         return """
                 <!doctype html>
                 <html lang="en">
@@ -246,6 +246,7 @@ final class FlowerConsoleHtml {
                       </div>
                     </div>
                     <div class="toolbar">
+                      <button id="flowGraphBtn" title="Open the read-only source graph in a new tab">Flow Graph</button>
                       <button id="startBtn" class="primary">Start</button>
                       <button id="stopBtn">Stop</button>
                       <button id="refreshBtn">Refresh</button>
@@ -259,6 +260,7 @@ final class FlowerConsoleHtml {
                   </main>
                   <script>
                     const API_PATH = "__API_PATH__";
+                    const FLOW_GRAPH_URL = "__FLOW_GRAPH_URL__";
                     const DEFAULT_POLL_MS = __POLL_MS__;
                     const state = {
                       timer: null,
@@ -276,7 +278,11 @@ final class FlowerConsoleHtml {
                     el("endpoint").textContent = API_PATH;
                     el("pollMs").value = state.pollMs;
                     el("stopBtn").disabled = true;
+                    el("flowGraphBtn").hidden = !FLOW_GRAPH_URL;
 
+                    el("flowGraphBtn").addEventListener("click", () => {
+                      window.open(FLOW_GRAPH_URL, "_blank", "noopener,noreferrer");
+                    });
                     el("pollMs").addEventListener("change", () => {
                       const next = Math.max(500, Number(el("pollMs").value || DEFAULT_POLL_MS));
                       state.pollMs = next;
@@ -405,12 +411,19 @@ final class FlowerConsoleHtml {
                 </body>
                 </html>
                 """
-                .replace("__API_PATH__", jsString(apiPath))
+                .replace("__API_PATH__", jsString(apiPath, "/internal/flower/console/dump"))
+                .replace("__FLOW_GRAPH_URL__", jsString(flowGraphUrl, ""))
                 .replace("__POLL_MS__", Long.toString(initialPollIntervalMs > 0L ? initialPollIntervalMs : 3000L));
     }
 
-    private static String jsString(String value) {
-        String v = value == null || value.isEmpty() ? "/internal/flower/console/dump" : value;
-        return v.replace("\\", "\\\\").replace("\"", "\\\"");
+    private static String jsString(String value, String fallback) {
+        String v = value == null || value.isEmpty() ? fallback : value;
+        return v.replace("\\", "\\\\")
+                .replace("\"", "\\\"")
+                .replace("\r", "\\r")
+                .replace("\n", "\\n")
+                .replace("<", "\\u003c")
+                .replace(">", "\\u003e")
+                .replace("&", "\\u0026");
     }
 }

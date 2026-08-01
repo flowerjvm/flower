@@ -1108,6 +1108,7 @@ flower:
       path: /internal/flower/console
       api-path: /internal/flower/console/dump
       poll-interval-ms: 3000
+      flow-graph-url: http://localhost:8790/
 ```
 
 Then open:
@@ -1119,7 +1120,34 @@ GET /internal/flower/console
 The console is served by the same Spring Boot application and polls the
 same-origin `api-path`. It shows Engine, Worker, Flow, current Step, stepNo,
 declared Step order, and execution context. The UI has Start, Stop, Refresh,
-and polling interval controls.
+and polling interval controls. Its `Flow Graph` button opens the configured
+read-only local source graph in a new tab. The Console itself does not analyze
+or serve source code. Use the optional development-only graph starter to manage
+the loopback server with the Spring lifecycle, or run the Maven plugin or CLI
+separately. Set `flow-graph-url` to an empty string to hide the button.
+
+To start the local graph with a Spring Boot development profile, add the
+separate Flower Flow Graph starter:
+
+```xml
+<dependency>
+  <groupId>io.github.flowerjvm</groupId>
+  <artifactId>flower-flow-graph-spring-boot-starter</artifactId>
+  <version>0.1.0</version>
+  <scope>runtime</scope>
+</dependency>
+```
+
+```yaml
+flower:
+  flow-graph:
+    enabled: true
+    project-root: .
+    port: 8790
+```
+
+The graph starter is disabled by default and binds only to the loopback
+interface. Omit it or leave it disabled in production.
 
 This is an internal/admin surface, not a public endpoint. Do not expose it
 directly to the internet.

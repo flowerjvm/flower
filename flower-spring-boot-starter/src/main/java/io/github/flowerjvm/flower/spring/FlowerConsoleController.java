@@ -31,7 +31,10 @@ public final class FlowerConsoleController {
             produces = MediaType.TEXT_HTML_VALUE)
     public String console() {
         FlowerProperties.Console console = properties.getAdmin().getConsole();
-        return FlowerConsoleHtml.render(console.getApiPath(), console.getPollIntervalMs());
+        return FlowerConsoleHtml.render(
+                console.getApiPath(),
+                console.getPollIntervalMs(),
+                console.getFlowGraphUrl());
     }
 
     @GetMapping(path = "${flower.admin.console.api-path:/internal/flower/console/dump}",
