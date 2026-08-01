@@ -57,6 +57,111 @@ long-running work has always been modeled this way: make the current state
 visible, make every transition explicit, keep each unit small, and leave a
 trace a human can inspect.
 
+## Before / After
+
+This is the shape the "already there" flow usually starts in: orchestration
+scattered across a status string, a scheduled scan, and a side-channel flag.
+
+```java
+@Entity
+class Order {
+    String id;
+    String status; // "NEW", "WAITING_PAYMENT", "PAID", "FULFILLED", "FAILED"
+    Instant paymentDeadline;
+}
+
+@Component
+class OrderPoller {
+    @Scheduled(fixedDelay = 1000)
+    void tick() {
+        for (Order order : orders.findActive()) {
+            switch (order.status) {
+                case "NEW" -> {
+                    prepare(order);
+                    order.status = "WAITING_PAYMENT";
+                    order.paymentDeadline = now().plusSeconds(30);
+                }
+                case "WAITING_PAYMENT" -> {
+                    if (paidFlags.contains(order.id)) {
+                        order.status = "PAID";
+                    } else if (now().isAfter(order.paymentDeadline)) {
+                        order.status = "FAILED";
+                    }
+                }
+                case "PAID" -> {
+                    fulfill(order);
+                    order.status = "FULFILLED";
+                }
+            }
+            orders.save(order);
+        }
+    }
+}
+
+@EventListener
+void onPaid(PaymentApproved event) {
+    paidFlags.add(event.orderId());
+}
+```
+
+The state machine is implicit in strings and a switch. Waiting is hidden in a
+shared flag. Recovery means "whatever the status column happened to be."
+Nobody can see the flow, because there is no flow, only fragments.
+
+After: the same behavior as an explicit Flow of Steps:
+
+```java
+Flow flow = Flow.builder("order", orderId)
+        .step("accept", new AcceptOrderStep(orderService))
+        .step("payment", new WaitForPaymentStep())
+        .step("fulfill", new FulfillOrderStep(warehouseService))
+        .build();
+
+worker.submit(flow);
+```
+
+```java
+final class WaitForPaymentStep extends Step {
+    @Override
+    protected void onEnter(StepContext ctx) {
+        ctx.startTimeout(30_000);
+        ctx.subscribe(PaymentApproved.class, event -> {
+            if (event.orderId().equals(ctx.flowId().flowKey())) {
+                ctx.signal("paid");
+            }
+        });
+    }
+
+    @Override
+    protected StepResult onTick(StepContext ctx) {
+        if (ctx.hasSignal("paid")) {
+            return StepResult.done();
+        }
+        if (ctx.timedOut()) {
+            return StepResult.fail(new IllegalStateException("payment timeout"));
+        }
+        return StepResult.stay();
+    }
+}
+```
+
+Now the current step is visible. The transition is the return value. The wait
+is a subscription plus a timeout that Flower cleans up for you. The same flow
+can be tested with a manual clock and `tickOnce()`, without starting a
+scheduler or database. That is the readable shape a new engineer can follow
+and repair.
+
+## Where It Comes From
+
+Flower's execution model is inspired by proven patterns from industrial and
+equipment-control software, where long-running work is modeled as explicit
+states, guarded transitions, timeouts, retries, operator intervention, and
+observable execution logs.
+
+Flower brings that discipline to ordinary Java application code: make the
+current state visible, make transitions explicit, keep each unit small, and
+leave a trace a human can inspect.
+
 ## Why And When To Use It
 
 Use Flower when application work has multiple phases and should progress over
@@ -66,6 +171,8 @@ time or in response to events:
 - game turns where a flow waits for player input and animation completion
 - logistics or device workflows where each unit of work moves through zones
 - retryable background coordination that should remain testable
+- AI agent applications that coordinate model turns, tools, context, and
+  governed domain actions
 - AI-assisted work that waits for model, tool, approval, or action results
 - demos and simulations that need deterministic manual ticks
 
@@ -109,6 +216,37 @@ agents one execution shape to inspect. The Flower plugin provides guidance
 before generation, `flower-check` detects known misuse during the build, and
 deterministic tests verify behavior afterward. Flower structures the generated
 or hand-written orchestration; it does not replace the coding agent itself.
+
+## What Flower Is Not
+
+Once the flow is visible, it is worth being precise about scope.
+
+Flower is not BPMN, Temporal, Camunda, a distributed scheduler, or a durable
+saga engine. It stays in one JVM on purpose. If you need cross-service
+distributed transactions, durable execution replay, a BPMN designer, or a
+multi-node scheduler, reach for those tools. That is not what Flower is for.
+
+For small flows, an enum and a switch are genuinely enough. Use them.
+Spring StateMachine is a good fit when your main problem is modeling
+formal states, events, transitions, and guards.
+
+Flower is for the other case: your domain model stays in your Spring Boot
+application, but a long-running internal flow needs a small runtime to execute
+it, one that waits for events, handles timeouts, checkpoints, resumes,
+inspects, and tests inside one JVM. State machines model state. Flower runs
+flows.
+
+The cost of "just build it yourself" is that, one requirement at a time, you
+rebuild a runtime you did not mean to write.
+
+| What the flow eventually needs | Hand-rolled around an enum | With Flower |
+| --- | --- | --- |
+| Wait for an event, then clean up the subscription | Register/deregister listeners by hand; leaks are easy to miss. | `ctx.subscribe(...)` in `onEnter`, released automatically on exit/reset/finish. |
+| Timeout on a wait | Deadline field plus a scheduler that checks it. | `ctx.startTimeout(30_000)` and `ctx.timedOut()`. |
+| Retry or explicit failure transition | Extra state, counters, and branches in the switch. | `StepResult.repeat()` / `StepResult.fail(cause)`. |
+| Checkpoint and resume after restart | Serialize position, persist it, rebuild, and resume. | `durable()` plus a `FlowCheckpointStore`. |
+| Deterministic tests | Abstract the clock, bypass the scheduler, and fake the bus yourself. | `ManualClock` plus `worker.tickOnce()`. |
+| Inspect what is running right now | Build your own dump/admin view. | `Engine.dump()` plus optional console. |
 
 ## Quick Start
 
@@ -237,142 +375,6 @@ Install the [Flower plugin for ChatGPT and Codex](https://chatgpt.com/plugins/pl
 Coding agents can build, verify, and maintain Flower workflows directly in
 your Java project. The plugin includes guidance for Flower application
 workflows and governed actions with Flower Action Runtime.
-
-## Before / After
-
-This is the shape the "already there" flow usually starts in: orchestration
-scattered across a status string, a scheduled scan, and a side-channel flag.
-
-```java
-@Entity
-class Order {
-    String id;
-    String status; // "NEW", "WAITING_PAYMENT", "PAID", "FULFILLED", "FAILED"
-    Instant paymentDeadline;
-}
-
-@Component
-class OrderPoller {
-    @Scheduled(fixedDelay = 1000)
-    void tick() {
-        for (Order order : orders.findActive()) {
-            switch (order.status) {
-                case "NEW" -> {
-                    prepare(order);
-                    order.status = "WAITING_PAYMENT";
-                    order.paymentDeadline = now().plusSeconds(30);
-                }
-                case "WAITING_PAYMENT" -> {
-                    if (paidFlags.contains(order.id)) {
-                        order.status = "PAID";
-                    } else if (now().isAfter(order.paymentDeadline)) {
-                        order.status = "FAILED";
-                    }
-                }
-                case "PAID" -> {
-                    fulfill(order);
-                    order.status = "FULFILLED";
-                }
-            }
-            orders.save(order);
-        }
-    }
-}
-
-@EventListener
-void onPaid(PaymentApproved event) {
-    paidFlags.add(event.orderId());
-}
-```
-
-The state machine is implicit in strings and a switch. Waiting is hidden in a
-shared flag. Recovery means "whatever the status column happened to be."
-Nobody can see the flow, because there is no flow, only fragments.
-
-After: the same behavior as an explicit Flow of Steps:
-
-```java
-Flow flow = Flow.builder("order", orderId)
-        .step("accept", new AcceptOrderStep(orderService))
-        .step("payment", new WaitForPaymentStep())
-        .step("fulfill", new FulfillOrderStep(warehouseService))
-        .build();
-
-worker.submit(flow);
-```
-
-```java
-final class WaitForPaymentStep extends Step {
-    @Override
-    protected void onEnter(StepContext ctx) {
-        ctx.startTimeout(30_000);
-        ctx.subscribe(PaymentApproved.class, event -> {
-            if (event.orderId().equals(ctx.flowId().flowKey())) {
-                ctx.signal("paid");
-            }
-        });
-    }
-
-    @Override
-    protected StepResult onTick(StepContext ctx) {
-        if (ctx.hasSignal("paid")) {
-            return StepResult.done();
-        }
-        if (ctx.timedOut()) {
-            return StepResult.fail(new IllegalStateException("payment timeout"));
-        }
-        return StepResult.stay();
-    }
-}
-```
-
-Now the current step is visible. The transition is the return value. The wait
-is a subscription plus a timeout that Flower cleans up for you. The same flow
-can be tested with a manual clock and `tickOnce()`, without starting a
-scheduler or database. That is the readable shape a new engineer can follow
-and repair.
-
-## Where It Comes From
-
-Flower's execution model is inspired by proven patterns from industrial and
-equipment-control software, where long-running work is modeled as explicit
-states, guarded transitions, timeouts, retries, operator intervention, and
-observable execution logs.
-
-Flower brings that discipline to ordinary Java application code: make the
-current state visible, make transitions explicit, keep each unit small, and
-leave a trace a human can inspect.
-
-## What Flower Is Not
-
-Once the flow is visible, it is worth being precise about scope.
-
-Flower is not BPMN, Temporal, Camunda, a distributed scheduler, or a durable
-saga engine. It stays in one JVM on purpose. If you need cross-service
-distributed transactions, durable execution replay, a BPMN designer, or a
-multi-node scheduler, reach for those tools. That is not what Flower is for.
-
-For small flows, an enum and a switch are genuinely enough. Use them.
-Spring StateMachine is a good fit when your main problem is modeling
-formal states, events, transitions, and guards.
-
-Flower is for the other case: your domain model stays in your Spring Boot
-application, but a long-running internal flow needs a small runtime to execute
-it, one that waits for events, handles timeouts, checkpoints, resumes,
-inspects, and tests inside one JVM. State machines model state. Flower runs
-flows.
-
-The cost of "just build it yourself" is that, one requirement at a time, you
-rebuild a runtime you did not mean to write.
-
-| What the flow eventually needs | Hand-rolled around an enum | With Flower |
-| --- | --- | --- |
-| Wait for an event, then clean up the subscription | Register/deregister listeners by hand; leaks are easy to miss. | `ctx.subscribe(...)` in `onEnter`, released automatically on exit/reset/finish. |
-| Timeout on a wait | Deadline field plus a scheduler that checks it. | `ctx.startTimeout(30_000)` and `ctx.timedOut()`. |
-| Retry or explicit failure transition | Extra state, counters, and branches in the switch. | `StepResult.repeat()` / `StepResult.fail(cause)`. |
-| Checkpoint and resume after restart | Serialize position, persist it, rebuild, and resume. | `durable()` plus a `FlowCheckpointStore`. |
-| Deterministic tests | Abstract the clock, bypass the scheduler, and fake the bus yourself. | `ManualClock` plus `worker.tickOnce()`. |
-| Inspect what is running right now | Build your own dump/admin view. | `Engine.dump()` plus optional console. |
 
 ## Typical Use With Kafka
 
