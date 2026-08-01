@@ -10,6 +10,7 @@ import org.springframework.boot.autoconfigure.AutoConfigurations;
 import org.springframework.boot.test.context.runner.WebApplicationContextRunner;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class FlowerConsoleEndpointAutoConfigurationTest {
 
@@ -29,7 +30,8 @@ class FlowerConsoleEndpointAutoConfigurationTest {
         runner.withPropertyValues(
                 "flower.admin.console.enabled=true",
                 "flower.admin.console.api-path=/internal/flower/console/dump",
-                "flower.admin.console.poll-interval-ms=1500"
+                "flower.admin.console.poll-interval-ms=1500",
+                "flower.admin.console.flow-graph-url=http://localhost:18790/"
         ).run(ctx -> {
             assertThat(ctx).hasSingleBean(FlowerConsoleController.class);
 
@@ -38,9 +40,33 @@ class FlowerConsoleEndpointAutoConfigurationTest {
             assertThat(html).contains("Flower Console");
             assertThat(html).contains("/internal/flower/console/dump");
             assertThat(html).contains("const DEFAULT_POLL_MS = 1500;");
+            assertThat(html).contains("id=\"flowGraphBtn\"");
+            assertThat(html).contains("const FLOW_GRAPH_URL = \"http://localhost:18790/\";");
             assertThat(html).contains("id=\"startBtn\"");
             assertThat(html).contains("id=\"stopBtn\"");
         });
+    }
+
+    @Test
+    void consoleCanHideFlowGraphButton() {
+        runner.withPropertyValues(
+                "flower.admin.console.enabled=true",
+                "flower.admin.console.flow-graph-url="
+        ).run(ctx -> {
+            String html = ctx.getBean(FlowerConsoleController.class).console();
+
+            assertThat(html).contains("const FLOW_GRAPH_URL = \"\";");
+            assertThat(html).contains("el(\"flowGraphBtn\").hidden = !FLOW_GRAPH_URL;");
+        });
+    }
+
+    @Test
+    void consoleRejectsUnsafeFlowGraphUrlSchemes() {
+        FlowerProperties.Console console = new FlowerProperties.Console();
+
+        assertThatThrownBy(() -> console.setFlowGraphUrl("javascript:alert(1)"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("flow-graph-url");
     }
 
     @Test
