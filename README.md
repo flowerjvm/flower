@@ -154,14 +154,13 @@ and repair.
 
 ## Where It Comes From
 
-Flower's execution model is inspired by proven patterns from industrial and
-equipment-control software, where long-running work is modeled as explicit
-states, guarded transitions, timeouts, retries, operator intervention, and
-observable execution logs.
+Flower's `Worker -> Flow -> Step -> StepResult` execution model was shaped by
+practical experience building industrial equipment control systems and
+business applications.
 
-Flower brings that discipline to ordinary Java application code: make the
-current state visible, make transitions explicit, keep each unit small, and
-leave a trace a human can inspect.
+It generalizes recurring patterns from those domains into a reusable workflow
+runtime for Java applications: explicit execution stages, result-driven
+transitions, waits, timeouts, retries, and human intervention.
 
 ## Why And When To Use It
 
