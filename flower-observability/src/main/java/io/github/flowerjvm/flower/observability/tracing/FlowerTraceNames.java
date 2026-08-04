@@ -2,7 +2,8 @@ package io.github.flowerjvm.flower.observability.tracing;
 
 /**
  * OpenTelemetry span names, attribute names, and event names emitted by
- * {@link OpenTelemetryFlowerListener}.
+ * {@link OpenTelemetryFlowerListener} and
+ * {@link OpenTelemetryFlowerTraceSink}.
  */
 public final class FlowerTraceNames {
 
@@ -14,6 +15,11 @@ public final class FlowerTraceNames {
     public static final String ATTR_FLOW_TYPE = "flower.flow.type";
     public static final String ATTR_FLOW_KEY = "flower.flow.key";
     public static final String ATTR_FLOW_STATE = "flower.flow.state";
+    public static final String ATTR_TRACE_ID = "flower.trace.id";
+    public static final String ATTR_FLOW_RUN_ID = "flower.flow.run.id";
+    public static final String ATTR_FLOW_RUNTIME_ID = "flower.flow.runtime.id";
+    public static final String ATTR_STEP_RUN_ID = "flower.step.run.id";
+    public static final String ATTR_EVENT_TYPE = "flower.event.type";
     public static final String ATTR_OUTCOME = "flower.outcome";
     public static final String ATTR_STEP_ID = "flower.step.id";
     public static final String ATTR_STEP_NO = "flower.step.no";
@@ -22,6 +28,7 @@ public final class FlowerTraceNames {
     public static final String OUTCOME_FAILED = "failed";
     public static final String OUTCOME_CANCELLED = "cancelled";
     public static final String OUTCOME_REPLACED = "replaced";
+    public static final String OUTCOME_SUSPENDED = "suspended";
 
     public static final String EVENT_STEP_CLOSED_BY_FLOW_TERMINAL =
             "flower.step.closed_by_flow_terminal";

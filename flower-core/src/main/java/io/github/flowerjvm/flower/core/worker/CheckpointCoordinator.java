@@ -1,5 +1,6 @@
 package io.github.flowerjvm.flower.core.worker;
 
+import io.github.flowerjvm.flower.core.context.ExecutionContext;
 import io.github.flowerjvm.flower.core.flow.Flow;
 import io.github.flowerjvm.flower.core.flow.FlowId;
 import io.github.flowerjvm.flower.core.flow.FlowPersistence;
@@ -17,17 +18,25 @@ import java.util.function.Consumer;
  */
 final class CheckpointCoordinator {
 
+    interface Observer {
+        void onSaved(Flow flow, FlowCheckpoint checkpoint, String action);
+
+        void onFailed(Flow flow, Throwable cause, String action);
+    }
+
     private final String workerName;
     private final Clock clock;
     private final FlowCheckpointStore checkpointStore;
     private final Consumer<Throwable> workerErrorReporter;
+    private final Observer observer;
     private final ConcurrentMap<FlowId, FlowCheckpoint> lastSaved = new ConcurrentHashMap<>();
 
     CheckpointCoordinator(
             String workerName,
             Clock clock,
             FlowCheckpointStore checkpointStore,
-            Consumer<Throwable> workerErrorReporter) {
+            Consumer<Throwable> workerErrorReporter,
+            Observer observer) {
         if (workerName == null || workerName.isEmpty()) {
             throw new IllegalArgumentException("workerName must not be null or empty");
         }
@@ -47,13 +56,14 @@ final class CheckpointCoordinator {
                     }
                 }
                 : workerErrorReporter;
+        this.observer = observer;
     }
 
-    boolean saveActive(Flow flow) {
+    boolean saveActive(Flow flow, ExecutionContext checkpointContext) {
         if (!requiresCheckpoint(flow)) {
             return true;
         }
-        FlowCheckpoint checkpoint = flow.checkpoint(workerName, clock.currentTimeMillis());
+        FlowCheckpoint checkpoint = checkpoint(flow, checkpointContext);
         FlowCheckpoint previous = lastSaved.get(flow.flowId());
         if (checkpoint.sameStoredPositionAs(previous)) {
             return true;
@@ -61,6 +71,7 @@ final class CheckpointCoordinator {
         try {
             checkpointStore.save(checkpoint);
             lastSaved.put(flow.flowId(), checkpoint);
+            notifySaved(flow, checkpoint, "ACTIVE");
             return true;
         } catch (Throwable t) {
             markCheckpointFailed(flow, t, "save");
@@ -68,17 +79,18 @@ final class CheckpointCoordinator {
         }
     }
 
-    boolean saveTerminalTombstone(Flow flow) {
+    boolean saveTerminalTombstone(Flow flow, ExecutionContext checkpointContext) {
         if (!requiresCheckpoint(flow)) {
             return true;
         }
         if (flow.state() == FlowState.CHECKPOINT_FAILED) {
             return false;
         }
-        FlowCheckpoint checkpoint = flow.checkpoint(workerName, clock.currentTimeMillis());
+        FlowCheckpoint checkpoint = checkpoint(flow, checkpointContext);
         try {
             checkpointStore.save(checkpoint);
             lastSaved.put(flow.flowId(), checkpoint);
+            notifySaved(flow, checkpoint, "TERMINAL");
             return true;
         } catch (Throwable t) {
             markCheckpointFailed(flow, t, "terminal save");
@@ -115,12 +127,54 @@ final class CheckpointCoordinator {
         return flow.persistence() == FlowPersistence.DURABLE;
     }
 
+    private FlowCheckpoint checkpoint(Flow flow, ExecutionContext checkpointContext) {
+        FlowCheckpoint checkpoint = flow.checkpoint(workerName, clock.currentTimeMillis());
+        ExecutionContext context = checkpointContext == null
+                ? checkpoint.executionContext()
+                : checkpointContext;
+        if (context.equals(checkpoint.executionContext())) {
+            return checkpoint;
+        }
+        return new FlowCheckpoint(
+                checkpoint.flowId(),
+                checkpoint.state(),
+                checkpoint.currentStepId(),
+                checkpoint.currentStepNo(),
+                checkpoint.currentStepEntered(),
+                checkpoint.persistence(),
+                checkpoint.workerName(),
+                checkpoint.updatedAtMillis(),
+                checkpoint.definitionVersion(),
+                context);
+    }
+
     private void markCheckpointFailed(Flow flow, Throwable cause, String action) {
         forget(flow.flowId());
         flow.checkpointFailed(cause);
+        notifyFailed(flow, cause, action);
         reportWorkerError(cause);
         System.err.println("[flower] worker " + workerName + " checkpoint " + action + " failed for "
                 + flow.flowId() + ": " + cause);
+    }
+
+    private void notifySaved(Flow flow, FlowCheckpoint checkpoint, String action) {
+        if (observer == null) {
+            return;
+        }
+        try {
+            observer.onSaved(flow, checkpoint, action);
+        } catch (Throwable ignored) {
+        }
+    }
+
+    private void notifyFailed(Flow flow, Throwable cause, String action) {
+        if (observer == null) {
+            return;
+        }
+        try {
+            observer.onFailed(flow, cause, action);
+        } catch (Throwable ignored) {
+        }
     }
 
     private void reportWorkerError(Throwable cause) {

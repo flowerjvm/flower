@@ -73,6 +73,7 @@ public final class EventWorker {
     private final EventBus eventBus;
     private final List<FlowerListener> listeners;
     private final ListenerDispatcher listenerDispatcher;
+    private final EventTraceDispatcher trace;
     private final CheckpointCoordinator checkpointCoordinator;
     private final Executor asyncExecutor;
 
@@ -122,11 +123,26 @@ public final class EventWorker {
             }
         }
         this.listenerDispatcher = new ListenerDispatcher(name, this.listeners);
+        this.trace = new EventTraceDispatcher(name, clock, this.listenerDispatcher);
         this.checkpointCoordinator = new CheckpointCoordinator(
                 name,
                 clock,
                 checkpointStore,
-                this.listenerDispatcher);
+                this.listenerDispatcher,
+                new CheckpointCoordinator.Observer() {
+                    @Override
+                    public void onSaved(
+                            EventFlow flow,
+                            EventFlowCheckpoint checkpoint,
+                            String action) {
+                        trace.checkpointSaved(flow, checkpoint, action);
+                    }
+
+                    @Override
+                    public void onFailed(EventFlow flow, Throwable cause, String action) {
+                        trace.checkpointFailed(flow, cause, action);
+                    }
+                });
     }
 
     public String name() {
@@ -377,6 +393,7 @@ public final class EventWorker {
             return;
         }
         activateForEntry(rt);
+        trace.startFlow(rt.flow, rt.recoveryCheckpoint);
         EventStepDefinition def = rt.flow.currentStep();
         if (def == null) {
             finishFlow(rt);
@@ -401,12 +418,20 @@ public final class EventWorker {
         rt.flow.activateRecoveryCheckpoint(checkpoint);
         rt.awaitGeneration = checkpoint.awaitGeneration();
         rt.awaitCheckpoints = checkpoint.awaits();
+        if (trace.enabled()) {
+            rt.waitDescriptors = trace.waitDescriptors(checkpoint.awaits());
+        }
         rt.recoveryCheckpoint = checkpoint;
     }
 
     private EventStepResult enterStep(FlowRuntime rt, EventStepDefinition def) {
         EventStepResult result;
         boolean entered = false;
+        boolean recovered = rt.recoveryCheckpoint != null;
+        trace.startStep(rt.flow, def, recovered);
+        if (recovered) {
+            trace.resumed(rt.flow, rt.awaitGeneration, "RECOVERY", null, NO_DEADLINE);
+        }
         try {
             result = invokeEnter(rt, def);
             rt.entered = true;
@@ -447,6 +472,12 @@ public final class EventWorker {
         if (def == null) {
             return;
         }
+        trace.resumed(
+                rt.flow,
+                rt.awaitGeneration,
+                event instanceof EventSignal ? "SIGNAL" : "EVENT",
+                event,
+                NO_DEADLINE);
         EventStepResult result;
         try {
             result = def.event(rt.ctx, event);
@@ -454,6 +485,7 @@ public final class EventWorker {
             result = EventStepResult.fail(t);
         }
         if (result == null) {
+            trace.waiting(rt.flow, rt.awaitGeneration, rt.waitDescriptors);
             return; // ignore; keep existing awaits active
         }
         applyResult(rt, result);
@@ -466,8 +498,16 @@ public final class EventWorker {
                 || !rt.entered) {
             return;
         }
+        long resumedDeadlineMillis = rt.deadlineMillis;
+        trace.resumed(
+                rt.flow,
+                rt.awaitGeneration,
+                "TIMEOUT",
+                null,
+                resumedDeadlineMillis);
         rt.deadlineMillis = NO_DEADLINE;
         rt.awaitCheckpoints = checkpointCoordinator.withoutDeadlines(rt.awaitCheckpoints);
+        rt.waitDescriptors = trace.withoutDeadlineDescriptors(rt.waitDescriptors);
         EventStepDefinition def = rt.flow.currentStep();
         if (def == null) {
             return;
@@ -482,6 +522,7 @@ public final class EventWorker {
             if (!saveActiveCheckpoint(rt)) {
                 return;
             }
+            trace.waiting(rt.flow, rt.awaitGeneration, rt.waitDescriptors);
             return; // keep waiting on remaining (event) conditions
         }
         applyResult(rt, result);
@@ -515,6 +556,7 @@ public final class EventWorker {
                     return;
                 }
                 safeExit(rt);
+                trace.finishStep(rt.flow, "NEXT", null, null);
                 clearAwaits(rt);
                 rt.flow.setCurrentIndex(next);
                 rt.entered = false;
@@ -533,6 +575,7 @@ public final class EventWorker {
                     return;
                 }
                 safeExit(rt);
+                trace.finishStep(rt.flow, "GOTO", result.targetStepId(), null);
                 clearAwaits(rt);
                 rt.flow.setCurrentIndex(target);
                 rt.entered = false;
@@ -614,7 +657,24 @@ public final class EventWorker {
             TerminalTransition transition,
             Throwable cause,
             boolean removeActive) {
+        EventFlowCheckpoint recovery = rt.recoveryCheckpoint != null
+                ? rt.recoveryCheckpoint
+                : rt.flow.recoveryCheckpoint();
+        trace.startFlow(rt.flow, recovery);
         safeExit(rt);
+        switch (transition) {
+            case FINISH:
+                trace.finishStep(rt.flow, "FINISH", null, null);
+                break;
+            case FAIL:
+                trace.finishStep(rt.flow, "FAIL", null, cause);
+                break;
+            case CANCEL:
+                trace.finishStep(rt.flow, "CANCELLED", null, null);
+                break;
+            default:
+                throw new IllegalStateException("Unknown terminal transition: " + transition);
+        }
         clearAwaits(rt);
         switch (transition) {
             case FINISH:
@@ -629,11 +689,14 @@ public final class EventWorker {
             default:
                 throw new IllegalStateException("Unknown terminal transition: " + transition);
         }
-        if (checkpointCoordinator.saveTerminalTombstone(rt.flow, rt.awaitGeneration)) {
-            listenerDispatcher.flowTerminated(rt.flow);
+        if (checkpointCoordinator.saveTerminalTombstone(
+                rt.flow,
+                rt.awaitGeneration,
+                trace.checkpointContext(rt.flow))) {
+            notifyFlowTerminated(rt.flow);
             checkpointCoordinator.cleanupTerminalTombstoneBestEffort(rt.flow);
         } else {
-            listenerDispatcher.flowTerminated(rt.flow);
+            notifyFlowTerminated(rt.flow);
         }
         if (removeActive) {
             remove(rt);
@@ -645,7 +708,8 @@ public final class EventWorker {
                 rt.flow,
                 rt.entered,
                 rt.awaitGeneration,
-                rt.awaitCheckpoints)) {
+                rt.awaitCheckpoints,
+                trace.checkpointContext(rt.flow))) {
             return true;
         }
         handleCheckpointFailure(rt, true);
@@ -654,10 +718,19 @@ public final class EventWorker {
 
     private void handleCheckpointFailure(FlowRuntime rt, boolean removeActive) {
         clearAwaits(rt);
-        listenerDispatcher.flowTerminated(rt.flow);
+        notifyFlowTerminated(rt.flow);
         if (removeActive) {
             remove(rt);
         }
+    }
+
+    // ------------------------------------------------------------------
+    // Standard runtime trace
+    // ------------------------------------------------------------------
+
+    private void notifyFlowTerminated(EventFlow flow) {
+        trace.flowTerminated(flow);
+        listenerDispatcher.flowTerminated(flow);
     }
 
     // ------------------------------------------------------------------
@@ -668,14 +741,25 @@ public final class EventWorker {
         long now = clock.currentTimeMillis();
         List<EventAwaitCheckpoint> checkpointAwaits =
                 checkpointCoordinator.checkpointAwaitsFor(rt.flow, conditions, now);
+        List<Map<String, Object>> waitDescriptors = trace.enabled()
+                ? new ArrayList<Map<String, Object>>()
+                : Collections.<Map<String, Object>>emptyList();
         clearAwaits(rt);
         long generation = rt.awaitGeneration;
         long earliestDeadline = NO_DEADLINE;
         for (AwaitCondition cond : conditions) {
             if (cond instanceof AwaitCondition.Event) {
-                rt.subscriptions.add(subscribeEvent(rt, (AwaitCondition.Event) cond, generation));
+                AwaitCondition.Event event = (AwaitCondition.Event) cond;
+                rt.subscriptions.add(subscribeEvent(rt, event, generation));
+                if (trace.enabled()) {
+                    waitDescriptors.add(trace.eventWaitDescriptor(event));
+                }
             } else if (cond instanceof AwaitCondition.Signal) {
-                rt.subscriptions.add(subscribeSignal(rt, (AwaitCondition.Signal) cond, generation));
+                AwaitCondition.Signal signal = (AwaitCondition.Signal) cond;
+                rt.subscriptions.add(subscribeSignal(rt, signal, generation));
+                if (trace.enabled()) {
+                    waitDescriptors.add(trace.signalWaitDescriptor(signal));
+                }
             } else if (cond instanceof AwaitCondition.Deadline) {
                 long deadline = deadlineAt(now, ((AwaitCondition.Deadline) cond).millisFromNow());
                 earliestDeadline = (earliestDeadline == NO_DEADLINE)
@@ -686,9 +770,17 @@ public final class EventWorker {
         if (earliestDeadline != NO_DEADLINE) {
             rt.deadlineMillis = earliestDeadline;
             deadlines.add(new DeadlineEntry(rt, generation, earliestDeadline, ++deadlineSeq));
+            if (trace.enabled()) {
+                waitDescriptors.add(trace.deadlineWaitDescriptor(earliestDeadline));
+            }
         }
         rt.awaitCheckpoints = checkpointAwaits;
-        saveActiveCheckpoint(rt);
+        rt.waitDescriptors = trace.enabled()
+                ? trace.immutableDescriptors(waitDescriptors)
+                : Collections.<Map<String, Object>>emptyList();
+        if (saveActiveCheckpoint(rt)) {
+            trace.waiting(rt.flow, rt.awaitGeneration, rt.waitDescriptors);
+        }
     }
 
     private long deadlineAt(long now, long millisFromNow) {
@@ -747,6 +839,8 @@ public final class EventWorker {
         rt.subscriptions.clear();
         rt.deadlineMillis = NO_DEADLINE;
         rt.awaitCheckpoints = Collections.emptyList();
+        rt.waitDescriptors = Collections.emptyList();
+        trace.clearWaiting(rt.flow);
         rt.awaitGeneration++;
     }
 
@@ -841,20 +935,30 @@ public final class EventWorker {
             }
         }
         for (FlowRuntime rt : runtimes) {
-            if (!checkpointCoordinator.saveActive(
-                    rt.flow,
-                    rt.entered,
-                    rt.awaitGeneration,
-                    rt.awaitCheckpoints)) {
-                handleCheckpointFailure(rt, false);
-                continue;
-            }
-            checkpointCoordinator.forget(rt.flow.flowId());
-            clearAwaits(rt);
-            safeExit(rt);
-            if (!rt.flow.state().isTerminal() && rt.flow.persistence() != FlowPersistence.DURABLE) {
+            EventFlowCheckpoint recovery = rt.recoveryCheckpoint != null
+                    ? rt.recoveryCheckpoint
+                    : rt.flow.recoveryCheckpoint();
+            trace.startFlow(rt.flow, recovery);
+            if (rt.flow.persistence() == FlowPersistence.DURABLE) {
+                if (!checkpointCoordinator.saveActive(
+                        rt.flow,
+                        rt.entered,
+                        rt.awaitGeneration,
+                        rt.awaitCheckpoints,
+                        trace.checkpointContext(rt.flow))) {
+                    handleCheckpointFailure(rt, false);
+                    continue;
+                }
+                trace.suspended(rt.flow);
+                checkpointCoordinator.forget(rt.flow.flowId());
+                clearAwaits(rt);
+                safeExit(rt);
+            } else if (!rt.flow.state().isTerminal()) {
+                safeExit(rt);
+                trace.finishStep(rt.flow, "CANCELLED", null, null);
+                clearAwaits(rt);
                 rt.flow.cancel();
-                listenerDispatcher.flowTerminated(rt.flow);
+                notifyFlowTerminated(rt.flow);
             }
         }
         deadlines.clear();
@@ -870,6 +974,7 @@ public final class EventWorker {
         final EventStepContext ctx;
         final List<Subscription> subscriptions = new ArrayList<>();
         List<EventAwaitCheckpoint> awaitCheckpoints = Collections.emptyList();
+        List<Map<String, Object>> waitDescriptors = Collections.emptyList();
         EventFlowCheckpoint recoveryCheckpoint;
         long deadlineMillis = NO_DEADLINE;
         long awaitGeneration;

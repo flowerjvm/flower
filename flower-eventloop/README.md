@@ -267,6 +267,13 @@ event-loop runtime emits submitted, step-entered, step-exited, terminal,
 listener-error, and worker-error callbacks using core `FlowSnapshot`, so the
 existing observability listeners can be reused.
 
+Register an opt-in `FlowerTraceListener` to receive the standard runtime Trace
+stream. One EventStep lifecycle emits one `STEP_STARTED`; every accepted
+`await(...)` emits `FLOW_WAITING`, and event, signal, timeout, or recovery
+wake-ups emit `FLOW_RESUMED`. Durable workers also emit `CHECKPOINT_SAVED`,
+`CHECKPOINT_FAILED`, `FLOW_SUSPENDED`, and `FLOW_RECOVERED`. Payloads are not
+included in these core events.
+
 ## Status
 
 Experimental runtime. The contract (`EventStep` / `EventStepResult` /

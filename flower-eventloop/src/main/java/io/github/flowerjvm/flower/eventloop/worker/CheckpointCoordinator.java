@@ -1,5 +1,6 @@
 package io.github.flowerjvm.flower.eventloop.worker;
 
+import io.github.flowerjvm.flower.core.context.ExecutionContext;
 import io.github.flowerjvm.flower.core.flow.FlowPersistence;
 import io.github.flowerjvm.flower.core.flow.FlowId;
 import io.github.flowerjvm.flower.core.flow.FlowState;
@@ -18,23 +19,32 @@ import java.util.concurrent.ConcurrentMap;
 
 final class CheckpointCoordinator {
 
+    interface Observer {
+        void onSaved(EventFlow flow, EventFlowCheckpoint checkpoint, String action);
+
+        void onFailed(EventFlow flow, Throwable cause, String action);
+    }
+
     private static final long NO_DEADLINE = Long.MIN_VALUE;
 
     private final String workerName;
     private final Clock clock;
     private final EventFlowCheckpointStore checkpointStore;
     private final ListenerDispatcher listenerDispatcher;
+    private final Observer observer;
     private final ConcurrentMap<FlowId, EventFlowCheckpoint> lastSaved = new ConcurrentHashMap<>();
 
     CheckpointCoordinator(
             String workerName,
             Clock clock,
             EventFlowCheckpointStore checkpointStore,
-            ListenerDispatcher listenerDispatcher) {
+            ListenerDispatcher listenerDispatcher,
+            Observer observer) {
         this.workerName = workerName;
         this.clock = clock;
         this.checkpointStore = checkpointStore;
         this.listenerDispatcher = listenerDispatcher;
+        this.observer = observer;
     }
 
     List<EventAwaitCheckpoint> checkpointAwaitsFor(
@@ -88,23 +98,32 @@ final class CheckpointCoordinator {
             EventFlow flow,
             boolean entered,
             long awaitGeneration,
-            List<EventAwaitCheckpoint> awaits) {
+            List<EventAwaitCheckpoint> awaits,
+            ExecutionContext checkpointContext) {
         if (!requiresCheckpoint(flow) || flow.state().isTerminal()) {
             return true;
         }
-        EventFlowCheckpoint checkpoint = checkpoint(flow, entered, awaitGeneration, awaits);
+        EventFlowCheckpoint checkpoint = checkpoint(
+                flow,
+                entered,
+                awaitGeneration,
+                awaits,
+                checkpointContext);
         EventFlowCheckpoint previous = lastSaved.get(flow.flowId());
         if (checkpoint.sameStoredPositionAs(previous)) {
             return true;
         }
-        return save(flow, checkpoint, "save");
+        return save(flow, checkpoint, "save", "ACTIVE");
     }
 
     boolean supportsDurableFlows() {
         return checkpointStore.capabilities().durable();
     }
 
-    boolean saveTerminalTombstone(EventFlow flow, long awaitGeneration) {
+    boolean saveTerminalTombstone(
+            EventFlow flow,
+            long awaitGeneration,
+            ExecutionContext checkpointContext) {
         if (!requiresCheckpoint(flow)) {
             return true;
         }
@@ -115,7 +134,8 @@ final class CheckpointCoordinator {
                 flow,
                 false,
                 awaitGeneration,
-                Collections.<EventAwaitCheckpoint>emptyList()), "terminal save");
+                Collections.<EventAwaitCheckpoint>emptyList(),
+                checkpointContext), "terminal save", "TERMINAL");
     }
 
     void cleanupTerminalTombstoneBestEffort(EventFlow flow) {
@@ -143,7 +163,8 @@ final class CheckpointCoordinator {
             EventFlow flow,
             boolean entered,
             long awaitGeneration,
-            List<EventAwaitCheckpoint> awaits) {
+            List<EventAwaitCheckpoint> awaits,
+            ExecutionContext checkpointContext) {
         return new EventFlowCheckpoint(
                 flow.flowId(),
                 flow.state(),
@@ -153,18 +174,23 @@ final class CheckpointCoordinator {
                 workerName,
                 clock.currentTimeMillis(),
                 flow.definitionVersion(),
-                flow.executionContext(),
+                checkpointContext == null ? flow.executionContext() : checkpointContext,
                 awaitGeneration,
                 awaits);
     }
 
-    private boolean save(EventFlow flow, EventFlowCheckpoint checkpoint, String action) {
+    private boolean save(
+            EventFlow flow,
+            EventFlowCheckpoint checkpoint,
+            String failureAction,
+            String traceAction) {
         try {
             checkpointStore.save(checkpoint);
             lastSaved.put(flow.flowId(), checkpoint);
+            notifySaved(flow, checkpoint, traceAction);
             return true;
         } catch (Throwable t) {
-            markCheckpointFailed(flow, t, action);
+            markCheckpointFailed(flow, t, failureAction);
             return false;
         }
     }
@@ -176,9 +202,30 @@ final class CheckpointCoordinator {
     private void markCheckpointFailed(EventFlow flow, Throwable cause, String action) {
         forget(flow.flowId());
         flow.checkpointFailed(cause);
+        notifyFailed(flow, cause, action);
         listenerDispatcher.workerError(cause);
         System.err.println("[flower] eventloop " + workerName + " checkpoint " + action + " failed for "
                 + flow.flowId() + ": " + cause);
+    }
+
+    private void notifySaved(EventFlow flow, EventFlowCheckpoint checkpoint, String action) {
+        if (observer == null) {
+            return;
+        }
+        try {
+            observer.onSaved(flow, checkpoint, action);
+        } catch (Throwable ignored) {
+        }
+    }
+
+    private void notifyFailed(EventFlow flow, Throwable cause, String action) {
+        if (observer == null) {
+            return;
+        }
+        try {
+            observer.onFailed(flow, cause, action);
+        } catch (Throwable ignored) {
+        }
     }
 
     private long deadlineAt(long now, long millisFromNow) {

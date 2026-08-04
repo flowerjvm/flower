@@ -1,8 +1,8 @@
 # Tracing, Studio, And Evaluation Architecture
 
-Status: implementation roadmap. The first ordinary-Worker runtime trace slice
-is implemented for `0.1.2-SNAPSHOT`; later phases below are not yet public
-runtime guarantees.
+Status: implementation roadmap. Runtime foundation plus event-loop and durable
+recovery tracing are implemented for `0.1.2-SNAPSHOT`; later phases below are
+not yet public runtime guarantees.
 
 ## Goal
 
@@ -57,11 +57,17 @@ The first event set is:
 
 ```text
 FLOW_STARTED
+FLOW_RECOVERED
 STEP_STARTED
 STEP_SKIPPED
 STEP_COMPLETED
 STEP_FAILED
 STEP_CANCELLED
+FLOW_WAITING
+FLOW_RESUMED
+CHECKPOINT_SAVED
+CHECKPOINT_FAILED
+FLOW_SUSPENDED
 FLOW_COMPLETED
 FLOW_FAILED
 FLOW_CANCELLED
@@ -70,7 +76,7 @@ FLOW_CANCELLED
 `FlowerTraceEvent` is immutable and payload-light. Its stable correlation data
 includes:
 
-- `eventId` and per-Flow `sequence`;
+- `eventId`, per-runtime `sequence`, and `flower.flow.runtime.id`;
 - `traceId`, `flowRunId`, `stepRunId`, and `parentRunId`;
 - `FlowId`, Worker name, timestamp, and schema version;
 - transition origin, outcome, selected target Step, and sanitized error type;
@@ -78,9 +84,18 @@ includes:
 
 A repeated Step gets a new `stepRunId`. Its completion event retains the same
 `stepRunId` as its corresponding start event. When `ExecutionContext.runId` or
-`traceId` is absent, Flower creates an in-memory run identifier. Durable and
-cross-process workloads should provide both identifiers so recovery remains
-correlated across JVM lifetimes.
+`traceId` is absent, Flower creates an identifier. For a traced durable Flow,
+the identifier is written into the existing checkpoint `ExecutionContext`, so
+recovery keeps the same logical `flowRunId` and `traceId`. Each JVM activation
+gets a distinct runtime id and restarts its local sequence, preventing event
+and Step-run id collisions across recovery.
+
+Fresh execution emits `FLOW_STARTED`. Durable recovery emits
+`FLOW_RECOVERED`, not another `FLOW_STARTED`; this keeps recovery distinct from
+restarting the business operation from the beginning. `FLOW_WAITING` and
+`FLOW_RESUMED` can repeat inside one Step run. Event and signal payloads are not
+captured: only event types, signal name/key pairs, deadlines, and wake-up
+reasons are part of the core trace.
 
 The trace contains no business state, prompt, model output, Tool input/output,
 API key, or arbitrary Step object. Higher layers may capture selected content
@@ -122,12 +137,20 @@ Implemented in `0.1.2-SNAPSHOT` for the ordinary tick-driven Worker:
 
 ### Phase 2: Event Loop And Durability
 
-- emit `FLOW_WAITING` with event/signal/deadline descriptors;
-- emit `FLOW_RESUMED` with event, signal, timeout, or recovery reason;
-- add checkpoint saved, checkpoint failed, Flow suspended, and Flow recovered
+Implemented in `0.1.2-SNAPSHOT`:
+
+- `FLOW_WAITING` with payload-free event/signal/deadline descriptors;
+- `FLOW_RESUMED` with event, signal, timeout, or recovery reason;
+- checkpoint saved, checkpoint failed, Flow suspended, and Flow recovered
   events without confusing checkpoint/resume with replay;
-- preserve Flow/Step correlation through durable recovery;
-- map the richer event stream to OpenTelemetry spans and events.
+- logical Flow correlation across durable recovery plus unique runtime
+  segments and event ids;
+- `OpenTelemetryFlowerTraceSink` mapping Flow/Step spans and the richer event
+  stream to OpenTelemetry span events.
+
+`CHECKPOINT_FAILED` represents a required active or terminal checkpoint save
+failure. Best-effort terminal tombstone cleanup failures continue through the
+Worker error callback because the logical Flow has already terminated.
 
 ### Phase 3: Storage And Security
 

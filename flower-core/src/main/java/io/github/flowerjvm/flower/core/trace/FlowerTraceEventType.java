@@ -9,11 +9,17 @@ package io.github.flowerjvm.flower.core.trace;
  */
 public enum FlowerTraceEventType {
     FLOW_STARTED,
+    FLOW_RECOVERED,
     STEP_STARTED,
     STEP_SKIPPED,
     STEP_COMPLETED,
     STEP_FAILED,
     STEP_CANCELLED,
+    FLOW_WAITING,
+    FLOW_RESUMED,
+    CHECKPOINT_SAVED,
+    CHECKPOINT_FAILED,
+    FLOW_SUSPENDED,
     FLOW_COMPLETED,
     FLOW_FAILED,
     FLOW_CANCELLED

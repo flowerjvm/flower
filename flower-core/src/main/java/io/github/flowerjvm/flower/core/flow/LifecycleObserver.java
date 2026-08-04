@@ -1,5 +1,6 @@
 package io.github.flowerjvm.flower.core.flow;
 
+import io.github.flowerjvm.flower.core.persistence.FlowCheckpoint;
 import io.github.flowerjvm.flower.core.trace.StepTransition;
 
 /**
@@ -25,6 +26,10 @@ public interface LifecycleObserver {
 
     /** Fires immediately before a fresh or recovered Step lifecycle starts. */
     default void onStepStarted(String stepId, int stepNo, boolean recovered) {
+    }
+
+    /** Fires when a durable Flow activates a previously stored checkpoint. */
+    default void onFlowRecovered(FlowCheckpoint checkpoint) {
     }
 
     void onStepEntered(String stepId);

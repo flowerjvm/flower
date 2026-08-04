@@ -1075,13 +1075,15 @@ stepNo, and the declared step list for admin/console views.
 
 The `0.1.2-SNAPSHOT` runtime also emits payload-light `FlowerTraceEvent`
 records to opt-in `FlowerTraceListener` implementations. Unlike the older
-coarse lifecycle callbacks, these events include per-Flow sequence numbers,
-distinct `stepRunId` values for repeated Step attempts, and the effective
-transition outcome and target Step. Existing `FlowerListener` implementations
-remain unchanged and do not pay Trace allocation cost.
+coarse lifecycle callbacks, these events include per-runtime sequence numbers,
+distinct `stepRunId` values for repeated Step attempts, effective transition
+outcomes, event-loop wait/resume reasons, and durable checkpoint/recovery
+facts. Existing `FlowerListener` implementations remain unchanged and do not
+pay Trace allocation cost.
 
 `flower-observability` provides `FlowerTraceSinkListener`, an in-memory sink,
-a composite sink, and `AsyncFlowerTraceSink`. Wrap file, database, HTTP, or
+a composite sink, `AsyncFlowerTraceSink`, and
+`OpenTelemetryFlowerTraceSink`. Wrap file, database, HTTP, OpenTelemetry, or
 messaging sinks with the bounded asynchronous sink because listener callbacks
 run on the Worker thread.
 

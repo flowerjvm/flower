@@ -259,6 +259,7 @@ public final class Flow {
         this.state = FlowState.READY;
         if (recoveryCheckpoint != null) {
             applyRecoveryCheckpoint(recoveryCheckpoint);
+            notifyRecovered(recoveryCheckpoint);
         }
     }
 
@@ -808,6 +809,14 @@ public final class Flow {
             observer.onStepStarted(stepId, stepNo, recovered);
         } catch (Throwable ignored) {
             // observer must not derail the tick
+        }
+    }
+
+    private void notifyRecovered(FlowCheckpoint checkpoint) {
+        try {
+            observer.onFlowRecovered(checkpoint);
+        } catch (Throwable ignored) {
+            // observer must not derail recovery
         }
     }
 
