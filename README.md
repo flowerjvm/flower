@@ -1080,14 +1080,29 @@ outcomes, event-loop wait/resume reasons, and durable checkpoint/recovery
 facts. Existing `FlowerListener` implementations remain unchanged and do not
 pay Trace allocation cost.
 
-`flower-observability` provides `FlowerTraceSinkListener`, an in-memory sink,
-a composite sink, `AsyncFlowerTraceSink`, and
-`OpenTelemetryFlowerTraceSink`. Wrap file, database, HTTP, OpenTelemetry, or
-messaging sinks with the bounded asynchronous sink because listener callbacks
-run on the Worker thread.
+`flower-observability` provides `FlowerTraceSinkListener`, in-memory and
+composite sinks, `AsyncFlowerTraceSink`, `OpenTelemetryFlowerTraceSink`, and an
+append-only `JsonLinesFlowerTraceSink`. Storage and security adapters include
+fail-closed `TraceSanitizer`, deterministic trace-level sampling, explicit
+content capture policy, and a local content-addressed artifact store.
+
+Keep fast sanitization and sampling on the listener path, then hand selected
+events to the bounded asynchronous sink before file, artifact, database, HTTP,
+OpenTelemetry, or messaging I/O:
+
+```text
+Worker -> sanitize -> sample -> bounded async queue -> content/artifact -> storage
+```
+
+Flower Core never captures prompts, Tool results, business payloads, or API
+keys. Higher layers must opt in to content capture and configure their own
+sanitization policy. Monitor each sink's drop/failure counters; trace
+backpressure never stops business Flow execution.
 
 See [Tracing, Studio, And Evaluation Architecture](docs/tracing-studio-evaluation.md)
-for the event contract, security boundary, and phased Studio/evaluation plan.
+for the event contract and phased Studio/evaluation plan, and
+[Trace Storage And Security](docs/tracing-storage-security.md) for the reference
+pipeline and operating boundaries.
 
 Lifecycle listener snapshots stay lightweight. The declared step list is only
 materialized for dump/admin views so observability does not add work to every

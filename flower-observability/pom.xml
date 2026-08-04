@@ -17,8 +17,9 @@
 
     <name>Flower Observability</name>
     <description>
-        Optional observability bindings for Flower: SLF4J logging listener,
-        Micrometer metrics listener, OpenTelemetry tracing listener, and JSON renderer for EngineDump.
+        Optional observability tools for Flower: logging, metrics, OpenTelemetry,
+        trace sanitization and sampling, local JSON Lines and artifact storage,
+        and JSON rendering for EngineDump.
         Java 8 compatible. Each third-party binding is declared optional;
         users opt in by adding the matching binding dependency.
     </description>

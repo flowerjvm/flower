@@ -1,8 +1,9 @@
 # Tracing, Studio, And Evaluation Architecture
 
-Status: implementation roadmap. Runtime foundation plus event-loop and durable
-recovery tracing are implemented for `0.1.2-SNAPSHOT`; later phases below are
-not yet public runtime guarantees.
+Status: implementation roadmap. Runtime foundation, event-loop and durable
+recovery tracing, and the local storage/security reference pipeline are
+implemented for `0.1.2-SNAPSHOT`; later Studio, domain adapter, and evaluation
+phases below are not yet public runtime guarantees.
 
 ## Goal
 
@@ -154,12 +155,30 @@ Worker error callback because the logical Flow has already terminated.
 
 ### Phase 3: Storage And Security
 
-- JSON Lines reference sink;
-- JDBC sink in a separate module when schema and migration behavior stabilize;
-- `TraceSanitizer`, content capture policy, artifact extraction, and sampling;
+Implemented in `flower-observability` for `0.1.2-SNAPSHOT`:
+
+- append-only, size-bounded `JsonLinesFlowerTraceSink` with no JSON dependency;
+- `TraceSanitizer` plus exact-name remove, redact, allow-list, and composition
+  helpers;
 - fail-closed sanitization: sanitizer failure drops the event instead of
   forwarding unsanitized content;
-- retention remains a storage concern, separate from sanitization.
+- deterministic probability sampling by logical `traceId`, so one trace is
+  retained or dropped as a whole;
+- explicit `TraceContent` capture policy with `DROP`, `INLINE`, and `ARTIFACT`
+  decisions;
+- local content-addressed, atomic `FileTraceArtifactStore` using SHA-256.
+
+Core events still contain orchestration metadata only. `TraceContent` is an
+opt-in value for custom or higher-layer instrumentation; its policy is never a
+license to collect prompts, Tool results, or business state automatically.
+JSON and artifact sinks perform blocking I/O and must remain behind
+`AsyncFlowerTraceSink`. Sanitization and sampling should stay before that
+bounded handoff. See [Trace Storage And Security](tracing-storage-security.md)
+for the complete pipeline.
+
+A JDBC sink remains deferred to a separate module until the event query schema,
+migrations, and retention behavior stabilize. Retention remains a storage
+concern, separate from sanitization.
 
 Possible modules are added only when their dependency boundary is real:
 
