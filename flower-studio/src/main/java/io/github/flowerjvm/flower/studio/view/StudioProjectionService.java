@@ -52,13 +52,7 @@ public final class StudioProjectionService {
         if (snapshot == null || query == null) {
             throw new IllegalArgumentException("snapshot and query must not be null");
         }
-        List<TraceProjection> projections = projections(snapshot.events());
-        Collections.sort(projections, new Comparator<TraceProjection>() {
-            @Override
-            public int compare(TraceProjection left, TraceProjection right) {
-                return right.updatedAt.compareTo(left.updatedAt);
-            }
-        });
+        List<TraceProjection> projections = sortedProjections(snapshot.events());
 
         Set<String> allSources = new LinkedHashSet<String>();
         List<TraceSummaryView> matched = new ArrayList<TraceSummaryView>();
@@ -76,6 +70,18 @@ public final class StudioProjectionService {
         List<String> sources = new ArrayList<String>(allSources);
         Collections.sort(sources);
         return new TraceListView(matched, sources, totalMatched, snapshot.diagnostics());
+    }
+
+    /** Returns every projected Trace summary, newest activity first. */
+    public List<TraceSummaryView> summaries(StudioSnapshot snapshot) {
+        if (snapshot == null) {
+            throw new IllegalArgumentException("snapshot must not be null");
+        }
+        List<TraceSummaryView> summaries = new ArrayList<TraceSummaryView>();
+        for (TraceProjection projection : sortedProjections(snapshot.events())) {
+            summaries.add(projection.summary);
+        }
+        return Collections.unmodifiableList(summaries);
     }
 
     public TraceDetailView detail(StudioSnapshot snapshot, String traceId) {
@@ -113,6 +119,17 @@ public final class StudioProjectionService {
             projections.add(project(entry.getKey(), entry.getValue()));
         }
         return projections;
+    }
+
+    private List<TraceProjection> sortedProjections(List<ObservationRecord> events) {
+        List<TraceProjection> selected = projections(events);
+        Collections.sort(selected, new Comparator<TraceProjection>() {
+            @Override
+            public int compare(TraceProjection left, TraceProjection right) {
+                return right.updatedAt.compareTo(left.updatedAt);
+            }
+        });
+        return selected;
     }
 
     private TraceProjection project(String traceId, List<ObservationRecord> sourceEvents) {

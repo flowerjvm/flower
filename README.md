@@ -1115,7 +1115,11 @@ can open common observation JSON Lines or legacy Core trace JSON Lines and show
 Trace outcomes, nested runs, event timing, Step transitions, waits, recovery,
 and optional Agent, Harness, Tool, approval, and Action overlays. It also reads
 `flower-evaluation` result and feedback streams to show candidate quality,
-cases, scores, baseline regressions, and Trace references. See the
+cases, scores, baseline regressions, and Trace references. Its Monitoring view
+adds bounded Trace outcomes, operation failure/duration, Step-transition,
+activity, source, token, approval, and evaluation-quality aggregates. These
+describe the currently loaded local files; production metrics and alerts remain
+the job of Micrometer/OpenTelemetry and the host observability platform. See the
 [Flower Studio README](flower-studio/README.md) for the included runnable demo
 and its local-reference operating boundary.
 
@@ -1249,7 +1253,8 @@ Observability / testing:
 - `flower-observability`: listeners and helpers for logging, dumps, metrics,
   tracing, and awaiting flow completion.
 - `flower-studio` (MVP): read-only local JSON Lines Trace, Run, and event
-  explorer with optional artifact links and evaluation views.
+  explorer with optional artifact links, evaluation views, and a bounded
+  monitoring dashboard.
 - `flower-evaluation` (MVP): post-run datasets, experiments, evaluators,
   baseline regression comparison, feedback, and local JSON Lines stores.
 - `flower-testkit` (MVP): deterministic Flow test helpers.

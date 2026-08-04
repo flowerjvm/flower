@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="light">
+    <title>Monitoring | Flower Studio</title>
+    <link rel="stylesheet" href="/assets/app.css">
+</head>
+<body>
+<header class="topbar">
+    <div class="brand" aria-label="Flower Studio">
+        <span class="brand-mark" aria-hidden="true">
+            <span></span><span></span><span></span><span></span>
+        </span>
+        <span class="brand-name">Flower Studio</span>
+        <span class="environment-label">LOCAL</span>
+    </div>
+    <nav class="section-nav" aria-label="Studio sections">
+        <a href="/">Traces</a>
+        <a href="/evaluations">Evaluations</a>
+        <a class="is-active" href="/monitoring">Monitoring</a>
+    </nav>
+    <div class="runtime-state">
+        <span id="health-dot" class="health-dot health-loading"></span>
+        <span id="health-label">Connecting</span>
+        <span id="monitoring-path" class="trace-path"></span>
+    </div>
+    <button id="refresh-button" class="command-button" type="button">Refresh</button>
+</header>
+
+<main class="monitoring-page">
+    <header class="monitoring-header">
+        <div>
+            <h1>Runtime monitoring</h1>
+            <div id="monitoring-window" class="monitoring-window">No observation window</div>
+        </div>
+        <div id="monitoring-loaded-at" class="monitoring-loaded-at">Not loaded</div>
+    </header>
+
+    <div id="monitoring-diagnostic-banner" class="diagnostic-banner monitoring-diagnostic" hidden></div>
+
+    <section id="monitoring-metrics" class="metric-strip monitoring-metrics" aria-label="Runtime metrics"></section>
+
+    <section class="monitoring-band monitoring-overview-band">
+        <div class="monitoring-section activity-section">
+            <header class="monitoring-section-header">
+                <div>
+                    <span class="section-kicker">ACTIVITY</span>
+                    <h2>Execution volume</h2>
+                </div>
+                <div class="activity-legend" aria-label="Activity legend">
+                    <span><i class="legend-trace"></i>Traces</span>
+                    <span><i class="legend-model"></i>Model</span>
+                    <span><i class="legend-tool"></i>Tool</span>
+                </div>
+            </header>
+            <div id="activity-chart" class="activity-chart" role="img" aria-label="Execution activity over time"></div>
+            <div id="activity-empty" class="monitoring-empty" hidden>No activity in this observation window.</div>
+        </div>
+
+        <div class="monitoring-section status-section">
+            <header class="monitoring-section-header">
+                <div>
+                    <span class="section-kicker">OUTCOMES</span>
+                    <h2>Trace status</h2>
+                </div>
+            </header>
+            <div id="status-distribution" class="status-distribution" aria-label="Trace status distribution"></div>
+            <div id="status-list" class="status-list"></div>
+            <dl id="runtime-facts" class="runtime-facts"></dl>
+        </div>
+    </section>
+
+    <section class="monitoring-band monitoring-section">
+        <header class="monitoring-section-header">
+            <div>
+                <span class="section-kicker">OPERATIONS</span>
+                <h2>Execution health</h2>
+            </div>
+            <span id="operation-count" class="monitoring-count">0 operations</span>
+        </header>
+        <div class="table-scroll">
+            <table class="event-table monitoring-table operation-table">
+                <thead>
+                <tr><th>Category</th><th>Operation</th><th>Calls</th><th>Completed</th><th>Failures</th><th>Failure rate</th><th>Average</th></tr>
+                </thead>
+                <tbody id="operation-table-body"></tbody>
+            </table>
+        </div>
+        <div id="operation-empty" class="monitoring-empty" hidden>No model, Tool, Action, or Step operations recorded.</div>
+    </section>
+
+    <section class="monitoring-band monitoring-detail-grid">
+        <div class="monitoring-section">
+            <header class="monitoring-section-header">
+                <div>
+                    <span class="section-kicker">FLOW CONTROL</span>
+                    <h2>Step transitions</h2>
+                </div>
+            </header>
+            <div class="table-scroll">
+                <table class="event-table monitoring-table transition-table">
+                    <thead><tr><th>Step</th><th>Outcome</th><th>Target</th><th>Count</th><th>Share</th></tr></thead>
+                    <tbody id="transition-table-body"></tbody>
+                </table>
+            </div>
+            <div id="transition-empty" class="monitoring-empty" hidden>No Step transition events recorded.</div>
+        </div>
+
+        <div class="monitoring-section">
+            <header class="monitoring-section-header">
+                <div>
+                    <span class="section-kicker">SOURCES</span>
+                    <h2>Runtime coverage</h2>
+                </div>
+            </header>
+            <div id="source-list" class="source-monitor-list"></div>
+            <div id="source-empty" class="monitoring-empty" hidden>No observation sources recorded.</div>
+        </div>
+    </section>
+
+    <section class="monitoring-band monitoring-section quality-section">
+        <header class="monitoring-section-header">
+            <div>
+                <span class="section-kicker">QUALITY</span>
+                <h2>Evaluation health</h2>
+            </div>
+            <a class="monitoring-link" href="/evaluations">Open evaluations</a>
+        </header>
+        <div id="quality-content" class="quality-content"></div>
+        <div id="quality-empty" class="monitoring-empty" hidden>No evaluation experiments loaded.</div>
+    </section>
+</main>
+
+<div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+<script src="/assets/monitoring.js" defer></script>
+</body>
+</html>

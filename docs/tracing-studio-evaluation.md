@@ -3,7 +3,8 @@
 Status: implemented development architecture. Runtime tracing, event-loop and
 durable recovery tracing, the local storage/security pipeline, common domain
 adapters, the read-only local Studio, and the first evaluation framework are
-implemented for `0.1.2-SNAPSHOT`.
+implemented for `0.1.2-SNAPSHOT`. Studio also includes the first bounded local
+monitoring dashboard over those Trace and evaluation records.
 
 ## Goal
 
@@ -274,6 +275,35 @@ Evaluation does not authorize an Action and does not make a bad run safe. It
 measures behavior after, or alongside, runtime controls owned by the relevant
 layer. It also does not replace AI Harness output validation/retry or the Agent
 model/Tool loop. See the [Flower Evaluation README](../flower-evaluation/README.md).
+
+### Phase 7: Local Monitoring Dashboard
+
+Implemented in `flower-studio` for `0.1.2-SNAPSHOT`. Monitoring is a read-only
+projection over the same bounded observation and evaluation snapshots; it does
+not add callbacks, mutable state, or work to a Flower Worker. The dashboard and
+`GET /api/monitoring` expose:
+
+- Trace outcome distribution and average terminal duration;
+- model, Tool, Action, approval, wait, timeout, and token totals;
+- Step, model, Tool, and Action call counts, failure rates, and paired-event
+  durations;
+- effective Step outcome and target frequencies;
+- time-bucketed Trace/model/Tool activity and source coverage;
+- aggregate evaluation pass rate plus the latest candidate's regressions and
+  improvements against its configured baseline.
+
+Aggregates are deterministic for the loaded files. A missing start event leaves
+an operation duration unknown rather than inventing one, and incompatible or
+missing evaluation baselines do not make the monitoring endpoint unavailable.
+The dashboard reports malformed and truncated input diagnostics so its scope is
+visible.
+
+These values describe only the records retained inside Studio's configured
+read limits; they are not an all-time production metrics database. Runtime
+alerts and low-latency service metrics should use the existing Micrometer or
+OpenTelemetry adapters. Large deployments should aggregate the common event
+contract in their own observability pipeline and may use Studio only as a local
+reference consumer.
 
 ## Explicit Non-Goals
 

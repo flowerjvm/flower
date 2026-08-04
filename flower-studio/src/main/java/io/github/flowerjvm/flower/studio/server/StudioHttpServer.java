@@ -5,6 +5,8 @@ import com.sun.net.httpserver.Headers;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
 import com.sun.net.httpserver.HttpServer;
+import io.github.flowerjvm.flower.evaluation.EvaluationExperimentResult;
+import io.github.flowerjvm.flower.evaluation.storage.EvaluationResultSnapshot;
 import io.github.flowerjvm.flower.evaluation.storage.JsonLinesEvaluationFeedbackSource;
 import io.github.flowerjvm.flower.evaluation.storage.JsonLinesEvaluationResultSource;
 import io.github.flowerjvm.flower.studio.store.ObservationRepository;
@@ -12,6 +14,8 @@ import io.github.flowerjvm.flower.studio.store.StudioSnapshot;
 import io.github.flowerjvm.flower.studio.view.EvaluationExperimentDetailView;
 import io.github.flowerjvm.flower.studio.view.EvaluationListView;
 import io.github.flowerjvm.flower.studio.view.EvaluationProjectionService;
+import io.github.flowerjvm.flower.studio.view.MonitoringDashboardView;
+import io.github.flowerjvm.flower.studio.view.MonitoringProjectionService;
 import io.github.flowerjvm.flower.studio.view.StudioProjectionService;
 import io.github.flowerjvm.flower.studio.view.StudioQuery;
 import io.github.flowerjvm.flower.studio.view.TraceDetailView;
@@ -48,6 +52,8 @@ public final class StudioHttpServer implements AutoCloseable {
     private final ObservationRepository repository;
     private final StudioProjectionService projections;
     private final EvaluationProjectionService evaluations;
+    private final JsonLinesEvaluationResultSource evaluationSource;
+    private final MonitoringProjectionService monitoring;
     private final ObjectMapper mapper;
     private final Path artifactRoot;
 
@@ -77,6 +83,8 @@ public final class StudioHttpServer implements AutoCloseable {
         this.projections = new StudioProjectionService(this.artifactRoot != null);
         this.evaluations = evaluationSource == null
                 ? null : new EvaluationProjectionService(evaluationSource, feedbackSource);
+        this.evaluationSource = evaluationSource;
+        this.monitoring = new MonitoringProjectionService();
         this.mapper = new ObjectMapper();
         this.server = HttpServer.create(address, 0);
         this.executor = Executors.newFixedThreadPool(4, new StudioThreadFactory());
@@ -84,8 +92,34 @@ public final class StudioHttpServer implements AutoCloseable {
         this.server.createContext("/api/health", new HealthHandler());
         this.server.createContext("/api/traces", new TraceHandler());
         this.server.createContext("/api/evaluations", new EvaluationHandler());
+        this.server.createContext("/api/monitoring", new MonitoringHandler());
         this.server.createContext("/api/artifacts", new ArtifactHandler());
         this.server.createContext("/", new StaticHandler());
+    }
+
+    private final class MonitoringHandler implements HttpHandler {
+        @Override
+        public void handle(HttpExchange exchange) throws IOException {
+            if (!requireGet(exchange)) {
+                return;
+            }
+            String rawPath = exchange.getRequestURI().getRawPath();
+            if (!"/api/monitoring".equals(rawPath)
+                    && !"/api/monitoring/".equals(rawPath)) {
+                sendError(exchange, 404, "Monitoring endpoint not found");
+                return;
+            }
+            StudioSnapshot traceSnapshot = repository.load();
+            EvaluationResultSnapshot evaluationSnapshot = evaluationSource == null
+                    ? null : evaluationSource.load();
+            MonitoringDashboardView dashboard = monitoring.project(
+                    traceSnapshot,
+                    evaluationSnapshot == null
+                            ? Collections.<EvaluationExperimentResult>emptyList()
+                            : evaluationSnapshot.getExperiments(),
+                    evaluationSnapshot == null ? null : evaluationSnapshot.getDiagnostics());
+            sendJson(exchange, 200, dashboard);
+        }
     }
 
     public void start() {
@@ -255,6 +289,10 @@ public final class StudioHttpServer implements AutoCloseable {
                     || "/evaluations.html".equals(path)) {
                 resource = "/studio/evaluations.html";
                 contentType = "text/html; charset=utf-8";
+            } else if ("/monitoring".equals(path)
+                    || "/monitoring.html".equals(path)) {
+                resource = "/studio/monitoring.html";
+                contentType = "text/html; charset=utf-8";
             } else if ("/assets/app.css".equals(path)) {
                 resource = "/studio/assets/app.css";
                 contentType = "text/css; charset=utf-8";
@@ -263,6 +301,9 @@ public final class StudioHttpServer implements AutoCloseable {
                 contentType = "text/javascript; charset=utf-8";
             } else if ("/assets/evaluations.js".equals(path)) {
                 resource = "/studio/assets/evaluations.js";
+                contentType = "text/javascript; charset=utf-8";
+            } else if ("/assets/monitoring.js".equals(path)) {
+                resource = "/studio/assets/monitoring.js";
                 contentType = "text/javascript; charset=utf-8";
             } else {
                 sendError(exchange, 404, "Resource not found");

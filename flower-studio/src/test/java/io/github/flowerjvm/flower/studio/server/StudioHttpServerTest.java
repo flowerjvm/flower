@@ -76,6 +76,19 @@ class StudioHttpServerTest {
             JsonNode detail = json(request("GET", base + "/api/traces/trace-1"));
             assertThat(detail.path("summary").path("status").asText()).isEqualTo("RUNNING");
 
+            Response monitoringPage = request("GET", base + "/monitoring");
+            assertThat(monitoringPage.status).isEqualTo(200);
+            assertThat(monitoringPage.body).contains("Runtime monitoring");
+            assertThat(request("GET", base + "/assets/monitoring.js").status)
+                    .isEqualTo(200);
+            JsonNode monitoring = json(request("GET", base + "/api/monitoring"));
+            assertThat(monitoring.path("overview").path("traceCount").asInt())
+                    .isEqualTo(1);
+            assertThat(monitoring.path("overview").path("running").asInt())
+                    .isEqualTo(1);
+            assertThat(monitoring.path("evaluation").path("experimentCount").asInt())
+                    .isZero();
+
             Response artifact = request(
                     "GET",
                     base + "/api/artifacts?location=trace-1%2Fevidence.txt");
@@ -87,6 +100,9 @@ class StudioHttpServerTest {
                     base + "/api/artifacts?location=..%2Fevidence.txt").status)
                     .isEqualTo(404);
             assertThat(request("POST", base + "/api/traces").status).isEqualTo(405);
+            assertThat(request("POST", base + "/api/monitoring").status).isEqualTo(405);
+            assertThat(request("GET", base + "/api/monitoring/missing").status)
+                    .isEqualTo(404);
             assertThat(request("GET", base + "/api/traces/missing").status).isEqualTo(404);
         }
     }
@@ -130,6 +146,14 @@ class StudioHttpServerTest {
             assertThat(detail.path("comparison").path("improvedExampleIds").get(0).asText())
                     .isEqualTo("case-1");
             assertThat(detail.path("feedback").size()).isEqualTo(1);
+
+            JsonNode monitoring = json(request("GET", base + "/api/monitoring"));
+            assertThat(monitoring.path("evaluation").path("experimentCount").asInt())
+                    .isEqualTo(2);
+            assertThat(monitoring.path("evaluation").path("latestExperimentId").asText())
+                    .isEqualTo("candidate");
+            assertThat(monitoring.path("evaluation").path("improvedExamples").asInt())
+                    .isEqualTo(1);
             assertThat(request("POST", base + "/api/evaluations").status).isEqualTo(405);
             assertThat(request("GET", base + "/api/evaluations/missing").status)
                     .isEqualTo(404);
