@@ -155,12 +155,17 @@ and repair.
 ## Where It Comes From
 
 Flower's `Worker -> Flow -> Step -> StepResult` execution model was shaped by
-practical experience building industrial equipment control systems and
-business applications.
+practical experience gained while developing industrial equipment control
+systems and business applications.
 
-It generalizes recurring patterns from those domains into a reusable workflow
-runtime for Java applications: explicit execution stages, result-driven
-transitions, waits, timeouts, retries, and human intervention.
+It generalizes recurring patterns observed in long-running, stage-based
+processes into a reusable workflow runtime for Java applications: explicit
+execution stages, result-driven transitions, waits, timeouts, retries, human
+intervention, and inspectable execution traces.
+
+The underlying discipline is simple: make the current state visible, make
+transitions explicit, keep each unit of work small, and leave a trace that a
+human can inspect.
 
 ## Why And When To Use It
 
