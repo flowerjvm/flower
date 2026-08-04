@@ -1,5 +1,7 @@
 package io.github.flowerjvm.flower.core.flow;
 
+import io.github.flowerjvm.flower.core.trace.StepTransition;
+
 /**
  * Internal hook used by a {@code Worker} to observe step transitions that
  * happen inside a single {@link Flow#tick()} call.
@@ -21,7 +23,15 @@ public interface LifecycleObserver {
         @Override public void onStepExited(String stepId) {}
     };
 
+    /** Fires immediately before a fresh or recovered Step lifecycle starts. */
+    default void onStepStarted(String stepId, int stepNo, boolean recovered) {
+    }
+
     void onStepEntered(String stepId);
 
     void onStepExited(String stepId);
+
+    /** Fires after a Step, Guard, lifecycle failure, or cancellation selects a transition. */
+    default void onStepTransitioned(StepTransition transition) {
+    }
 }

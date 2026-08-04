@@ -10,6 +10,7 @@ import io.github.flowerjvm.flower.core.step.StepDefinition;
 import io.github.flowerjvm.flower.core.step.StepResult;
 import io.github.flowerjvm.flower.core.step.StepRuntime;
 import io.github.flowerjvm.flower.core.time.Clock;
+import io.github.flowerjvm.flower.core.trace.StepTransition;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -318,8 +319,12 @@ public final class Flow {
         if (state.isTerminal()) {
             return;
         }
+        String cancelledStepId = null;
+        int cancelledStepNo = 0;
         if (currentRuntime != null) {
             StepDefinition def = steps.get(currentIndex);
+            cancelledStepId = def.stepId();
+            cancelledStepNo = currentRuntime.stepNo();
             boolean notifyExit = currentEntered;
             try {
                 if (currentEntered) {
@@ -340,6 +345,14 @@ public final class Flow {
             }
         }
         state = FlowState.CANCELLED;
+        if (cancelledStepId != null) {
+            notifyTransition(StepTransition.of(
+                    cancelledStepId,
+                    cancelledStepNo,
+                    StepTransition.Origin.EXTERNAL,
+                    StepTransition.Outcome.CANCELLED,
+                    null));
+        }
     }
 
     /**
@@ -452,36 +465,73 @@ public final class Flow {
                 applyGuardGoTo(def, result.targetStepId());
                 return false;
             case FAIL:
+                int failedStepNo = currentRuntime.stepNo();
                 failureCause = result.cause();
                 state = FlowState.FAILED;
                 exitCurrent(def);
+                notifyTransition(StepTransition.failed(
+                        def.stepId(),
+                        failedStepNo,
+                        StepTransition.Origin.GUARD,
+                        null,
+                        failureCause));
                 return false;
             default:
+                int unknownStepNo = currentRuntime.stepNo();
                 failureCause = new IllegalStateException(
                         "Unknown GuardResult type: " + result.type());
                 state = FlowState.FAILED;
                 exitCurrent(def);
+                notifyTransition(StepTransition.failed(
+                        def.stepId(),
+                        unknownStepNo,
+                        StepTransition.Origin.GUARD,
+                        null,
+                        failureCause));
                 return false;
         }
     }
 
     private void applyGuardGoTo(StepDefinition def, String targetStepId) {
+        int stepNo = currentRuntime.stepNo();
         Integer target = stepIndexById.get(targetStepId);
         if (target == null) {
             failureCause = new IllegalStateException(
                     "guard goTo target stepId not found: " + targetStepId);
             state = FlowState.FAILED;
             exitCurrent(def);
+            notifyTransition(StepTransition.failed(
+                    def.stepId(),
+                    stepNo,
+                    StepTransition.Origin.GUARD,
+                    targetStepId,
+                    failureCause));
             return;
         }
         exitCurrent(def);
-        if (state.isTerminal()) return;
+        if (state.isTerminal()) {
+            notifyTransition(StepTransition.failed(
+                    def.stepId(),
+                    stepNo,
+                    StepTransition.Origin.GUARD,
+                    targetStepId,
+                    failureCause));
+            return;
+        }
         currentIndex = target;
+        notifyTransition(StepTransition.of(
+                def.stepId(),
+                stepNo,
+                StepTransition.Origin.GUARD,
+                StepTransition.Outcome.GOTO,
+                targetStepId));
     }
 
     private void enterCurrent() {
         StepDefinition def = steps.get(currentIndex);
         ensureCurrentRuntime(def);
+        int stepNo = currentRuntime.stepNo();
+        notifyStarted(def.stepId(), stepNo, false);
         try {
             currentRuntime.enter(def.step());
         } catch (Throwable t) {
@@ -497,6 +547,12 @@ public final class Flow {
             retainedStepNo = 0;
             state = FlowState.FAILED;
             failureCause = t;
+            notifyTransition(StepTransition.failed(
+                    def.stepId(),
+                    stepNo,
+                    StepTransition.Origin.LIFECYCLE,
+                    null,
+                    t));
             return;
         }
         currentEntered = true;
@@ -509,6 +565,8 @@ public final class Flow {
         StepDefinition def = steps.get(currentIndex);
         ensureCurrentRuntime(def);
         RecoveryPolicy recoveryPolicy = def.recoveryPolicy();
+        int stepNo = currentRuntime.stepNo();
+        notifyStarted(def.stepId(), stepNo, true);
         try {
             currentRuntime.resume(def.step(), recoveryPolicy);
         } catch (Throwable t) {
@@ -523,6 +581,12 @@ public final class Flow {
             retainedStepNo = 0;
             state = FlowState.FAILED;
             failureCause = t;
+            notifyTransition(StepTransition.failed(
+                    def.stepId(),
+                    stepNo,
+                    StepTransition.Origin.LIFECYCLE,
+                    null,
+                    t));
             return;
         }
         currentEntered = true;
@@ -533,33 +597,76 @@ public final class Flow {
 
     private void applyResult(StepResult result) {
         StepDefinition def = steps.get(currentIndex);
+        int stepNo = currentRuntime.stepNo();
         switch (result.type()) {
             case STAY:
                 return;
 
-            case DONE:
+            case DONE: {
+                String targetStepId = currentIndex + 1 < steps.size()
+                        ? steps.get(currentIndex + 1).stepId()
+                        : null;
                 exitCurrent(def);
-                if (state.isTerminal()) return;
+                if (state.isTerminal()) {
+                    notifyTransition(StepTransition.failed(
+                            def.stepId(),
+                            stepNo,
+                            StepTransition.Origin.STEP_RESULT,
+                            targetStepId,
+                            failureCause));
+                    return;
+                }
                 if (currentIndex + 1 >= steps.size()) {
                     state = FlowState.FINISHED;
+                    notifyTransition(StepTransition.of(
+                            def.stepId(),
+                            stepNo,
+                            StepTransition.Origin.STEP_RESULT,
+                            StepTransition.Outcome.DONE,
+                            null));
                     return;
                 }
                 currentIndex++;
+                notifyTransition(StepTransition.of(
+                        def.stepId(),
+                        stepNo,
+                        StepTransition.Origin.STEP_RESULT,
+                        StepTransition.Outcome.DONE,
+                        targetStepId));
                 return;
+            }
 
-            case REPEAT:
+            case REPEAT: {
+                Throwable resetFailure = null;
                 try {
                     currentRuntime.reset(def.step());
                 } catch (Throwable t) {
                     state = FlowState.FAILED;
                     failureCause = t;
+                    resetFailure = t;
                 }
                 // Discard the runtime; next tick re-creates it and calls onEnter again.
                 currentRuntime = null;
                 currentEntered = false;
                 recoveringCurrentStep = false;
                 retainedStepNo = 0;
+                if (resetFailure != null) {
+                    notifyTransition(StepTransition.failed(
+                            def.stepId(),
+                            stepNo,
+                            StepTransition.Origin.LIFECYCLE,
+                            def.stepId(),
+                            resetFailure));
+                } else {
+                    notifyTransition(StepTransition.of(
+                            def.stepId(),
+                            stepNo,
+                            StepTransition.Origin.STEP_RESULT,
+                            StepTransition.Outcome.REPEAT,
+                            def.stepId()));
+                }
                 return;
+            }
 
             case GOTO: {
                 Integer target = stepIndexById.get(result.targetStepId());
@@ -569,24 +676,64 @@ public final class Flow {
                     failureCause = cause;
                     state = FlowState.FAILED;
                     exitCurrent(def);
+                    notifyTransition(StepTransition.failed(
+                            def.stepId(),
+                            stepNo,
+                            StepTransition.Origin.STEP_RESULT,
+                            result.targetStepId(),
+                            cause));
                     return;
                 }
                 exitCurrent(def);
-                if (state.isTerminal()) return;
+                if (state.isTerminal()) {
+                    notifyTransition(StepTransition.failed(
+                            def.stepId(),
+                            stepNo,
+                            StepTransition.Origin.STEP_RESULT,
+                            result.targetStepId(),
+                            failureCause));
+                    return;
+                }
                 currentIndex = target;
+                notifyTransition(StepTransition.of(
+                        def.stepId(),
+                        stepNo,
+                        StepTransition.Origin.STEP_RESULT,
+                        StepTransition.Outcome.GOTO,
+                        result.targetStepId()));
                 return;
             }
 
             case FINISH:
                 exitCurrent(def);
-                if (state.isTerminal()) return;
+                if (state.isTerminal()) {
+                    notifyTransition(StepTransition.failed(
+                            def.stepId(),
+                            stepNo,
+                            StepTransition.Origin.STEP_RESULT,
+                            null,
+                            failureCause));
+                    return;
+                }
                 state = FlowState.FINISHED;
+                notifyTransition(StepTransition.of(
+                        def.stepId(),
+                        stepNo,
+                        StepTransition.Origin.STEP_RESULT,
+                        StepTransition.Outcome.FINISH,
+                        null));
                 return;
 
             case FAIL:
                 failureCause = result.cause();
                 state = FlowState.FAILED;
                 exitCurrent(def);
+                notifyTransition(StepTransition.failed(
+                        def.stepId(),
+                        stepNo,
+                        StepTransition.Origin.STEP_RESULT,
+                        null,
+                        failureCause));
                 return;
 
             default:
@@ -594,6 +741,12 @@ public final class Flow {
                 state = FlowState.FAILED;
                 failureCause = new IllegalStateException(
                         "Unknown StepResult type: " + result.type());
+                notifyTransition(StepTransition.failed(
+                        def.stepId(),
+                        stepNo,
+                        StepTransition.Origin.STEP_RESULT,
+                        null,
+                        failureCause));
         }
     }
 
@@ -650,9 +803,25 @@ public final class Flow {
         }
     }
 
+    private void notifyStarted(String stepId, int stepNo, boolean recovered) {
+        try {
+            observer.onStepStarted(stepId, stepNo, recovered);
+        } catch (Throwable ignored) {
+            // observer must not derail the tick
+        }
+    }
+
     private void notifyExited(String stepId) {
         try {
             observer.onStepExited(stepId);
+        } catch (Throwable ignored) {
+            // observer must not derail the tick
+        }
+    }
+
+    private void notifyTransition(StepTransition transition) {
+        try {
+            observer.onStepTransitioned(transition);
         } catch (Throwable ignored) {
             // observer must not derail the tick
         }

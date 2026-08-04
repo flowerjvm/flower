@@ -1073,6 +1073,21 @@ errors. `Engine.dump()` gives a snapshot of the current engine and worker
 state, including active flows, current step id, current step index, current
 stepNo, and the declared step list for admin/console views.
 
+The `0.1.2-SNAPSHOT` runtime also emits payload-light `FlowerTraceEvent`
+records to opt-in `FlowerTraceListener` implementations. Unlike the older
+coarse lifecycle callbacks, these events include per-Flow sequence numbers,
+distinct `stepRunId` values for repeated Step attempts, and the effective
+transition outcome and target Step. Existing `FlowerListener` implementations
+remain unchanged and do not pay Trace allocation cost.
+
+`flower-observability` provides `FlowerTraceSinkListener`, an in-memory sink,
+a composite sink, and `AsyncFlowerTraceSink`. Wrap file, database, HTTP, or
+messaging sinks with the bounded asynchronous sink because listener callbacks
+run on the Worker thread.
+
+See [Tracing, Studio, And Evaluation Architecture](docs/tracing-studio-evaluation.md)
+for the event contract, security boundary, and phased Studio/evaluation plan.
+
 Lifecycle listener snapshots stay lightweight. The declared step list is only
 materialized for dump/admin views so observability does not add work to every
 listener callback.

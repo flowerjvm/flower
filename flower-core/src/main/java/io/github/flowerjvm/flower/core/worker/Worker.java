@@ -1,5 +1,6 @@
 package io.github.flowerjvm.flower.core.worker;
 
+import io.github.flowerjvm.flower.core.context.ExecutionContext;
 import io.github.flowerjvm.flower.core.event.EventBus;
 import io.github.flowerjvm.flower.core.flow.Flow;
 import io.github.flowerjvm.flower.core.flow.FlowId;
@@ -10,14 +11,22 @@ import io.github.flowerjvm.flower.core.flow.LifecycleObserver;
 import io.github.flowerjvm.flower.core.listener.FlowerListener;
 import io.github.flowerjvm.flower.core.persistence.FlowCheckpointStore;
 import io.github.flowerjvm.flower.core.time.Clock;
+import io.github.flowerjvm.flower.core.trace.FlowerTraceAttributes;
+import io.github.flowerjvm.flower.core.trace.FlowerTraceEvent;
+import io.github.flowerjvm.flower.core.trace.FlowerTraceEventType;
+import io.github.flowerjvm.flower.core.trace.FlowerTraceListener;
+import io.github.flowerjvm.flower.core.trace.StepTransition;
 
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.IdentityHashMap;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Queue;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -52,6 +61,7 @@ public final class Worker {
     private final Map<FlowId, Flow> activeFlows = new LinkedHashMap<>();
     private final Queue<Flow> pendingSubmits = new ConcurrentLinkedQueue<>();
     private final Queue<FlowId> pendingCancels = new ConcurrentLinkedQueue<>();
+    private final Map<Flow, FlowTraceState> traceStates = new IdentityHashMap<>();
     private final Object stateLock = new Object();
     // Serializes all direct Flow mutations: tick, active cancel, stop cleanup, and snapshots.
     private final ReentrantLock executionLock = new ReentrantLock();
@@ -62,6 +72,7 @@ public final class Worker {
     private Clock clock;
     private EventBus eventBus;
     private List<FlowerListener> listeners = Collections.emptyList();
+    private List<FlowerTraceListener> traceListeners = Collections.emptyList();
     private CheckpointCoordinator checkpointCoordinator;
     private FlowOwnershipRegistry ownershipRegistry;
 
@@ -177,6 +188,7 @@ public final class Worker {
             this.listeners = listeners == null
                     ? Collections.emptyList()
                     : Collections.unmodifiableList(new ArrayList<>(listeners));
+            this.traceListeners = traceListeners(this.listeners);
             this.checkpointCoordinator = new CheckpointCoordinator(
                     name,
                     clock,
@@ -627,6 +639,7 @@ public final class Worker {
             if (flow.persistence() == FlowPersistence.DURABLE) {
                 if (checkpointCoordinator.saveActive(flow)) {
                     flow.suspend();
+                    forgetTraceState(flow);
                     checkpointCoordinator.forget(flow.flowId());
                     releaseOwnership(flow);
                 } else {
@@ -656,6 +669,7 @@ public final class Worker {
     // ------------------------------------------------------------------
 
     private void fireFlowSubmitted(Flow flow) {
+        fireTraceEvent(flow, FlowerTraceEventType.FLOW_STARTED, null, Collections.<String, Object>emptyMap());
         FlowSnapshot snap = flow.snapshot();
         for (FlowerListener l : listeners) {
             try {
@@ -668,6 +682,20 @@ public final class Worker {
 
     private LifecycleObserver observerFor(Flow flow) {
         return new LifecycleObserver() {
+            @Override
+            public void onStepStarted(String stepId, int stepNo, boolean recovered) {
+                if (traceListeners.isEmpty()) {
+                    return;
+                }
+                FlowTraceState traceState = traceState(flow);
+                String stepRunId = traceState.startStepRun();
+                Map<String, Object> attributes = new LinkedHashMap<>();
+                attributes.put(FlowerTraceAttributes.STEP_ID, stepId);
+                attributes.put(FlowerTraceAttributes.STEP_NO, stepNo);
+                attributes.put(FlowerTraceAttributes.STEP_RECOVERED, recovered);
+                fireTraceEvent(flow, FlowerTraceEventType.STEP_STARTED, stepRunId, attributes);
+            }
+
             @Override
             public void onStepEntered(String stepId) {
                 FlowSnapshot snap = flow.snapshot();
@@ -691,11 +719,41 @@ public final class Worker {
                     }
                 }
             }
+
+            @Override
+            public void onStepTransitioned(StepTransition transition) {
+                if (traceListeners.isEmpty()) {
+                    return;
+                }
+                FlowTraceState traceState = traceState(flow);
+                String stepRunId = traceState.currentStepRunId();
+                Map<String, Object> attributes = transitionAttributes(transition);
+                fireTraceEvent(flow, traceType(transition, stepRunId), stepRunId, attributes);
+                traceState.clearStepRun();
+            }
         };
     }
 
     private void fireFlowTerminated(Flow flow) {
         FlowSnapshot snap = flow.snapshot();
+        Map<String, Object> traceAttributes = new LinkedHashMap<>();
+        FlowerTraceEventType traceType;
+        switch (flow.state()) {
+            case FINISHED:
+                traceType = FlowerTraceEventType.FLOW_COMPLETED;
+                break;
+            case FAILED:
+            case CHECKPOINT_FAILED:
+                traceType = FlowerTraceEventType.FLOW_FAILED;
+                addError(traceAttributes, flow.failureCause());
+                break;
+            case CANCELLED:
+                traceType = FlowerTraceEventType.FLOW_CANCELLED;
+                break;
+            default:
+                return;
+        }
+        fireTraceEvent(flow, traceType, null, traceAttributes);
         switch (flow.state()) {
             case FINISHED:
                 for (FlowerListener l : listeners) {
@@ -729,6 +787,123 @@ public final class Worker {
             default:
                 // not terminal - shouldn't happen
         }
+        forgetTraceState(flow);
+    }
+
+    private void fireTraceEvent(
+            Flow flow,
+            FlowerTraceEventType type,
+            String stepRunId,
+            Map<String, Object> attributes) {
+        if (traceListeners.isEmpty()) {
+            return;
+        }
+        FlowTraceState traceState = traceState(flow);
+        long sequence = traceState.nextSequence();
+        ExecutionContext context = flow.executionContext();
+        FlowerTraceEvent.Builder builder = FlowerTraceEvent.builder(type)
+                .eventId(traceState.flowRunId + ":event:" + sequence)
+                .traceId(traceState.traceId)
+                .flowRunId(traceState.flowRunId)
+                .stepRunId(stepRunId)
+                .parentRunId(stepRunId == null ? null : traceState.flowRunId)
+                .flowId(flow.flowId())
+                .workerName(name)
+                .sequence(sequence)
+                .occurredAt(Instant.ofEpochMilli(clock.currentTimeMillis()))
+                .attribute(FlowerTraceAttributes.FLOW_STATE, flow.state().name())
+                .attribute(FlowerTraceAttributes.FLOW_PERSISTENCE, flow.persistence().name())
+                .attribute(FlowerTraceAttributes.FLOW_DEFINITION_VERSION, flow.definitionVersion())
+                .attribute(FlowerTraceAttributes.TENANT_ID, context.tenantIdOrNull())
+                .attribute(FlowerTraceAttributes.USER_ID, context.userIdOrNull())
+                .attribute(FlowerTraceAttributes.SESSION_ID, context.sessionIdOrNull())
+                .attribute(FlowerTraceAttributes.CORRELATION_ID, context.correlationIdOrNull())
+                .attributes(attributes);
+        FlowerTraceEvent event = builder.build();
+        FlowSnapshot snap = flow.snapshot();
+        for (FlowerTraceListener listener : traceListeners) {
+            try {
+                listener.onTraceEvent(event);
+            } catch (Throwable t) {
+                notifyListenerError(snap, "onTraceEvent", t);
+            }
+        }
+    }
+
+    private FlowTraceState traceState(Flow flow) {
+        synchronized (traceStates) {
+            FlowTraceState traceState = traceStates.get(flow);
+            if (traceState != null) {
+                return traceState;
+            }
+            ExecutionContext context = flow.executionContext();
+            String flowRunId = context.runIdOrNull();
+            if (flowRunId == null) {
+                flowRunId = UUID.randomUUID().toString();
+            }
+            String traceId = context.traceIdOrNull();
+            if (traceId == null) {
+                traceId = flowRunId;
+            }
+            FlowTraceState created = new FlowTraceState(flowRunId, traceId);
+            traceStates.put(flow, created);
+            return created;
+        }
+    }
+
+    private void forgetTraceState(Flow flow) {
+        synchronized (traceStates) {
+            traceStates.remove(flow);
+        }
+    }
+
+    private static List<FlowerTraceListener> traceListeners(List<FlowerListener> listeners) {
+        List<FlowerTraceListener> traces = new ArrayList<>();
+        for (FlowerListener listener : listeners) {
+            if (listener instanceof FlowerTraceListener) {
+                traces.add((FlowerTraceListener) listener);
+            }
+        }
+        return Collections.unmodifiableList(traces);
+    }
+
+    private static FlowerTraceEventType traceType(StepTransition transition, String stepRunId) {
+        if (stepRunId == null
+                && transition.origin() == StepTransition.Origin.GUARD
+                && transition.outcome() == StepTransition.Outcome.GOTO) {
+            return FlowerTraceEventType.STEP_SKIPPED;
+        }
+        switch (transition.outcome()) {
+            case FAILED:
+                return FlowerTraceEventType.STEP_FAILED;
+            case CANCELLED:
+                return FlowerTraceEventType.STEP_CANCELLED;
+            default:
+                return FlowerTraceEventType.STEP_COMPLETED;
+        }
+    }
+
+    private static Map<String, Object> transitionAttributes(StepTransition transition) {
+        Map<String, Object> attributes = new LinkedHashMap<>();
+        attributes.put(FlowerTraceAttributes.STEP_ID, transition.stepId());
+        attributes.put(FlowerTraceAttributes.STEP_NO, transition.stepNo());
+        attributes.put(FlowerTraceAttributes.STEP_TRANSITION_ORIGIN, transition.origin().name());
+        attributes.put(FlowerTraceAttributes.STEP_OUTCOME, transition.outcome().name());
+        if (transition.targetStepId() != null) {
+            attributes.put(FlowerTraceAttributes.STEP_TARGET_ID, transition.targetStepId());
+        }
+        addError(attributes, transition.cause());
+        return attributes;
+    }
+
+    private static void addError(Map<String, Object> attributes, Throwable cause) {
+        if (cause == null) {
+            return;
+        }
+        attributes.put(FlowerTraceAttributes.ERROR_TYPE, cause.getClass().getName());
+        if (cause.getMessage() != null) {
+            attributes.put(FlowerTraceAttributes.ERROR_MESSAGE, cause.getMessage());
+        }
     }
 
     private void notifyListenerError(FlowSnapshot flow, String callbackName, Throwable cause) {
@@ -746,6 +921,36 @@ public final class Worker {
                 l.onWorkerError(name, cause);
             } catch (Throwable ignored) {
             }
+        }
+    }
+
+    private static final class FlowTraceState {
+        private final String flowRunId;
+        private final String traceId;
+        private long sequence;
+        private long stepSequence;
+        private String currentStepRunId;
+
+        private FlowTraceState(String flowRunId, String traceId) {
+            this.flowRunId = flowRunId;
+            this.traceId = traceId;
+        }
+
+        private long nextSequence() {
+            return ++sequence;
+        }
+
+        private String startStepRun() {
+            currentStepRunId = flowRunId + ":step:" + (++stepSequence);
+            return currentStepRunId;
+        }
+
+        private String currentStepRunId() {
+            return currentStepRunId;
+        }
+
+        private void clearStepRun() {
+            currentStepRunId = null;
         }
     }
 
