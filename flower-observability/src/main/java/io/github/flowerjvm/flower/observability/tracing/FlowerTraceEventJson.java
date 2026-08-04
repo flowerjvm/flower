@@ -33,6 +33,10 @@ final class FlowerTraceEventJson {
         document.put("sequence", event.sequence());
         document.put("occurredAt", event.occurredAt().toString());
         document.put("attributes", event.attributes());
+        return encodeDocument(document);
+    }
+
+    static String encodeDocument(Map<String, Object> document) {
         return new Encoder().encode(document);
     }
 

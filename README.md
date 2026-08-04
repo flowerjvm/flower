@@ -1091,6 +1091,12 @@ append-only `JsonLinesFlowerTraceSink`. Storage and security adapters include
 fail-closed `TraceSanitizer`, deterministic trace-level sampling, explicit
 content capture policy, and a local content-addressed artifact store.
 
+For cross-project traces, `FlowerObservationEvent` is the common envelope and
+`FlowerObservationSink` is the shared destination. `FlowerTraceObservationSink`
+maps Core Flow events into it; separate Agent, AI Harness, and Action Runtime
+modules map their native lifecycle events without adding those domain types to
+Flower Core.
+
 Keep fast sanitization and sampling on the listener path, then hand selected
 events to the bounded asynchronous sink before file, artifact, database, HTTP,
 OpenTelemetry, or messaging I/O:
@@ -1107,7 +1113,8 @@ backpressure never stops business Flow execution.
 See [Tracing, Studio, And Evaluation Architecture](docs/tracing-studio-evaluation.md)
 for the event contract and phased Studio/evaluation plan, and
 [Trace Storage And Security](docs/tracing-storage-security.md) for the reference
-pipeline and operating boundaries.
+pipeline and operating boundaries. [Domain Observation Adapters](docs/domain-observation-adapters.md)
+shows how Flow, Agent, Harness, and Action events share one correlated stream.
 
 Lifecycle listener snapshots stay lightweight. The declared step list is only
 materialized for dump/admin views so observability does not add work to every

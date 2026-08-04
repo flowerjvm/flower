@@ -2,8 +2,9 @@
 
 Status: implementation roadmap. Runtime foundation, event-loop and durable
 recovery tracing, and the local storage/security reference pipeline are
-implemented for `0.1.2-SNAPSHOT`; later Studio, domain adapter, and evaluation
-phases below are not yet public runtime guarantees.
+implemented for `0.1.2-SNAPSHOT`. The common domain-adapter envelope is also
+implemented; later Studio and evaluation phases below are not yet public
+runtime guarantees.
 
 ## Goal
 
@@ -193,14 +194,24 @@ flower-evaluation              later dataset/experiment/evaluator APIs
 
 ### Phase 4: Domain Adapters
 
-Adapters correlate native events rather than moving their meaning into
-Flower Core:
+Implemented across the Flower projects' current development versions. Adapters
+correlate native events rather than moving their meaning into Flower Core:
 
 - `flower-agent-observability` for model and Tool events;
-- AI Harness trace adapter for attempts, validation, and refinement;
-- Action Runtime adapter for policy, approval, execution, and audit links.
+- `flower-ai-harness-observability` for attempts, validation, and refinement;
+- `flower-action-runtime-observability` for policy, approval, execution, and
+  audit links.
 
-There is no single giant Core event enum for all projects.
+`FlowerObservationEvent` supplies source, native event type, trace/run/parent
+correlation, operation identity, sequence, timestamp, and sanitized
+attributes. The source project still owns the native event meaning. There is
+no single giant Core event enum for all projects.
+
+The adapter defaults are payload-light: they do not mirror prompts, raw model
+responses, validation text, Tool input/output, action output, reasons, or user
+identifiers. Hosts may opt into additional attributes only through an explicit
+allowlist and should still apply the common fail-closed sanitizer before
+storage. See [Domain Observation Adapters](domain-observation-adapters.md).
 
 ### Phase 5: Local Flower Studio
 
