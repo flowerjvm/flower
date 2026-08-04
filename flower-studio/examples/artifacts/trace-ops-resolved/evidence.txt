@@ -1,0 +1,2 @@
+server-alpha / ERROR / Health probe failed three consecutive times.
+server-alpha / ERROR / Database connection pool exhausted.

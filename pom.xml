@@ -54,6 +54,7 @@
         <module>flower-eventloop-persistence-jdbc</module>
         <module>flower-spring-boot-starter</module>
         <module>flower-observability</module>
+        <module>flower-studio</module>
         <module>flower-testkit</module>
         <module>flower-check-annotations</module>
         <module>flower-check</module>
@@ -93,6 +94,7 @@
         <exec-maven-plugin.version>3.5.0</exec-maven-plugin.version>
         <maven-plugin-plugin.version>3.13.1</maven-plugin-plugin.version>
         <maven-invoker-plugin.version>3.10.1</maven-invoker-plugin.version>
+        <maven-shade-plugin.version>3.6.0</maven-shade-plugin.version>
         <maven-plugin-api.version>3.9.9</maven-plugin-api.version>
         <central-publishing-maven-plugin.version>0.11.0</central-publishing-maven-plugin.version>
 
@@ -104,6 +106,7 @@
         <!-- Test dependency versions -->
         <junit-jupiter.version>5.10.3</junit-jupiter.version>
         <assertj.version>3.26.3</assertj.version>
+        <jackson.version>2.17.2</jackson.version>
         <sqlite-jdbc.version>3.46.1.0</sqlite-jdbc.version>
 
         <!-- Checker dependency versions -->
@@ -144,6 +147,11 @@
             </dependency>
             <dependency>
                 <groupId>io.github.flowerjvm</groupId>
+                <artifactId>flower-studio</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.github.flowerjvm</groupId>
                 <artifactId>flower-testkit</artifactId>
                 <version>${project.version}</version>
             </dependency>
@@ -168,6 +176,11 @@
                 <groupId>org.assertj</groupId>
                 <artifactId>assertj-core</artifactId>
                 <version>${assertj.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.fasterxml.jackson.core</groupId>
+                <artifactId>jackson-databind</artifactId>
+                <version>${jackson.version}</version>
             </dependency>
             <dependency>
                 <groupId>org.xerial</groupId>
@@ -320,6 +333,11 @@
                     <groupId>org.apache.maven.plugins</groupId>
                     <artifactId>maven-invoker-plugin</artifactId>
                     <version>${maven-invoker-plugin.version}</version>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-shade-plugin</artifactId>
+                    <version>${maven-shade-plugin.version}</version>
                 </plugin>
             </plugins>
         </pluginManagement>

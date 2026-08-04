@@ -1110,6 +1110,13 @@ keys. Higher layers must opt in to content capture and configure their own
 sanitization policy. Monitor each sink's drop/failure counters; trace
 backpressure never stops business Flow execution.
 
+`flower-studio` is the read-only local consumer for this correlated stream. It
+can open common observation JSON Lines or legacy Core trace JSON Lines and show
+Trace outcomes, nested runs, event timing, Step transitions, waits, recovery,
+and optional Agent, Harness, Tool, approval, and Action overlays. See the
+[Flower Studio README](flower-studio/README.md) for the included runnable demo
+and its local-reference operating boundary.
+
 See [Tracing, Studio, And Evaluation Architecture](docs/tracing-studio-evaluation.md)
 for the event contract and phased Studio/evaluation plan, and
 [Trace Storage And Security](docs/tracing-storage-security.md) for the reference
@@ -1232,6 +1239,8 @@ Observability / testing:
 
 - `flower-observability`: listeners and helpers for logging, dumps, metrics,
   tracing, and awaiting flow completion.
+- `flower-studio` (MVP): read-only local JSON Lines Trace, Run, and event
+  explorer with optional artifact links.
 - `flower-testkit` (MVP): deterministic Flow test helpers.
 
 Developer tooling:

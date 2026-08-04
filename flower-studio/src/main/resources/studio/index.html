@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="light">
+    <title>Flower Studio</title>
+    <link rel="stylesheet" href="/assets/app.css">
+</head>
+<body>
+<header class="topbar">
+    <div class="brand" aria-label="Flower Studio">
+        <span class="brand-mark" aria-hidden="true">
+            <span></span><span></span><span></span><span></span>
+        </span>
+        <span class="brand-name">Flower Studio</span>
+        <span class="environment-label">LOCAL</span>
+    </div>
+    <div class="runtime-state">
+        <span id="health-dot" class="health-dot health-loading"></span>
+        <span id="health-label">Connecting</span>
+        <span id="trace-path" class="trace-path"></span>
+    </div>
+    <button id="refresh-button" class="command-button" type="button">Refresh</button>
+</header>
+
+<div class="workspace">
+    <aside class="trace-panel" aria-label="Trace browser">
+        <div class="panel-heading">
+            <div>
+                <h1>Traces</h1>
+                <span id="trace-count" class="muted-count">0</span>
+            </div>
+        </div>
+        <div class="filters">
+            <label class="field field-wide">
+                <span>Search</span>
+                <input id="search-input" type="search" autocomplete="off" placeholder="Trace, run, operation">
+            </label>
+            <label class="field">
+                <span>Status</span>
+                <select id="status-filter">
+                    <option value="ALL">All</option>
+                    <option value="RUNNING">Running</option>
+                    <option value="WAITING">Waiting</option>
+                    <option value="INTERRUPTED">Interrupted</option>
+                    <option value="FAILED">Failed</option>
+                    <option value="CANCELLED">Cancelled</option>
+                    <option value="COMPLETED">Completed</option>
+                </select>
+            </label>
+            <label class="field">
+                <span>Source</span>
+                <select id="source-filter">
+                    <option value="">All</option>
+                </select>
+            </label>
+        </div>
+        <div id="diagnostic-banner" class="diagnostic-banner" hidden></div>
+        <div id="trace-list" class="trace-list" role="listbox" aria-label="Traces"></div>
+        <div id="trace-list-empty" class="list-empty" hidden>No traces match the current filters.</div>
+        <div class="source-footer">
+            <span id="loaded-at">Not loaded</span>
+            <span id="event-total">0 events</span>
+        </div>
+    </aside>
+
+    <main class="detail-panel">
+        <section id="welcome-state" class="welcome-state">
+            <div class="welcome-visual" aria-hidden="true">
+                <span></span><span></span><span></span><span></span><span></span>
+            </div>
+            <h2>Select a trace</h2>
+            <p>Trace details will appear here.</p>
+        </section>
+
+        <section id="detail-view" class="detail-view" hidden>
+            <header class="detail-header">
+                <div class="detail-title-block">
+                    <div class="detail-title-line">
+                        <h2 id="detail-title"></h2>
+                        <span id="detail-status" class="status-badge"></span>
+                    </div>
+                    <div id="detail-trace-id" class="trace-identifier"></div>
+                    <div id="detail-times" class="detail-times"></div>
+                </div>
+                <div id="source-badges" class="source-badges"></div>
+            </header>
+
+            <section id="metric-strip" class="metric-strip" aria-label="Trace metrics"></section>
+
+            <div class="tabbar" role="tablist" aria-label="Trace views">
+                <button class="tab-button is-active" type="button" role="tab" data-tab="timeline" aria-selected="true">Timeline</button>
+                <button class="tab-button" type="button" role="tab" data-tab="runs" aria-selected="false">Runs</button>
+                <button class="tab-button" type="button" role="tab" data-tab="events" aria-selected="false">Events</button>
+            </div>
+
+            <div class="detail-content">
+                <div class="content-primary">
+                    <section id="timeline-tab" class="tab-content">
+                        <div class="content-toolbar">
+                            <label class="field compact-field">
+                                <span>Category</span>
+                                <select id="category-filter">
+                                    <option value="ALL">All</option>
+                                    <option value="FLOW">Flow</option>
+                                    <option value="STEP">Step</option>
+                                    <option value="RUN">Run</option>
+                                    <option value="MODEL">Model</option>
+                                    <option value="TOOL">Tool</option>
+                                    <option value="ACTION">Action</option>
+                                    <option value="APPROVAL">Approval</option>
+                                    <option value="CHECKPOINT">Checkpoint</option>
+                                </select>
+                            </label>
+                            <span id="timeline-count" class="toolbar-count"></span>
+                        </div>
+                        <div id="timeline-list" class="timeline-list"></div>
+                    </section>
+
+                    <section id="runs-tab" class="tab-content" hidden>
+                        <div class="table-header run-grid">
+                            <span>Run</span><span>Status</span><span>Events</span><span>Duration</span>
+                        </div>
+                        <div id="run-list" class="run-list"></div>
+                    </section>
+
+                    <section id="events-tab" class="tab-content" hidden>
+                        <div class="table-scroll">
+                            <table class="event-table">
+                                <thead>
+                                <tr><th>Time</th><th>Source</th><th>Event</th><th>Run</th><th>Operation</th></tr>
+                                </thead>
+                                <tbody id="event-table-body"></tbody>
+                            </table>
+                        </div>
+                    </section>
+                </div>
+
+                <aside id="event-inspector" class="event-inspector" hidden aria-label="Event details">
+                    <div class="inspector-heading">
+                        <div>
+                            <span id="inspector-category" class="category-label"></span>
+                            <h3 id="inspector-title"></h3>
+                        </div>
+                        <button id="close-inspector" class="text-button" type="button">Close</button>
+                    </div>
+                    <dl id="inspector-metadata" class="metadata-list"></dl>
+                    <section id="artifact-section" class="inspector-section" hidden>
+                        <h4>Artifacts</h4>
+                        <div id="artifact-list" class="artifact-list"></div>
+                    </section>
+                    <section class="inspector-section">
+                        <h4>Attributes</h4>
+                        <pre id="attribute-json" tabindex="0"></pre>
+                    </section>
+                </aside>
+            </div>
+        </section>
+    </main>
+</div>
+
+<div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+<script src="/assets/app.js" defer></script>
+</body>
+</html>

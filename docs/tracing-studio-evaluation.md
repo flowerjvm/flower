@@ -1,10 +1,9 @@
 # Tracing, Studio, And Evaluation Architecture
 
 Status: implementation roadmap. Runtime foundation, event-loop and durable
-recovery tracing, and the local storage/security reference pipeline are
-implemented for `0.1.2-SNAPSHOT`. The common domain-adapter envelope is also
-implemented; later Studio and evaluation phases below are not yet public
-runtime guarantees.
+recovery tracing, the local storage/security pipeline, common domain adapters,
+and the first read-only local Studio are implemented for `0.1.2-SNAPSHOT`.
+Evaluation remains a later phase and is not yet a public runtime guarantee.
 
 ## Goal
 
@@ -215,22 +214,34 @@ storage. See [Domain Observation Adapters](domain-observation-adapters.md).
 
 ### Phase 5: Local Flower Studio
 
-The first Studio is a read-only consumer with local JSON Lines or SQLite
-storage. It should show:
+Implemented in the separate `flower-studio` application for
+`0.1.2-SNAPSHOT`. The first Studio is a read-only consumer of common
+observation JSON Lines and legacy Core trace JSON Lines. It shows:
 
 - run list and terminal outcome;
 - Step timeline, effective transition, and selected next Step;
 - durations, failures, waits, wake-up reasons, checkpoints, and recovery;
 - optional Agent model/Tool and Action approval/execution overlays;
-- links to large artifacts rather than embedding them in every event.
+- links to large artifacts rather than embedding them in every event;
+- bounded loading, malformed-line diagnostics, search, source/status filters,
+  and a loopback-only default server.
 
-Arbitrary state diff is opt-in through a host `StateSnapshotProvider`; Flower
-cannot infer meaningful or safe diffs from arbitrary Java object graphs.
+The included sample correlates Core, Agent, Harness, and Action Runtime events
+without importing those projects' native types. Studio remains a consumer; it
+does not run or alter a Flow and does not add work to Worker threads.
+
+SQLite/JDBC query storage is deferred until a real query and migration boundary
+is justified. Arbitrary state diff is also deferred and remains opt-in through
+explicit, sanitized host observations or a future snapshot SPI. Flower cannot
+infer meaningful or safe diffs from arbitrary Java object graphs.
 
 The local store is a reference implementation for development, tests, and
 small deployments. Large or highly available deployments connect the same
 event contracts to their own Kafka, OpenTelemetry, database, object storage,
 security, and retention infrastructure.
+
+See the [Flower Studio README](../flower-studio/README.md) for the runnable demo,
+options, and operating boundary.
 
 ### Phase 6: Evaluation
 
