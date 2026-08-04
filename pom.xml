@@ -55,7 +55,6 @@
         <module>flower-spring-boot-starter</module>
         <module>flower-observability</module>
         <module>flower-evaluation</module>
-        <module>flower-studio</module>
         <module>flower-testkit</module>
         <module>flower-check-annotations</module>
         <module>flower-check</module>
@@ -149,11 +148,6 @@
             <dependency>
                 <groupId>io.github.flowerjvm</groupId>
                 <artifactId>flower-evaluation</artifactId>
-                <version>${project.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>io.github.flowerjvm</groupId>
-                <artifactId>flower-studio</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>

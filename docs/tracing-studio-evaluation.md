@@ -188,7 +188,7 @@ flower-core                    runtime facts and observer SPI
 flower-eventloop               await/resume facts
 flower-observability           basic sinks and OpenTelemetry adapters
 flower-observability-jdbc      optional JDBC storage
-flower-studio                  separate trace consumer application
+flower-studio                  separate repository and trace consumer application
 flower-evaluation              post-run dataset/experiment/evaluator APIs
 ```
 
@@ -215,12 +215,16 @@ storage. See [Domain Observation Adapters](domain-observation-adapters.md).
 
 ### Phase 5: Local Flower Studio
 
-Implemented in the separate `flower-studio` application for
-`0.1.2-SNAPSHOT`. The first Studio is a read-only consumer of common
+Implemented in the separate
+[`flower-studio`](https://github.com/flowerjvm/flower-studio) repository. Its
+`0.1.0-SNAPSHOT` currently consumes Flower `0.1.2-SNAPSHOT`. The first Studio
+is a read-only consumer of common
 observation JSON Lines and legacy Core trace JSON Lines. It shows:
 
 - run list and terminal outcome;
 - Step timeline, effective transition, and selected next Step;
+- optional execution graph joining a `flower.flow-graph/v4` static snapshot
+  with visited Steps and observed transitions for one Core Flow run;
 - durations, failures, waits, wake-up reasons, checkpoints, and recovery;
 - optional Agent model/Tool and Action approval/execution overlays;
 - links to large artifacts rather than embedding them in every event;
@@ -230,6 +234,13 @@ observation JSON Lines and legacy Core trace JSON Lines. It shows:
 The included sample correlates Core, Agent, Harness, and Action Runtime events
 without importing those projects' native types. Studio remains a consumer; it
 does not run or alter a Flow and does not add work to Worker threads.
+
+Execution graphs preserve the static/runtime boundary. Flower Flow Graph owns
+source analysis and emits the optional snapshot. Core Trace events remain the
+authority for what actually ran. Studio matches by Flow type and definition
+version when available, exposes mismatches and ambiguity, and renders
+runtime-only Steps or transitions separately instead of rewriting the static
+definition.
 
 SQLite/JDBC query storage is deferred until a real query and migration boundary
 is justified. Arbitrary state diff is also deferred and remains opt-in through
@@ -241,8 +252,8 @@ small deployments. Large or highly available deployments connect the same
 event contracts to their own Kafka, OpenTelemetry, database, object storage,
 security, and retention infrastructure.
 
-See the [Flower Studio README](../flower-studio/README.md) for the runnable demo,
-options, and operating boundary.
+See the [Flower Studio repository](https://github.com/flowerjvm/flower-studio)
+for the runnable demo, options, and operating boundary.
 
 ### Phase 6: Evaluation
 
@@ -278,7 +289,7 @@ model/Tool loop. See the [Flower Evaluation README](../flower-evaluation/README.
 
 ### Phase 7: Local Monitoring Dashboard
 
-Implemented in `flower-studio` for `0.1.2-SNAPSHOT`. Monitoring is a read-only
+Implemented in the separate `flower-studio` repository. Monitoring is a read-only
 projection over the same bounded observation and evaluation snapshots; it does
 not add callbacks, mutable state, or work to a Flower Worker. The dashboard and
 `GET /api/monitoring` expose:

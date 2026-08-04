@@ -1110,18 +1110,22 @@ keys. Higher layers must opt in to content capture and configure their own
 sanitization policy. Monitor each sink's drop/failure counters; trace
 backpressure never stops business Flow execution.
 
-`flower-studio` is the read-only local consumer for this correlated stream. It
+[Flower Studio](https://github.com/flowerjvm/flower-studio) is the read-only
+local consumer for this correlated stream. It
 can open common observation JSON Lines or legacy Core trace JSON Lines and show
 Trace outcomes, nested runs, event timing, Step transitions, waits, recovery,
 and optional Agent, Harness, Tool, approval, and Action overlays. It also reads
 `flower-evaluation` result and feedback streams to show candidate quality,
 cases, scores, baseline regressions, and Trace references. Its Monitoring view
 adds bounded Trace outcomes, operation failure/duration, Step-transition,
-activity, source, token, approval, and evaluation-quality aggregates. These
+activity, source, token, approval, and evaluation-quality aggregates. It can
+also overlay a selected Core Flow run on an optional static
+`flower.flow-graph/v4` snapshot, keeping declared structure, observed paths,
+version mismatches, and runtime-only transitions visibly distinct. These views
 describe the currently loaded local files; production metrics and alerts remain
 the job of Micrometer/OpenTelemetry and the host observability platform. See the
-[Flower Studio README](flower-studio/README.md) for the included runnable demo
-and its local-reference operating boundary.
+[Flower Studio repository](https://github.com/flowerjvm/flower-studio) for the
+included runnable demo and its local-reference operating boundary.
 
 `flower-evaluation` supplies versioned Dataset, Example, Candidate, Experiment,
 Evaluator, Score, and Feedback contracts, deterministic rules, failure-isolated
@@ -1252,8 +1256,9 @@ Observability / testing:
 
 - `flower-observability`: listeners and helpers for logging, dumps, metrics,
   tracing, and awaiting flow completion.
-- `flower-studio` (MVP): read-only local JSON Lines Trace, Run, and event
-  explorer with optional artifact links, evaluation views, and a bounded
+- [`flower-studio`](https://github.com/flowerjvm/flower-studio) (separate
+  project): read-only local JSON Lines Trace, Run, and event explorer with
+  optional artifact links, evaluation views, execution graphs, and a bounded
   monitoring dashboard.
 - `flower-evaluation` (MVP): post-run datasets, experiments, evaluators,
   baseline regression comparison, feedback, and local JSON Lines stores.
