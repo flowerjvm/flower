@@ -10,8 +10,9 @@ and Spring application flows explicit, testable, observable, and operable.
 Engine -> Worker -> Flow -> Step -> StepResult
 ```
 
-Project status: `0.1.1`. The stable center is `flower-core`; modules
-marked MVP are usable but may change more quickly before a 1.0 release. See
+Latest release: `0.1.1`. The `main` branch is developing
+`0.1.2-SNAPSHOT`. The stable center is `flower-core`; modules marked MVP are
+usable but may change more quickly before a 1.0 release. See
 [CONTRIBUTING.md](CONTRIBUTING.md), [SECURITY.md](SECURITY.md), and
 [ROADMAP.md](ROADMAP.md) for project process and planned work.
 
@@ -364,10 +365,16 @@ Add only the modules your application needs:
 | Logging, metrics, tracing, and dumps | `io.github.flowerjvm:flower-observability:0.1.1` |
 | Deterministic test helpers | `io.github.flowerjvm:flower-testkit:0.1.1` |
 | Event-driven execution | `io.github.flowerjvm:flower-eventloop:0.1.1` |
+| Event-loop JDBC checkpoints | `io.github.flowerjvm:flower-eventloop-persistence-jdbc:0.1.1` |
 
 See [Modules And Maturity](#modules-and-maturity) before adopting an MVP
 module. The Bloom adapter is published separately as
-`io.github.flowerjvm:bloom-flower-adapter:0.1.0`.
+`io.github.flowerjvm:bloom-flower-adapter:0.1.1`.
+
+Build-time Flower usage checks are available through the
+[`flower-check-maven-plugin`](flower-check-maven-plugin/README.md) and
+[`flower-check-gradle-plugin`](flower-check-gradle-plugin/README.md), both at
+version `0.1.1`.
 
 ## Use Flower With ChatGPT And Codex
 
@@ -511,7 +518,8 @@ Flower core is deliberately small, so its runtime contract is also explicit:
   effect execution, so external writes and API calls should be idempotent.
 - Scale: the default Worker is tick-based and simple to test. It is a good fit
   for small to medium in-process workloads. Very large numbers of idle Flows may
-  need application-level sharding or a future event-loop scheduler.
+  need application-level sharding or a different Worker scheduling strategy.
+  Possible scheduling optimizations are tracked in [ROADMAP.md](ROADMAP.md).
 
 ## Mental Model
 
@@ -1206,42 +1214,6 @@ execution line, not a replacement for the tick-driven Worker / Flow / Step
 model. Work that is not shipped in this repository is tracked in
 [ROADMAP.md](ROADMAP.md).
 
-## Future Worker Scheduling Direction
-
-Today, each `Worker` is driven by a `ScheduledExecutorService` and wakes up at
-its configured `intervalMillis` to run one short tick. This is not a busy loop:
-an idle worker does not spin in a manual `while` loop, and user code must still
-avoid blocking inside `onTick`.
-
-This model is intentionally simple and deterministic. It is a good default for
-small and medium in-JVM orchestration because it keeps Worker behavior easy to
-test with `tickOnce()` and `ManualClock`.
-
-For deployments with many mostly-idle Workers, Flower may later add an
-event-driven Worker scheduler. A future scheduler could wake a Worker only
-when useful work is possible:
-
-```text
-submit/cancel queued
-event or signal delivered
-timeout/deadline reached
-runnable flow available
-```
-
-That direction should preserve the current programming model:
-
-```text
-onEnter starts or subscribes
-onTick checks state quickly
-stay means "not ready yet"
-done/goTo/fail drive the Flow transition
-```
-
-An event-driven scheduler is therefore a future optimization, not a change in
-the Step contract. It should be considered only after measuring that idle
-Worker wakeups are a real cost. Until then, prefer tuning `intervalMillis` per
-Worker and keeping each tick cheap.
-
 ## Testing With Flower Testkit
 
 `flower-testkit` keeps testing helpers outside `flower-core`. It does not
@@ -1314,7 +1286,8 @@ examples. It is currently being run and hardened in:
 - architecture-office SaaS document workflows
 - a Terminal Operating System execution layer
 - game server workflow and turn/state coordination
-- AI harness runtime experiments for controlled AI execution
+- controlled AI automation through Flower Agent, Flower AI Harness, and Flower
+  Action Runtime
 
 These projects keep Flower honest about practical needs: explicit flow
 structure, small steps, recoverable execution, observable state, and code that
@@ -1349,36 +1322,37 @@ library call. The goal is not to generate more code faster. The goal is to make
 generated orchestration small enough that a human can read it, test it, and
 repair it later.
 
-`flower-check` is the first enforcement tool for this direction. It can fail a
-build when generated code uses known bad patterns, such as blocking a worker
-tick or hiding orchestration outside Flower's Flow/Step boundary.
+`flower-check` is the build-time enforcement tool for this direction. It can
+fail a build when generated code uses known bad patterns, such as blocking a
+worker tick or hiding orchestration outside Flower's Flow/Step boundary.
 
-A future developer MCP can make the same rules available before code is
-written:
+The Flower plugin makes the same rules available before code is written:
 
 ```text
 AI coding agent
--> asks Flower developer MCP for the right pattern
+-> uses the Flower plugin for the right pattern
 -> generates Flow / Step code
 -> flower-check verifies the result
 -> tests prove the behavior
 ```
 
-This is the AI-era framework loop Flower should aim for: guidance before
-generation, explicit structure in code, checks during build, and deterministic
-tests for behavior.
+A future developer MCP may provide richer tool-driven access to Flower
+concepts, examples, and checks. It is an optional extension of the current
+loop: guidance before generation, explicit structure in code, checks during
+build, and deterministic tests for behavior.
 
 ## Build
 
 To build and test the repository locally:
 
 ```bash
-mvn test
-mvn install
+mvn -B verify
 ```
 
 Applications should normally consume the released `0.1.1` artifacts from
 Maven Central as shown in [Install From Maven Central](#install-from-maven-central).
+Contributors working on the separately built Gradle checker should follow the
+additional local development steps in [CONTRIBUTING.md](CONTRIBUTING.md).
 
 Release preparation and Maven Central publisher setup are documented in
 [docs/RELEASING.md](docs/RELEASING.md).
