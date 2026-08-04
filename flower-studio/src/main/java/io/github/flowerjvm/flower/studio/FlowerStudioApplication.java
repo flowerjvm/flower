@@ -1,5 +1,7 @@
 package io.github.flowerjvm.flower.studio;
 
+import io.github.flowerjvm.flower.evaluation.storage.JsonLinesEvaluationFeedbackSource;
+import io.github.flowerjvm.flower.evaluation.storage.JsonLinesEvaluationResultSource;
 import io.github.flowerjvm.flower.studio.server.StudioHttpServer;
 import io.github.flowerjvm.flower.studio.store.JsonLinesObservationRepository;
 
@@ -22,10 +24,18 @@ public final class FlowerStudioApplication {
         JsonLinesObservationRepository repository = new JsonLinesObservationRepository(
                 options.traceFile(),
                 options.maxEvents());
+        JsonLinesEvaluationResultSource evaluationSource = options.evaluationFile() == null
+                ? null : new JsonLinesEvaluationResultSource(
+                        options.evaluationFile(), options.maxEvaluations());
+        JsonLinesEvaluationFeedbackSource feedbackSource = options.feedbackFile() == null
+                ? null : new JsonLinesEvaluationFeedbackSource(
+                        options.feedbackFile(), options.maxEvaluations());
         final StudioHttpServer server = new StudioHttpServer(
                 new InetSocketAddress(options.host(), options.port()),
                 repository,
-                options.artifactRoot());
+                options.artifactRoot(),
+                evaluationSource,
+                feedbackSource);
         final CountDownLatch stopped = new CountDownLatch(1);
         Runtime.getRuntime().addShutdownHook(new Thread(new Runnable() {
             @Override
@@ -38,6 +48,7 @@ public final class FlowerStudioApplication {
         server.start();
         System.out.println("Flower Studio: http://" + options.host() + ":" + server.port());
         System.out.println("Observation file: " + options.traceFile());
+        System.out.println("Evaluation file: " + options.evaluationFile());
         System.out.println("Read-only local reference application. Press Ctrl+C to stop.");
         stopped.await();
     }

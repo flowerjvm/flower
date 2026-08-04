@@ -1,10 +1,14 @@
 # Flower Studio
 
 Flower Studio is a small, read-only local application for inspecting correlated
-Flower observation events. It reads the common JSON Lines stream produced by
+Flower observation and evaluation data. It reads the common JSON Lines stream produced by
 Flower Core, Flower Agent, Flower AI Harness, and Flower Action Runtime
 observation adapters, and also accepts the legacy Flower Core trace JSON Lines
 shape from the Phase 3 sink.
+
+Studio can also read `flower-evaluation` result and feedback JSON Lines. The
+evaluation view shows candidate quality, individual cases and evaluator scores,
+baseline regressions, Trace references, and explicit human feedback.
 
 It shows:
 
@@ -13,6 +17,8 @@ It shows:
 - chronological events with Step transitions and operation durations;
 - model, Tool, approval, Action, checkpoint, and recovery overlays;
 - safe links to explicitly captured local artifacts.
+- evaluation experiment summaries, baseline comparison, cases, scores, and
+  feedback.
 
 ## Run The Included Demo
 
@@ -27,7 +33,9 @@ Then start Studio with the included game-server operations trace:
 ```powershell
 java -jar flower-studio/target/flower-studio-0.1.2-SNAPSHOT-all.jar `
   --trace-file=flower-studio/examples/game-server-ops-observations.jsonl `
-  --artifact-root=flower-studio/examples/artifacts
+  --artifact-root=flower-studio/examples/artifacts `
+  --evaluation-file=flower-studio/examples/game-server-ops-evaluations.jsonl `
+  --feedback-file=flower-studio/examples/game-server-ops-evaluation-feedback.jsonl
 ```
 
 Open [http://127.0.0.1:8077](http://127.0.0.1:8077). Studio reloads the file
@@ -72,10 +80,15 @@ for complete adapter examples and the correlation rule.
 | `--trace-file` | `FLOWER_STUDIO_TRACE_FILE` | `data/flower-observations.jsonl` |
 | `--artifact-root` | `FLOWER_STUDIO_ARTIFACT_ROOT` | `data/flower-artifacts` |
 | `--max-events` | `FLOWER_STUDIO_MAX_EVENTS` | `100000` |
+| `--evaluation-file` | `FLOWER_STUDIO_EVALUATION_FILE` | `data/flower-evaluations.jsonl` |
+| `--feedback-file` | `FLOWER_STUDIO_FEEDBACK_FILE` | `data/flower-evaluation-feedback.jsonl` |
+| `--max-evaluations` | `FLOWER_STUDIO_MAX_EVALUATIONS` | `10000` |
 
 Use `--artifact-root=none` to disable artifact downloads. The server permits
 only `GET` requests for APIs, binds to loopback by default, and resolves
 artifact locations beneath the configured root.
+Use both `--evaluation-file=none` and `--feedback-file=none` to disable the
+evaluation API.
 
 ## Scope And Operating Boundary
 
@@ -84,6 +97,8 @@ development, tests, demonstrations, and small trusted deployments. It is not
 an enterprise trace platform and does not provide authentication,
 organization authorization, high availability, long-term retention, backup,
 or a distributed collector. Do not expose it directly to the public internet.
+Studio does not write evaluation feedback; the Host owns authenticated feedback
+collection and publishes sanitized records through `EvaluationFeedbackSink`.
 
 Large deployments should send the same common observation contract to their
 own Kafka, OpenTelemetry, database, object storage, security, and retention

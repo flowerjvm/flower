@@ -5,8 +5,13 @@ import com.sun.net.httpserver.Headers;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
 import com.sun.net.httpserver.HttpServer;
+import io.github.flowerjvm.flower.evaluation.storage.JsonLinesEvaluationFeedbackSource;
+import io.github.flowerjvm.flower.evaluation.storage.JsonLinesEvaluationResultSource;
 import io.github.flowerjvm.flower.studio.store.ObservationRepository;
 import io.github.flowerjvm.flower.studio.store.StudioSnapshot;
+import io.github.flowerjvm.flower.studio.view.EvaluationExperimentDetailView;
+import io.github.flowerjvm.flower.studio.view.EvaluationListView;
+import io.github.flowerjvm.flower.studio.view.EvaluationProjectionService;
 import io.github.flowerjvm.flower.studio.view.StudioProjectionService;
 import io.github.flowerjvm.flower.studio.view.StudioQuery;
 import io.github.flowerjvm.flower.studio.view.TraceDetailView;
@@ -42,6 +47,7 @@ public final class StudioHttpServer implements AutoCloseable {
     private final ExecutorService executor;
     private final ObservationRepository repository;
     private final StudioProjectionService projections;
+    private final EvaluationProjectionService evaluations;
     private final ObjectMapper mapper;
     private final Path artifactRoot;
 
@@ -49,19 +55,35 @@ public final class StudioHttpServer implements AutoCloseable {
             InetSocketAddress address,
             ObservationRepository repository,
             Path artifactRoot) throws IOException {
+        this(address, repository, artifactRoot, null, null);
+    }
+
+    public StudioHttpServer(
+            InetSocketAddress address,
+            ObservationRepository repository,
+            Path artifactRoot,
+            JsonLinesEvaluationResultSource evaluationSource,
+            JsonLinesEvaluationFeedbackSource feedbackSource) throws IOException {
         if (address == null || repository == null) {
             throw new IllegalArgumentException("address and repository must not be null");
+        }
+        if ((evaluationSource == null) != (feedbackSource == null)) {
+            throw new IllegalArgumentException(
+                    "evaluation result and feedback sources must be configured together");
         }
         this.repository = repository;
         this.artifactRoot = artifactRoot == null
                 ? null : artifactRoot.toAbsolutePath().normalize();
         this.projections = new StudioProjectionService(this.artifactRoot != null);
+        this.evaluations = evaluationSource == null
+                ? null : new EvaluationProjectionService(evaluationSource, feedbackSource);
         this.mapper = new ObjectMapper();
         this.server = HttpServer.create(address, 0);
         this.executor = Executors.newFixedThreadPool(4, new StudioThreadFactory());
         this.server.setExecutor(executor);
         this.server.createContext("/api/health", new HealthHandler());
         this.server.createContext("/api/traces", new TraceHandler());
+        this.server.createContext("/api/evaluations", new EvaluationHandler());
         this.server.createContext("/api/artifacts", new ArtifactHandler());
         this.server.createContext("/", new StaticHandler());
     }
@@ -92,15 +114,58 @@ public final class StudioHttpServer implements AutoCloseable {
             }
             StudioSnapshot snapshot = repository.load();
             Map<String, Object> response = new LinkedHashMap<String, Object>();
-            String status = !snapshot.diagnostics().isTraceFileExists()
-                    || snapshot.diagnostics().getMalformedLineCount() > 0L
-                    ? "DEGRADED" : "UP";
+            boolean degraded = !snapshot.diagnostics().isTraceFileExists()
+                    || snapshot.diagnostics().getMalformedLineCount() > 0L;
+            EvaluationListView evaluationList = evaluations == null
+                    ? null : evaluations.list();
+            if (evaluationList != null) {
+                degraded = degraded
+                        || evaluationList.getResultDiagnostics().getMalformedCount() > 0L
+                        || evaluationList.getFeedbackDiagnostics().getMalformedCount() > 0L;
+            }
+            String status = degraded ? "DEGRADED" : "UP";
             response.put("status", status);
             response.put("readOnly", true);
             response.put("artifactDownloadsEnabled", artifactRoot != null);
             response.put("artifactRoot", artifactRoot == null ? null : artifactRoot.toString());
             response.put("diagnostics", snapshot.diagnostics());
+            response.put("evaluationsEnabled", evaluations != null);
+            if (evaluationList != null) {
+                response.put("evaluationDiagnostics", evaluationList.getResultDiagnostics());
+                response.put("feedbackDiagnostics", evaluationList.getFeedbackDiagnostics());
+            }
             sendJson(exchange, 200, response);
+        }
+    }
+
+    private final class EvaluationHandler implements HttpHandler {
+        @Override
+        public void handle(HttpExchange exchange) throws IOException {
+            if (!requireGet(exchange)) {
+                return;
+            }
+            if (evaluations == null) {
+                sendError(exchange, 404, "Evaluation sources are disabled");
+                return;
+            }
+            String rawPath = exchange.getRequestURI().getRawPath();
+            if ("/api/evaluations".equals(rawPath)
+                    || "/api/evaluations/".equals(rawPath)) {
+                sendJson(exchange, 200, evaluations.list());
+                return;
+            }
+            String prefix = "/api/evaluations/";
+            if (!rawPath.startsWith(prefix) || rawPath.length() == prefix.length()) {
+                sendError(exchange, 404, "Evaluation endpoint not found");
+                return;
+            }
+            String experimentId = decode(rawPath.substring(prefix.length()));
+            EvaluationExperimentDetailView detail = evaluations.detail(experimentId);
+            if (detail == null) {
+                sendError(exchange, 404, "Evaluation experiment not found");
+                return;
+            }
+            sendJson(exchange, 200, detail);
         }
     }
 
@@ -186,11 +251,18 @@ public final class StudioHttpServer implements AutoCloseable {
             if ("/".equals(path) || "/index.html".equals(path)) {
                 resource = "/studio/index.html";
                 contentType = "text/html; charset=utf-8";
+            } else if ("/evaluations".equals(path)
+                    || "/evaluations.html".equals(path)) {
+                resource = "/studio/evaluations.html";
+                contentType = "text/html; charset=utf-8";
             } else if ("/assets/app.css".equals(path)) {
                 resource = "/studio/assets/app.css";
                 contentType = "text/css; charset=utf-8";
             } else if ("/assets/app.js".equals(path)) {
                 resource = "/studio/assets/app.js";
+                contentType = "text/javascript; charset=utf-8";
+            } else if ("/assets/evaluations.js".equals(path)) {
+                resource = "/studio/assets/evaluations.js";
                 contentType = "text/javascript; charset=utf-8";
             } else {
                 sendError(exchange, 404, "Resource not found");

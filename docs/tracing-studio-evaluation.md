@@ -1,9 +1,9 @@
 # Tracing, Studio, And Evaluation Architecture
 
-Status: implementation roadmap. Runtime foundation, event-loop and durable
-recovery tracing, the local storage/security pipeline, common domain adapters,
-and the first read-only local Studio are implemented for `0.1.2-SNAPSHOT`.
-Evaluation remains a later phase and is not yet a public runtime guarantee.
+Status: implemented development architecture. Runtime tracing, event-loop and
+durable recovery tracing, the local storage/security pipeline, common domain
+adapters, the read-only local Studio, and the first evaluation framework are
+implemented for `0.1.2-SNAPSHOT`.
 
 ## Goal
 
@@ -188,7 +188,7 @@ flower-eventloop               await/resume facts
 flower-observability           basic sinks and OpenTelemetry adapters
 flower-observability-jdbc      optional JDBC storage
 flower-studio                  separate trace consumer application
-flower-evaluation              later dataset/experiment/evaluator APIs
+flower-evaluation              post-run dataset/experiment/evaluator APIs
 ```
 
 ### Phase 4: Domain Adapters
@@ -245,14 +245,35 @@ options, and operating boundary.
 
 ### Phase 6: Evaluation
 
-Evaluation is built after trace identity and storage stabilize. Its likely
-public concepts are Dataset, Example, Experiment, Evaluator, Score, and
-Feedback. It compares agent/prompt/model/tool-policy versions using completed
-run artifacts and trace references.
+Implemented in the independent `flower-evaluation` module for
+`0.1.2-SNAPSHOT`:
+
+- immutable, versioned Dataset, Example, Candidate, Experiment, Output, Score,
+  and Feedback models;
+- a sequential offline runner with per-example and per-evaluator failure
+  isolation, required/advisory evaluator semantics, aggregate quality and
+  usage summaries, and an optional result sink;
+- deterministic evaluators for expected values, required fields, collection
+  size, metric budgets, and host-defined rules;
+- one `Evaluator` SPI for deterministic, LLM-backed, or external judges,
+  without selecting a model provider in Flower;
+- same-dataset baseline comparison with pass-rate and score deltas plus
+  regressed and improved example ids;
+- append-only local JSON Lines result/feedback sinks and tolerant bounded
+  sources;
+- a read-only Studio evaluation view for experiment lists, cases, scores,
+  baseline comparison, Trace references, and human feedback.
+
+`EvaluationRunner` may block while executing a target. It belongs in tests,
+CI, batch jobs, or a dedicated host executor, never in a Flower Worker tick.
+The local JSON Lines store is a reference implementation; enterprise storage,
+feedback authorization, model-judge credentials, retention, and analytics
+remain host responsibilities.
 
 Evaluation does not authorize an Action and does not make a bad run safe. It
 measures behavior after, or alongside, runtime controls owned by the relevant
-layer.
+layer. It also does not replace AI Harness output validation/retry or the Agent
+model/Tool loop. See the [Flower Evaluation README](../flower-evaluation/README.md).
 
 ## Explicit Non-Goals
 

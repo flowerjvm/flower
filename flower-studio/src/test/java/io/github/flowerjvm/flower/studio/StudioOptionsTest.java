@@ -23,7 +23,10 @@ class StudioOptionsTest {
                 "--port=0",
                 "--trace-file=demo.jsonl",
                 "--artifact-root=none",
-                "--max-events=25"
+                "--max-events=25",
+                "--evaluation-file=none",
+                "--feedback-file=none",
+                "--max-evaluations=50"
         }, environment);
 
         assertThat(options.host()).isEqualTo("127.0.0.1");
@@ -31,6 +34,9 @@ class StudioOptionsTest {
         assertThat(options.traceFile().getFileName().toString()).isEqualTo("demo.jsonl");
         assertThat(options.artifactRoot()).isNull();
         assertThat(options.maxEvents()).isEqualTo(25);
+        assertThat(options.evaluationFile()).isNull();
+        assertThat(options.feedbackFile()).isNull();
+        assertThat(options.maxEvaluations()).isEqualTo(50);
     }
 
     @Test
@@ -50,5 +56,15 @@ class StudioOptionsTest {
                 Collections.<String, String>emptyMap()))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("positive");
+        assertThatThrownBy(() -> StudioOptions.parse(
+                new String[] {"--max-evaluations=0"},
+                Collections.<String, String>emptyMap()))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("positive");
+        assertThatThrownBy(() -> StudioOptions.parse(
+                new String[] {"--evaluation-file=none"},
+                Collections.<String, String>emptyMap()))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("enabled or disabled together");
     }
 }

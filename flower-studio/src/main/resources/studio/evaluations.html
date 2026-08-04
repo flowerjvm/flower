@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="light">
+    <title>Evaluations | Flower Studio</title>
+    <link rel="stylesheet" href="/assets/app.css">
+</head>
+<body>
+<header class="topbar">
+    <div class="brand" aria-label="Flower Studio">
+        <span class="brand-mark" aria-hidden="true">
+            <span></span><span></span><span></span><span></span>
+        </span>
+        <span class="brand-name">Flower Studio</span>
+        <span class="environment-label">LOCAL</span>
+    </div>
+    <nav class="section-nav" aria-label="Studio sections">
+        <a href="/">Traces</a>
+        <a class="is-active" href="/evaluations">Evaluations</a>
+    </nav>
+    <div class="runtime-state">
+        <span id="health-dot" class="health-dot health-loading"></span>
+        <span id="health-label">Connecting</span>
+        <span id="evaluation-path" class="trace-path"></span>
+    </div>
+    <button id="refresh-button" class="command-button" type="button">Refresh</button>
+</header>
+
+<div class="workspace evaluation-workspace">
+    <aside class="trace-panel" aria-label="Evaluation browser">
+        <div class="panel-heading">
+            <div>
+                <h1>Experiments</h1>
+                <span id="experiment-count" class="muted-count">0</span>
+            </div>
+        </div>
+        <div id="evaluation-diagnostic-banner" class="diagnostic-banner" hidden></div>
+        <div id="experiment-list" class="trace-list" role="listbox" aria-label="Evaluation experiments"></div>
+        <div id="experiment-list-empty" class="list-empty" hidden>No evaluation experiments are available.</div>
+        <div class="source-footer">
+            <span id="evaluation-loaded-at">Not loaded</span>
+            <span id="feedback-total">0 feedback</span>
+        </div>
+    </aside>
+
+    <main class="detail-panel">
+        <section id="evaluation-welcome-state" class="welcome-state">
+            <div class="evaluation-welcome-visual" aria-hidden="true">
+                <span></span><span></span><span></span><span></span>
+            </div>
+            <h2>Select an experiment</h2>
+            <p>Quality scores and regressions will appear here.</p>
+        </section>
+
+        <section id="evaluation-detail-view" class="detail-view" hidden>
+            <header class="detail-header evaluation-detail-header">
+                <div class="detail-title-block">
+                    <div class="detail-title-line">
+                        <h2 id="evaluation-title"></h2>
+                        <span id="evaluation-status" class="status-badge"></span>
+                    </div>
+                    <div id="evaluation-id" class="trace-identifier"></div>
+                    <div id="evaluation-context" class="detail-times"></div>
+                </div>
+                <div id="candidate-version" class="candidate-version"></div>
+            </header>
+
+            <section id="evaluation-metrics" class="metric-strip evaluation-metrics" aria-label="Evaluation metrics"></section>
+            <section id="comparison-band" class="comparison-band" hidden></section>
+
+            <div class="tabbar" role="tablist" aria-label="Evaluation views">
+                <button class="tab-button is-active" type="button" role="tab" data-tab="cases" aria-selected="true">Cases</button>
+                <button class="tab-button" type="button" role="tab" data-tab="scores" aria-selected="false">Scores</button>
+                <button class="tab-button" type="button" role="tab" data-tab="feedback" aria-selected="false">Feedback</button>
+            </div>
+
+            <div class="evaluation-content">
+                <section id="cases-tab" class="tab-content">
+                    <div class="table-scroll">
+                        <table class="event-table evaluation-table">
+                            <thead>
+                            <tr><th>Example</th><th>Status</th><th>Mean score</th><th>Tokens</th><th>Tool calls</th><th>Trace</th></tr>
+                            </thead>
+                            <tbody id="case-table-body"></tbody>
+                        </table>
+                    </div>
+                    <aside id="case-inspector" class="case-inspector" hidden>
+                        <div class="inspector-heading">
+                            <div>
+                                <span class="category-label">EXAMPLE</span>
+                                <h3 id="case-title"></h3>
+                            </div>
+                            <button id="close-case-inspector" class="text-button" type="button">Close</button>
+                        </div>
+                        <div id="case-score-list" class="case-score-list"></div>
+                        <div class="case-data-grid">
+                            <section class="inspector-section"><h4>Input</h4><pre id="case-input"></pre></section>
+                            <section class="inspector-section"><h4>Expected</h4><pre id="case-expected"></pre></section>
+                            <section class="inspector-section"><h4>Actual</h4><pre id="case-actual"></pre></section>
+                        </div>
+                    </aside>
+                </section>
+
+                <section id="scores-tab" class="tab-content" hidden>
+                    <div class="table-header score-grid">
+                        <span>Evaluator</span><span>Mean</span><span>Pass</span><span>Fail</span><span>Error</span>
+                    </div>
+                    <div id="score-summary-list" class="score-summary-list"></div>
+                </section>
+
+                <section id="feedback-tab" class="tab-content" hidden>
+                    <div id="feedback-list" class="feedback-list"></div>
+                    <div id="feedback-empty" class="list-empty" hidden>No feedback has been recorded for this experiment.</div>
+                </section>
+            </div>
+        </section>
+    </main>
+</div>
+
+<div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+<script src="/assets/evaluations.js" defer></script>
+</body>
+</html>

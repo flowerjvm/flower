@@ -1113,9 +1113,18 @@ backpressure never stops business Flow execution.
 `flower-studio` is the read-only local consumer for this correlated stream. It
 can open common observation JSON Lines or legacy Core trace JSON Lines and show
 Trace outcomes, nested runs, event timing, Step transitions, waits, recovery,
-and optional Agent, Harness, Tool, approval, and Action overlays. See the
+and optional Agent, Harness, Tool, approval, and Action overlays. It also reads
+`flower-evaluation` result and feedback streams to show candidate quality,
+cases, scores, baseline regressions, and Trace references. See the
 [Flower Studio README](flower-studio/README.md) for the included runnable demo
 and its local-reference operating boundary.
+
+`flower-evaluation` supplies versioned Dataset, Example, Candidate, Experiment,
+Evaluator, Score, and Feedback contracts, deterministic rules, failure-isolated
+offline execution, baseline comparison, and local JSON Lines reference stores.
+It evaluates completed behavior; it does not replace AI Harness validation,
+Agent loops, or Action Runtime authorization. See the
+[Flower Evaluation README](flower-evaluation/README.md).
 
 See [Tracing, Studio, And Evaluation Architecture](docs/tracing-studio-evaluation.md)
 for the event contract and phased Studio/evaluation plan, and
@@ -1240,7 +1249,9 @@ Observability / testing:
 - `flower-observability`: listeners and helpers for logging, dumps, metrics,
   tracing, and awaiting flow completion.
 - `flower-studio` (MVP): read-only local JSON Lines Trace, Run, and event
-  explorer with optional artifact links.
+  explorer with optional artifact links and evaluation views.
+- `flower-evaluation` (MVP): post-run datasets, experiments, evaluators,
+  baseline regression comparison, feedback, and local JSON Lines stores.
 - `flower-testkit` (MVP): deterministic Flow test helpers.
 
 Developer tooling:

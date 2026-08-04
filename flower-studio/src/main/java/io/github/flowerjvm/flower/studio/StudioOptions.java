@@ -11,12 +11,16 @@ public final class StudioOptions {
 
     public static final String DEFAULT_HOST = "127.0.0.1";
     public static final int DEFAULT_PORT = 8077;
+    public static final int DEFAULT_MAX_EVALUATIONS = 10_000;
 
     private final String host;
     private final int port;
     private final Path traceFile;
     private final Path artifactRoot;
     private final int maxEvents;
+    private final Path evaluationFile;
+    private final Path feedbackFile;
+    private final int maxEvaluations;
     private final boolean help;
 
     private StudioOptions(
@@ -25,12 +29,18 @@ public final class StudioOptions {
             Path traceFile,
             Path artifactRoot,
             int maxEvents,
+            Path evaluationFile,
+            Path feedbackFile,
+            int maxEvaluations,
             boolean help) {
         this.host = host;
         this.port = port;
         this.traceFile = traceFile;
         this.artifactRoot = artifactRoot;
         this.maxEvents = maxEvents;
+        this.evaluationFile = evaluationFile;
+        this.feedbackFile = feedbackFile;
+        this.maxEvaluations = maxEvaluations;
         this.help = help;
     }
 
@@ -53,6 +63,18 @@ public final class StudioOptions {
                 value(environment, "FLOWER_STUDIO_MAX_EVENTS", null),
                 JsonLinesObservationRepository.DEFAULT_MAX_EVENTS,
                 "max-events");
+        String evaluations = value(
+                environment,
+                "FLOWER_STUDIO_EVALUATION_FILE",
+                "data/flower-evaluations.jsonl");
+        String feedback = value(
+                environment,
+                "FLOWER_STUDIO_FEEDBACK_FILE",
+                "data/flower-evaluation-feedback.jsonl");
+        int maxEvaluations = integer(
+                value(environment, "FLOWER_STUDIO_MAX_EVALUATIONS", null),
+                DEFAULT_MAX_EVALUATIONS,
+                "max-evaluations");
         boolean help = false;
 
         if (args != null) {
@@ -78,6 +100,12 @@ public final class StudioOptions {
                     artifacts = selected;
                 } else if ("max-events".equals(name)) {
                     maxEvents = integer(selected, maxEvents, name);
+                } else if ("evaluation-file".equals(name)) {
+                    evaluations = selected;
+                } else if ("feedback-file".equals(name)) {
+                    feedback = selected;
+                } else if ("max-evaluations".equals(name)) {
+                    maxEvaluations = integer(selected, maxEvaluations, name);
                 } else {
                     throw new IllegalArgumentException("unknown option: --" + name);
                 }
@@ -90,16 +118,28 @@ public final class StudioOptions {
         if (maxEvents <= 0) {
             throw new IllegalArgumentException("max-events must be positive");
         }
+        if (maxEvaluations <= 0) {
+            throw new IllegalArgumentException("max-evaluations must be positive");
+        }
         Path artifactRoot = artifacts == null
                 || artifacts.trim().isEmpty()
                 || "none".equalsIgnoreCase(artifacts.trim())
                 ? null : Paths.get(artifacts).toAbsolutePath().normalize();
+        Path evaluationFile = optionalPath(evaluations);
+        Path feedbackFile = optionalPath(feedback);
+        if ((evaluationFile == null) != (feedbackFile == null)) {
+            throw new IllegalArgumentException(
+                    "evaluation-file and feedback-file must be enabled or disabled together");
+        }
         return new StudioOptions(
                 requireText("host", host),
                 port,
                 Paths.get(trace).toAbsolutePath().normalize(),
                 artifactRoot,
                 maxEvents,
+                evaluationFile,
+                feedbackFile,
+                maxEvaluations,
                 help);
     }
 
@@ -123,6 +163,18 @@ public final class StudioOptions {
         return maxEvents;
     }
 
+    public Path evaluationFile() {
+        return evaluationFile;
+    }
+
+    public Path feedbackFile() {
+        return feedbackFile;
+    }
+
+    public int maxEvaluations() {
+        return maxEvaluations;
+    }
+
     public boolean help() {
         return help;
     }
@@ -134,6 +186,9 @@ public final class StudioOptions {
                 + "  --trace-file=<path>          Observation JSON Lines file\n"
                 + "  --artifact-root=<path|none>  Safe root for artifact downloads\n"
                 + "  --max-events=100000          Newest events retained in memory\n"
+                + "  --evaluation-file=<path|none>  Evaluation result JSON Lines file\n"
+                + "  --feedback-file=<path|none>    Evaluation feedback JSON Lines file\n"
+                + "  --max-evaluations=10000        Newest evaluation records retained\n"
                 + "  --help                       Show this help\n";
     }
 
@@ -161,5 +216,12 @@ public final class StudioOptions {
             throw new IllegalArgumentException(name + " must not be blank");
         }
         return value.trim();
+    }
+
+    private static Path optionalPath(String value) {
+        return value == null
+                || value.trim().isEmpty()
+                || "none".equalsIgnoreCase(value.trim())
+                ? null : Paths.get(value).toAbsolutePath().normalize();
     }
 }
