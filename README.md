@@ -10,7 +10,8 @@ and Spring application flows explicit, testable, observable, and operable.
 Engine -> Worker -> Flow -> Step -> StepResult
 ```
 
-Latest release: `0.1.2`. The stable center is `flower-core`; modules marked MVP are
+Latest release: `0.1.2`. The `main` branch is developing
+`0.1.3-SNAPSHOT`. The stable center is `flower-core`; modules marked MVP are
 usable but may change more quickly before a 1.0 release. See
 [CONTRIBUTING.md](CONTRIBUTING.md), [SECURITY.md](SECURITY.md), and
 [ROADMAP.md](ROADMAP.md) for project process and planned work.
