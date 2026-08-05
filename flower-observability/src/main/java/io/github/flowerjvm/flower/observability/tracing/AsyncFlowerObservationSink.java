@@ -84,12 +84,20 @@ public final class AsyncFlowerObservationSink
         close(DEFAULT_CLOSE_TIMEOUT_MILLIS);
     }
 
+    /**
+     * Stops accepting events and waits up to the requested time for queued
+     * events to drain. A zero timeout returns immediately; queued events may
+     * still be delivered by the daemon consumer.
+     */
     public void close(long timeoutMillis) {
         if (timeoutMillis < 0) {
             throw new IllegalArgumentException("timeoutMillis must not be negative: " + timeoutMillis);
         }
         running = false;
         consumer.interrupt();
+        if (timeoutMillis == 0) {
+            return;
+        }
         try {
             consumer.join(timeoutMillis);
         } catch (InterruptedException interrupted) {

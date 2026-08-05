@@ -15,6 +15,8 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -132,6 +134,50 @@ class FlowerObservationPipelineTest {
                 .doesNotContain("secret")
                 .doesNotContain("must-not-be-stored");
         assertThat(async.publishedCount()).isEqualTo(1);
+    }
+
+    @Test
+    void async_sink_close_with_zero_timeout_does_not_wait_for_consumer() throws Exception {
+        CountDownLatch consumerEntered = new CountDownLatch(1);
+        CountDownLatch releaseConsumer = new CountDownLatch(1);
+        CountDownLatch closeReturned = new CountDownLatch(1);
+        AsyncFlowerObservationSink sink = new AsyncFlowerObservationSink(event -> {
+            consumerEntered.countDown();
+            awaitUninterruptibly(releaseConsumer);
+        }, 1, "observation-zero-close-test");
+        Thread closer = new Thread(() -> {
+            sink.close(0);
+            closeReturned.countDown();
+        }, "observation-zero-close-caller");
+
+        boolean returnedWithoutWaiting;
+        try {
+            sink.publish(event("trace-1", 1, Collections.emptyMap()));
+            assertThat(consumerEntered.await(2, TimeUnit.SECONDS)).isTrue();
+            closer.start();
+            returnedWithoutWaiting = closeReturned.await(1, TimeUnit.SECONDS);
+        } finally {
+            releaseConsumer.countDown();
+            closer.join(2_000L);
+            sink.close();
+        }
+
+        assertThat(returnedWithoutWaiting).isTrue();
+    }
+
+    private static void awaitUninterruptibly(CountDownLatch latch) {
+        boolean interrupted = false;
+        while (true) {
+            try {
+                latch.await();
+                break;
+            } catch (InterruptedException ignored) {
+                interrupted = true;
+            }
+        }
+        if (interrupted) {
+            Thread.currentThread().interrupt();
+        }
     }
 
     private static FlowerObservationEvent event(

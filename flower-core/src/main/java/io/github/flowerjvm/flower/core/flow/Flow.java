@@ -608,13 +608,7 @@ public final class Flow {
                         ? steps.get(currentIndex + 1).stepId()
                         : null;
                 exitCurrent(def);
-                if (state.isTerminal()) {
-                    notifyTransition(StepTransition.failed(
-                            def.stepId(),
-                            stepNo,
-                            StepTransition.Origin.STEP_RESULT,
-                            targetStepId,
-                            failureCause));
+                if (notifyTerminalTransitionAfterExit(def, stepNo, targetStepId)) {
                     return;
                 }
                 if (currentIndex + 1 >= steps.size()) {
@@ -686,13 +680,7 @@ public final class Flow {
                     return;
                 }
                 exitCurrent(def);
-                if (state.isTerminal()) {
-                    notifyTransition(StepTransition.failed(
-                            def.stepId(),
-                            stepNo,
-                            StepTransition.Origin.STEP_RESULT,
-                            result.targetStepId(),
-                            failureCause));
+                if (notifyTerminalTransitionAfterExit(def, stepNo, result.targetStepId())) {
                     return;
                 }
                 currentIndex = target;
@@ -707,13 +695,7 @@ public final class Flow {
 
             case FINISH:
                 exitCurrent(def);
-                if (state.isTerminal()) {
-                    notifyTransition(StepTransition.failed(
-                            def.stepId(),
-                            stepNo,
-                            StepTransition.Origin.STEP_RESULT,
-                            null,
-                            failureCause));
+                if (notifyTerminalTransitionAfterExit(def, stepNo, null)) {
                     return;
                 }
                 state = FlowState.FINISHED;
@@ -749,6 +731,40 @@ public final class Flow {
                         null,
                         failureCause));
         }
+    }
+
+    private boolean notifyTerminalTransitionAfterExit(
+            StepDefinition def,
+            int stepNo,
+            String targetStepId) {
+        if (!state.isTerminal()) {
+            return false;
+        }
+        if (state == FlowState.CANCELLED) {
+            notifyTransition(StepTransition.of(
+                    def.stepId(),
+                    stepNo,
+                    StepTransition.Origin.EXTERNAL,
+                    StepTransition.Outcome.CANCELLED,
+                    null));
+            return true;
+        }
+        if (state != FlowState.FAILED && state != FlowState.CHECKPOINT_FAILED) {
+            failureCause = new IllegalStateException(
+                    "Unexpected terminal state after Step exit: " + state + " (" + flowId + ")");
+            state = FlowState.FAILED;
+        } else if (failureCause == null) {
+            failureCause = new IllegalStateException(
+                    "Terminal Flow has no failure cause: " + state + " (" + flowId + ")");
+            state = FlowState.FAILED;
+        }
+        notifyTransition(StepTransition.failed(
+                def.stepId(),
+                stepNo,
+                StepTransition.Origin.STEP_RESULT,
+                targetStepId,
+                failureCause));
+        return true;
     }
 
     private void exitCurrent(StepDefinition def) {

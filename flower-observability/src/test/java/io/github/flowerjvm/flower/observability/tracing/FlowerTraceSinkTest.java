@@ -74,6 +74,50 @@ class FlowerTraceSinkTest {
         }
     }
 
+    @Test
+    void async_sink_close_with_zero_timeout_does_not_wait_for_consumer() throws Exception {
+        CountDownLatch consumerEntered = new CountDownLatch(1);
+        CountDownLatch releaseConsumer = new CountDownLatch(1);
+        CountDownLatch closeReturned = new CountDownLatch(1);
+        AsyncFlowerTraceSink sink = new AsyncFlowerTraceSink(event -> {
+            consumerEntered.countDown();
+            awaitUninterruptibly(releaseConsumer);
+        }, 1, "trace-zero-close-test");
+        Thread closer = new Thread(() -> {
+            sink.close(0);
+            closeReturned.countDown();
+        }, "trace-zero-close-caller");
+
+        boolean returnedWithoutWaiting;
+        try {
+            sink.publish(event(1));
+            assertThat(consumerEntered.await(2, TimeUnit.SECONDS)).isTrue();
+            closer.start();
+            returnedWithoutWaiting = closeReturned.await(1, TimeUnit.SECONDS);
+        } finally {
+            releaseConsumer.countDown();
+            closer.join(2_000L);
+            sink.close();
+        }
+
+        assertThat(returnedWithoutWaiting).isTrue();
+    }
+
+    private static void awaitUninterruptibly(CountDownLatch latch) {
+        boolean interrupted = false;
+        while (true) {
+            try {
+                latch.await();
+                break;
+            } catch (InterruptedException ignored) {
+                interrupted = true;
+            }
+        }
+        if (interrupted) {
+            Thread.currentThread().interrupt();
+        }
+    }
+
     private static FlowerTraceEvent event(long sequence) {
         return FlowerTraceEvent.builder(FlowerTraceEventType.FLOW_STARTED)
                 .eventId("run-1:event:" + sequence)
