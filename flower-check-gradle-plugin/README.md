@@ -26,7 +26,7 @@ Then apply the plugin:
 ```kotlin
 plugins {
     java
-    id("io.github.flowerjvm.flower-check") version "0.1.1"
+    id("io.github.flowerjvm.flower-check") version "0.1.2"
 }
 ```
 

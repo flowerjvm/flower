@@ -1,6 +1,6 @@
 # Trace Storage And Security
 
-Status: Phase 3 reference implementation for `0.1.2-SNAPSHOT`.
+Status: Phase 3 reference implementation for `0.1.2`.
 
 ## Boundary
 

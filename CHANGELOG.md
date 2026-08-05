@@ -4,6 +4,18 @@ This project records notable changes here.
 
 ## Unreleased
 
+## 0.1.2
+
+- Added payload-light runtime tracing across ordinary and event-loop flows,
+  including waits, recovery, checkpoints, transition outcomes, and stable run
+  and Step-attempt identities.
+- Added local trace storage, sanitization, sampling, artifact handling,
+  OpenTelemetry export, and common domain-observation adapters.
+- Added the independent `flower-evaluation` module for datasets, experiments,
+  deterministic evaluators, aggregate results, and result sinks.
+- Linked the Spring Boot console to the opt-in local Flower Flow Graph tool.
+- Extracted the read-only Flower Studio application into its own repository.
+
 ## 0.1.1
 
 - Added SQLite checkpoint dialects and schema SQL for core and event-loop

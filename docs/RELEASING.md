@@ -5,7 +5,7 @@ Flower release artifacts use these coordinates:
 ```text
 groupId:    io.github.flowerjvm
 artifactId: flower-parent, flower-core, flower-eventloop, ...
-version:    a non-SNAPSHOT release such as 0.1.1
+version:    a non-SNAPSHOT release such as 0.1.2
 ```
 
 The Java API packages use `io.github.flowerjvm.flower.*`.
@@ -78,7 +78,7 @@ publishing.
 
    ```bash
    mvn -B versions:set \
-     -DnewVersion=0.1.1 \
+     -DnewVersion=0.1.2 \
      -DprocessAllModules=true \
      -DgenerateBackupPoms=false
    ```
@@ -93,12 +93,12 @@ publishing.
    `v`-prefixed tag:
 
    ```bash
-   git commit -am "Release Flower 0.1.1"
-   git tag v0.1.1
-   git push origin main v0.1.1
+   git commit -am "Release Flower 0.1.2"
+   git tag v0.1.2
+   git push origin main v0.1.2
    ```
 
-4. Publish a GitHub Release for `v0.1.1`. The
+4. Publish a GitHub Release for `v0.1.2`. The
    **Publish Release to Maven Central** workflow validates that the tag version
    and POM version match, builds all Maven reactor modules, creates source and
    Javadoc JARs, signs every artifact, and publishes through the Central
@@ -115,10 +115,10 @@ publishing.
 
    ```bash
    mvn -B versions:set \
-     -DnewVersion=0.1.2-SNAPSHOT \
+     -DnewVersion=0.1.3-SNAPSHOT \
      -DprocessAllModules=true \
      -DgenerateBackupPoms=false
-   git commit -am "Begin Flower 0.1.2-SNAPSHOT"
+   git commit -am "Begin Flower 0.1.3-SNAPSHOT"
    git push origin main
    ```
 

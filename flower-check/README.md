@@ -100,14 +100,14 @@ Host application Maven build:
 <dependency>
     <groupId>io.github.flowerjvm</groupId>
     <artifactId>flower-check-annotations</artifactId>
-    <version>0.1.1</version>
+    <version>0.1.2</version>
     <scope>provided</scope>
 </dependency>
 
 <plugin>
     <groupId>io.github.flowerjvm</groupId>
     <artifactId>flower-check-maven-plugin</artifactId>
-    <version>0.1.1</version>
+    <version>0.1.2</version>
     <executions>
         <execution>
             <goals>

@@ -3,7 +3,7 @@
 Status: implemented development architecture. Runtime tracing, event-loop and
 durable recovery tracing, the local storage/security pipeline, common domain
 adapters, the read-only local Studio, and the first evaluation framework are
-implemented for `0.1.2-SNAPSHOT`. Studio also includes the first bounded local
+implemented for `0.1.2`. Studio also includes the first bounded local
 monitoring dashboard over those Trace and evaluation records.
 
 ## Goal
@@ -127,7 +127,7 @@ backpressure must not halt business Flow execution.
 
 ### Phase 1: Runtime Foundation
 
-Implemented in `0.1.2-SNAPSHOT` for the ordinary tick-driven Worker:
+Implemented in `0.1.2` for the ordinary tick-driven Worker:
 
 - immutable `FlowerTraceEvent` and standard runtime event types;
 - effective `StepTransition`, including Guard, lifecycle, and cancellation
@@ -139,7 +139,7 @@ Implemented in `0.1.2-SNAPSHOT` for the ordinary tick-driven Worker:
 
 ### Phase 2: Event Loop And Durability
 
-Implemented in `0.1.2-SNAPSHOT`:
+Implemented in `0.1.2`:
 
 - `FLOW_WAITING` with payload-free event/signal/deadline descriptors;
 - `FLOW_RESUMED` with event, signal, timeout, or recovery reason;
@@ -156,7 +156,7 @@ Worker error callback because the logical Flow has already terminated.
 
 ### Phase 3: Storage And Security
 
-Implemented in `flower-observability` for `0.1.2-SNAPSHOT`:
+Implemented in `flower-observability` for `0.1.2`:
 
 - append-only, size-bounded `JsonLinesFlowerTraceSink` with no JSON dependency;
 - `TraceSanitizer` plus exact-name remove, redact, allow-list, and composition
@@ -217,7 +217,7 @@ storage. See [Domain Observation Adapters](domain-observation-adapters.md).
 
 Implemented in the separate
 [`flower-studio`](https://github.com/flowerjvm/flower-studio) repository. Its
-`0.1.0-SNAPSHOT` currently consumes Flower `0.1.2-SNAPSHOT`. The first Studio
+`0.1.0-SNAPSHOT` currently consumes Flower `0.1.2`. The first Studio
 is a read-only consumer of common
 observation JSON Lines and legacy Core trace JSON Lines. It shows:
 
@@ -258,7 +258,7 @@ for the runnable demo, options, and operating boundary.
 ### Phase 6: Evaluation
 
 Implemented in the independent `flower-evaluation` module for
-`0.1.2-SNAPSHOT`:
+`0.1.2`:
 
 - immutable, versioned Dataset, Example, Candidate, Experiment, Output, Score,
   and Feedback models;

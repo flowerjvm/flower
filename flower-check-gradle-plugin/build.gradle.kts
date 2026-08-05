@@ -7,7 +7,7 @@ plugins {
 }
 
 group = "io.github.flowerjvm"
-version = providers.gradleProperty("flowerVersion").orElse("0.1.2-SNAPSHOT").get()
+version = providers.gradleProperty("flowerVersion").orElse("0.1.2").get()
 
 java {
     sourceCompatibility = JavaVersion.VERSION_1_8
