@@ -38,6 +38,7 @@ class FlowerTraceSinkTest {
 
             assertThat(published.await(2, TimeUnit.SECONDS)).isTrue();
             assertThat(threadName.get()).isEqualTo("trace-test-consumer");
+            sink.close();
             assertThat(sink.acceptedCount()).isEqualTo(1);
             assertThat(sink.publishedCount()).isEqualTo(1);
             assertThat(sink.droppedCount()).isZero();
