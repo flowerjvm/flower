@@ -55,6 +55,7 @@ Useful properties:
 mvn verify -Dflower.check.skip=true
 mvn verify -Dflower.check.config=flower-check.config
 mvn verify -Dflower.check.failOn=warning
+mvn verify -Dflower.check.strictParsing=true
 mvn verify -Dflower.check.includeTests=true
 mvn verify -Dflower.check.format=sarif -Dflower.check.outputFile=target/flower-check.sarif
 mvn verify -Dflower.check.writeBaseline=flower-check-baseline.txt
@@ -62,6 +63,7 @@ mvn verify -Dflower.check.writeBaseline=flower-check-baseline.txt
 
 `flower.check.writeBaseline` records current findings and exits successfully so
 a project can adopt the checker without fixing all existing debt at once.
+Parse diagnostics are never written to or accepted from that baseline.
 
 Integration coverage:
 

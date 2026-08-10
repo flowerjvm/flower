@@ -376,6 +376,19 @@ See [Modules And Maturity](#modules-and-maturity) before adopting an MVP
 module. The Bloom adapter is published separately as
 `io.github.flowerjvm:bloom-flower-adapter:0.1.1`.
 
+### Java compatibility
+
+| Build or artifact | Minimum Java |
+| --- | --- |
+| `flower-core`, event-loop, persistence, observability, evaluation, testkit, and Flower Check artifacts | Java 8 |
+| `flower-spring-boot-starter` | Java 17 and Spring Boot 3.x |
+| Full Flower repository build | JDK 17 |
+
+CI runs the Java 8-compatible modules on a Java 8 runtime and verifies the full
+reactor on JDK 17 and 21. A Java 8/11 application can use the compatible
+artifacts, but it cannot load the Spring Boot starter because that artifact is
+compiled for Java 17.
+
 Build-time Flower usage checks are available through the
 [`flower-check-maven-plugin`](flower-check-maven-plugin/README.md) and
 [`flower-check-gradle-plugin`](flower-check-gradle-plugin/README.md), both at
@@ -521,6 +534,13 @@ Flower core is deliberately small, so its runtime contract is also explicit:
   context, and definition version. Recovery rebuilds a fresh Flow and resumes
   from that checkpoint. It is not deterministic replay or exactly-once side
   effect execution, so external writes and API calls should be idempotent.
+- Durable event-loop effects have explicit crash windows. An `await(...).thenRun`
+  or `thenPublish` effect runs after the await checkpoint, so a process failure
+  in between can leave the saved wait without having dispatched the effect.
+  Effects attached to `next`, `goTo`, `finish`, or `fail` run before the next or
+  terminal checkpoint, so a recovered application may repeat them. Important
+  external work needs a durable intent/outbox or operation record with a stable
+  idempotency key; Flower does not make either ordering exactly-once.
 - Scale: the default Worker is tick-based and simple to test. It is a good fit
   for small to medium in-process workloads. Very large numbers of idle Flows may
   need application-level sharding or a different Worker scheduling strategy.

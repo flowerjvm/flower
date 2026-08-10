@@ -38,6 +38,7 @@ public final class JavaParserParser implements Parser {
     @Override
     public SourceUnit parse(SourceFile file) {
         Objects.requireNonNull(file, "file");
+        String failure = "JavaParser did not produce a compilation unit";
         try {
             ParseResult<CompilationUnit> result = javaParser.parse(
                     ParseStart.COMPILATION_UNIT,
@@ -46,10 +47,23 @@ public final class JavaParserParser implements Parser {
             if (result.isSuccessful() && unit.isPresent()) {
                 return new SourceUnit(file, unit.get(), true);
             }
-        } catch (RuntimeException ignored) {
+            if (!result.getProblems().isEmpty()) {
+                failure = result.getProblems().get(0).getMessage();
+            }
+        } catch (RuntimeException e) {
             // Malformed or unsupported source must not abort a checker run.
+            if (e.getMessage() != null && !e.getMessage().trim().isEmpty()) {
+                failure = e.getMessage();
+            } else {
+                failure = e.getClass().getSimpleName();
+            }
         }
-        return fallback.parse(file);
+        SourceUnit fallbackUnit = fallback.parse(file);
+        return new SourceUnit(
+                fallbackUnit.file(),
+                fallbackUnit.ast().orElse(null),
+                false,
+                failure);
     }
 
     private static JavaParser createJavaParser() {

@@ -28,7 +28,8 @@ class ConfigLoaderTest {
                 "providerClientNames: OpenAIClient, com.acme.llm.ProviderClient",
                 "schedulerApprovalAnnotations:",
                 "  - ProjectSchedulerApproved",
-                "agentRulesEnabled: true");
+                "agentRulesEnabled: true",
+                "strictParsing: true");
 
         FlowerCheckConfig config = new ConfigLoader().load(Optional.of(configFile));
 
@@ -39,6 +40,7 @@ class ConfigLoaderTest {
         assertThat(config.providerClientNames()).containsExactly("OpenAIClient", "com.acme.llm.ProviderClient");
         assertThat(config.schedulerApprovalAnnotations()).contains("ProjectSchedulerApproved");
         assertThat(config.agentRulesEnabled()).isTrue();
+        assertThat(config.strictParsing()).isTrue();
     }
 
     @Test
@@ -64,6 +66,7 @@ class ConfigLoaderTest {
 
         assertThat(config.failOn()).isEqualTo(Severity.ERROR);
         assertThat(config.agentRulesEnabled()).isFalse();
+        assertThat(config.strictParsing()).isFalse();
         assertThat(config.schedulerApprovalAnnotations()).contains("FlowerSchedulerApproved");
         assertThat(config.baselineEntries()).isEmpty();
     }

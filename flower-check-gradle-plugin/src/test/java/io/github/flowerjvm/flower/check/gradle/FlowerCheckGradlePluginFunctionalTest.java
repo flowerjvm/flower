@@ -46,6 +46,22 @@ class FlowerCheckGradlePluginFunctionalTest {
         assertThat(result.getOutput()).contains("flower-check skipped");
     }
 
+    @Test
+    void strictParsingPropertyFailsOnIncompleteAnalysis() throws IOException {
+        writeProject(false);
+        Path source = projectDir.resolve("src/main/java/demo/GoodStep.java");
+        Files.write(source, String.join("\n",
+                "package demo;",
+                "class Broken {",
+                "    void run( {",
+                "}").getBytes(StandardCharsets.UTF_8));
+
+        BuildResult result = gradle("check", "-Pflower.check.strictParsing=true").buildAndFail();
+
+        assertThat(result.getOutput()).contains("FLOWER-CHECK-PARSE");
+        assertThat(result.getOutput()).contains("flower-check failed");
+    }
+
     private GradleRunner gradle(String... arguments) {
         return GradleRunner.create()
                 .withProjectDir(projectDir.toFile())

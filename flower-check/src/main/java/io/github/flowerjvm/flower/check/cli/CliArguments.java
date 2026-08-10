@@ -15,7 +15,8 @@ import java.util.Optional;
  *
  * <pre>
  * flower-check [--config &lt;file&gt;] [--fail-on error|warning|info]
- *              [--format plain|sarif] [--write-baseline &lt;file&gt;]
+ *              [--strict-parsing] [--format plain|sarif]
+ *              [--write-baseline &lt;file&gt;]
  *              &lt;path&gt; [&lt;path&gt; ...]
  * flower-check [--config &lt;file&gt;] --list-rules
  * </pre>
@@ -31,19 +32,22 @@ public final class CliArguments {
     private final ReportFormat reportFormat;
     private final Optional<Path> baselineOutputPath;
     private final boolean listRules;
+    private final boolean strictParsing;
 
     private CliArguments(List<String> sourceRoots,
                          Optional<Path> configPath,
                          Optional<Severity> failOn,
                          ReportFormat reportFormat,
                          Optional<Path> baselineOutputPath,
-                         boolean listRules) {
+                         boolean listRules,
+                         boolean strictParsing) {
         this.sourceRoots = sourceRoots;
         this.configPath = configPath;
         this.failOn = failOn;
         this.reportFormat = reportFormat;
         this.baselineOutputPath = baselineOutputPath;
         this.listRules = listRules;
+        this.strictParsing = strictParsing;
     }
 
     public List<String> sourceRoots() {
@@ -70,6 +74,10 @@ public final class CliArguments {
         return listRules;
     }
 
+    public boolean strictParsing() {
+        return strictParsing;
+    }
+
     /** @throws IllegalArgumentException on malformed input (CLI maps to exit 2). */
     public static CliArguments parse(String[] args) {
         List<String> roots = new ArrayList<>();
@@ -78,6 +86,7 @@ public final class CliArguments {
         ReportFormat reportFormat = ReportFormat.PLAIN;
         Optional<Path> baselineOutputPath = Optional.empty();
         boolean listRules = false;
+        boolean strictParsing = false;
 
         for (int i = 0; i < args.length; i++) {
             String arg = args[i];
@@ -97,6 +106,9 @@ public final class CliArguments {
                 case "--list-rules":
                     listRules = true;
                     break;
+                case "--strict-parsing":
+                    strictParsing = true;
+                    break;
                 default:
                     if (arg.startsWith("--")) {
                         throw new IllegalArgumentException("unknown option: " + arg);
@@ -111,7 +123,14 @@ public final class CliArguments {
         if (listRules && baselineOutputPath.isPresent()) {
             throw new IllegalArgumentException("--write-baseline cannot be combined with --list-rules");
         }
-        return new CliArguments(roots, configPath, failOn, reportFormat, baselineOutputPath, listRules);
+        return new CliArguments(
+                roots,
+                configPath,
+                failOn,
+                reportFormat,
+                baselineOutputPath,
+                listRules,
+                strictParsing);
     }
 
     private static String requireValue(String[] args, int index, String option) {
@@ -130,7 +149,7 @@ public final class CliArguments {
     }
 
     public static String usage() {
-        return "usage: flower-check [--config <file>] [--fail-on error|warning|info] "
+        return "usage: flower-check [--config <file>] [--fail-on error|warning|info] [--strict-parsing] "
                 + "[--format plain|sarif] [--write-baseline <file>] <path> [<path> ...]\n"
                 + "       flower-check [--config <file>] --list-rules";
     }

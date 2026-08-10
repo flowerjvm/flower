@@ -5,16 +5,12 @@ import io.github.flowerjvm.flower.check.config.FlowerCheckConfig;
 import io.github.flowerjvm.flower.check.engine.CheckResult;
 import io.github.flowerjvm.flower.check.engine.FlowerCheckEngine;
 import io.github.flowerjvm.flower.check.finding.BaselineWriter;
-import io.github.flowerjvm.flower.check.finding.Finding;
 import io.github.flowerjvm.flower.check.report.PlainTextReporter;
 import io.github.flowerjvm.flower.check.report.ReportFormat;
 import io.github.flowerjvm.flower.check.report.Reporter;
 import io.github.flowerjvm.flower.check.report.RuleListReporter;
 import io.github.flowerjvm.flower.check.report.SarifReporter;
 import io.github.flowerjvm.flower.check.rule.RuleRegistry;
-
-import java.util.ArrayList;
-import java.util.List;
 
 /**
  * Command-line entry point. Wiring only: argument parsing, engine run,
@@ -55,6 +51,11 @@ public final class FlowerCheckCli {
                         .failOn(parsed.failOn().get())
                         .build();
             }
+            if (parsed.strictParsing()) {
+                config = config.toBuilder()
+                        .strictParsing(true)
+                        .build();
+            }
         } catch (RuntimeException e) {
             appendLine(err, "flower-check: " + e.getMessage());
             return ExitCode.USAGE;
@@ -76,14 +77,17 @@ public final class FlowerCheckCli {
 
         if (parsed.baselineOutputPath().isPresent()) {
             try {
-                List<Finding> baselineFindings = new ArrayList<>();
-                baselineFindings.addAll(result.acceptedFindings());
-                baselineFindings.addAll(result.findings());
-                int count = new BaselineWriter().write(baselineFindings, parsed.baselineOutputPath().get());
+                int count = new BaselineWriter().write(
+                        result.baselineCandidates(),
+                        parsed.baselineOutputPath().get());
                 appendLine(out, "flower-check: wrote " + count + " baseline "
                         + (count == 1 ? "finding" : "findings") + " to "
                         + parsed.baselineOutputPath().get());
-                return ExitCode.OK;
+                if (!result.parseDiagnostics().isEmpty()) {
+                    new PlainTextReporter().report(result.parseDiagnostics(), out);
+                    appendLine(out, "flower-check: parse diagnostics are not baseline-eligible.");
+                }
+                return result.hasFailingParseDiagnostic() ? ExitCode.FINDINGS : ExitCode.OK;
             } catch (RuntimeException e) {
                 appendLine(err, "flower-check: " + e.getMessage());
                 return ExitCode.USAGE;

@@ -3,6 +3,7 @@ package io.github.flowerjvm.flower.core.flow;
 import io.github.flowerjvm.flower.core.context.ExecutionContext;
 import io.github.flowerjvm.flower.core.event.EventBus;
 import io.github.flowerjvm.flower.core.persistence.FlowCheckpoint;
+import io.github.flowerjvm.flower.core.step.GoToMode;
 import io.github.flowerjvm.flower.core.step.GuardResult;
 import io.github.flowerjvm.flower.core.step.RecoveryPolicy;
 import io.github.flowerjvm.flower.core.step.Step;
@@ -67,13 +68,13 @@ public final class Flow {
             String definitionVersion,
             ExecutionContext executionContext) {
         this.flowId = flowId;
-        this.steps = Collections.unmodifiableList(steps);
+        this.steps = Collections.unmodifiableList(new ArrayList<>(steps));
         this.persistence = persistence == null ? FlowPersistence.TRANSIENT : persistence;
         this.definitionVersion = definitionVersion;
         this.executionContext = executionContext == null ? ExecutionContext.empty() : executionContext;
         Map<String, Integer> idx = new HashMap<>();
-        for (int i = 0; i < steps.size(); i++) {
-            idx.put(steps.get(i).stepId(), i);
+        for (int i = 0; i < this.steps.size(); i++) {
+            idx.put(this.steps.get(i).stepId(), i);
         }
         this.stepIndexById = Collections.unmodifiableMap(idx);
     }
@@ -679,7 +680,9 @@ public final class Flow {
                             cause));
                     return;
                 }
-                exitCurrent(def);
+                if (!applyGoToMode(def, result, stepNo)) {
+                    return;
+                }
                 if (notifyTerminalTransitionAfterExit(def, stepNo, result.targetStepId())) {
                     return;
                 }
@@ -731,6 +734,30 @@ public final class Flow {
                         null,
                         failureCause));
         }
+    }
+
+    private boolean applyGoToMode(StepDefinition def, StepResult result, int stepNo) {
+        GoToMode mode = result.goToMode();
+        if (mode != null) {
+            switch (mode) {
+                case COMPLETE_CURRENT:
+                    exitCurrent(def);
+                    return true;
+                default:
+                    break;
+            }
+        }
+
+        failureCause = new IllegalStateException("Unsupported GoToMode: " + mode);
+        state = FlowState.FAILED;
+        exitCurrent(def);
+        notifyTransition(StepTransition.failed(
+                def.stepId(),
+                stepNo,
+                StepTransition.Origin.STEP_RESULT,
+                result.targetStepId(),
+                failureCause));
+        return false;
     }
 
     private boolean notifyTerminalTransitionAfterExit(

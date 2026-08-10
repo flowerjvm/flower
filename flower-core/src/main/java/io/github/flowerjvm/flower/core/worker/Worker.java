@@ -381,6 +381,10 @@ public final class Worker {
     }
 
     private void tickOnce(boolean scheduledTick) {
+        if (executionLock.isHeldByCurrentThread()) {
+            throw new IllegalStateException(
+                    "Worker " + name + " does not allow a nested tickOnce() call from its tick thread");
+        }
         executionLock.lock();
         try {
             if (!prepareTick(scheduledTick)) {

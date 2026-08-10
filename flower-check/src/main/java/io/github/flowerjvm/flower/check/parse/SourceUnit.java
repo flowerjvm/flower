@@ -15,18 +15,25 @@ import java.util.Optional;
  *
  * <p>When {@link #parsed()} is false the file could not be parsed. Rules must
  * tolerate that (fall back to conservative text checks or skip), and the engine
- * emits at most an INFO note - a parse failure alone never fails the build.
+ * emits a non-suppressible parse diagnostic. The diagnostic is a WARNING by
+ * default and an ERROR when strict parsing is enabled.
  */
 public final class SourceUnit {
 
     private final SourceFile file;
     private final Object ast;
     private final boolean parsed;
+    private final String parseFailure;
 
     public SourceUnit(SourceFile file, Object ast, boolean parsed) {
+        this(file, ast, parsed, null);
+    }
+
+    public SourceUnit(SourceFile file, Object ast, boolean parsed, String parseFailure) {
         this.file = Objects.requireNonNull(file, "file");
         this.ast = ast;
         this.parsed = parsed;
+        this.parseFailure = parseFailure;
     }
 
     public SourceFile file() {
@@ -40,5 +47,10 @@ public final class SourceUnit {
     /** The parsed AST, present only when {@link #parsed()} is true. */
     public Optional<Object> ast() {
         return Optional.ofNullable(ast);
+    }
+
+    /** Parser-provided failure detail, present only on best-effort fallback. */
+    public Optional<String> parseFailure() {
+        return Optional.ofNullable(parseFailure);
     }
 }

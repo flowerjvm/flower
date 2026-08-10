@@ -59,6 +59,43 @@ class FlowExecutionTest {
     }
 
     @Test
+    void built_flow_keeps_an_immutable_snapshot_when_builder_is_reused() {
+        List<String> trace = new ArrayList<>();
+        FlowBuilder builder = Flow.builder("test", "builder-reuse")
+                .step("a", new TestSteps.RecordingStep("a", trace, StepResult.finish()));
+
+        Flow first = builder.build();
+        builder.step("b", new TestSteps.RecordingStep("b", trace, StepResult.done()));
+        Flow second = builder.build();
+
+        assertThat(first.steps()).extracting("stepId").containsExactly("a");
+        assertThat(second.steps()).extracting("stepId").containsExactly("a", "b");
+
+        worker.submit(first);
+        worker.tickOnce();
+
+        assertThat(first.state()).isEqualTo(FlowState.FINISHED);
+        assertThat(trace).containsExactly("enter:a", "tick:a", "exit:a");
+    }
+
+    @Test
+    void builder_reuse_cannot_add_a_goto_target_to_an_existing_flow() {
+        List<String> trace = new ArrayList<>();
+        FlowBuilder builder = Flow.builder("test", "builder-goto")
+                .step("a", new TestSteps.RecordingStep("a", trace, StepResult.goTo("b")));
+
+        Flow first = builder.build();
+        builder.step("b", new TestSteps.RecordingStep("b", trace, StepResult.done()));
+
+        worker.submit(first);
+        worker.tickOnce();
+
+        assertThat(first.state()).isEqualTo(FlowState.FAILED);
+        assertThat(first.failureCause()).hasMessageContaining("goTo target stepId not found: b");
+        assertThat(trace).containsExactly("enter:a", "tick:a", "exit:a");
+    }
+
+    @Test
     void finish_ends_flow_without_visiting_later_steps() {
         List<String> trace = new ArrayList<>();
         Flow flow = Flow.builder("test", "1")
@@ -147,22 +184,37 @@ class FlowExecutionTest {
         List<String> trace = new ArrayList<>();
         Step a = new Step() {
             @Override
+            protected void onEnter(StepContext ctx) {
+                trace.add("enter:a");
+            }
+
+            @Override
             protected StepResult onTick(StepContext ctx) {
-                trace.add("a");
+                trace.add("tick:a");
                 return StepResult.goTo("c");
+            }
+
+            @Override
+            protected void onExit(StepContext ctx) {
+                trace.add("exit:a");
             }
         };
         Step b = new Step() {
             @Override
             protected StepResult onTick(StepContext ctx) {
-                trace.add("b");
+                trace.add("tick:b");
                 return StepResult.done();
             }
         };
         Step c = new Step() {
             @Override
+            protected void onEnter(StepContext ctx) {
+                trace.add("enter:c");
+            }
+
+            @Override
             protected StepResult onTick(StepContext ctx) {
-                trace.add("c");
+                trace.add("tick:c");
                 return StepResult.done();
             }
         };
@@ -174,7 +226,9 @@ class FlowExecutionTest {
         worker.tickOnce(); // enter c, tick -> done
 
         assertThat(flow.state()).isEqualTo(FlowState.FINISHED);
-        assertThat(trace).containsExactly("a", "c");
+        assertThat(trace).containsExactly(
+                "enter:a", "tick:a", "exit:a",
+                "enter:c", "tick:c");
     }
 
     @Test

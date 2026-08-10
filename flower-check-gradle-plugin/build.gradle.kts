@@ -1,4 +1,5 @@
 import org.gradle.api.publish.maven.MavenPublication
+import org.gradle.jvm.tasks.Jar
 
 plugins {
     `java-gradle-plugin`
@@ -44,6 +45,13 @@ tasks.withType<JavaCompile>().configureEach {
 
 tasks.test {
     useJUnitPlatform()
+}
+
+tasks.named<Jar>("jar") {
+    from(rootProject.projectDir.parentFile) {
+        include("LICENSE", "NOTICE")
+        into("META-INF")
+    }
 }
 
 publishing {

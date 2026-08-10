@@ -31,6 +31,7 @@ class JavaParserParserTest {
 
         assertThat(unit.parsed()).isFalse();
         assertThat(unit.ast()).isEmpty();
+        assertThat(unit.parseFailure()).isPresent();
     }
 
     private static SourceFile source(String content) {

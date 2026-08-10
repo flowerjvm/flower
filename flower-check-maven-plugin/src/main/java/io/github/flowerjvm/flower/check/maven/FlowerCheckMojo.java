@@ -5,7 +5,6 @@ import io.github.flowerjvm.flower.check.config.FlowerCheckConfig;
 import io.github.flowerjvm.flower.check.engine.CheckResult;
 import io.github.flowerjvm.flower.check.engine.FlowerCheckEngine;
 import io.github.flowerjvm.flower.check.finding.BaselineWriter;
-import io.github.flowerjvm.flower.check.finding.Finding;
 import io.github.flowerjvm.flower.check.report.PlainTextReporter;
 import io.github.flowerjvm.flower.check.report.ReportFormat;
 import io.github.flowerjvm.flower.check.report.Reporter;
@@ -84,6 +83,12 @@ public final class FlowerCheckMojo extends AbstractMojo {
     private String failOn;
 
     /**
+     * Promote parser fallback diagnostics from WARNING to ERROR.
+     */
+    @Parameter(property = "flower.check.strictParsing", defaultValue = "false")
+    private boolean strictParsing;
+
+    /**
      * Report format: plain or sarif.
      */
     @Parameter(property = "flower.check.format", defaultValue = "plain")
@@ -119,6 +124,10 @@ public final class FlowerCheckMojo extends AbstractMojo {
 
         if (writeBaseline != null) {
             writeBaseline(result);
+            if (result.hasFailingParseDiagnostic()) {
+                throw new MojoFailureException(
+                        "flower-check strict parsing failed; parse diagnostics cannot be baselined");
+            }
             return;
         }
 
@@ -165,6 +174,11 @@ public final class FlowerCheckMojo extends AbstractMojo {
                         .failOn(parseSeverity(failOn))
                         .build();
             }
+            if (strictParsing) {
+                config = config.toBuilder()
+                        .strictParsing(true)
+                        .build();
+            }
             return config;
         } catch (RuntimeException e) {
             throw new MojoExecutionException("flower-check configuration error: " + e.getMessage(), e);
@@ -194,12 +208,13 @@ public final class FlowerCheckMojo extends AbstractMojo {
 
     private void writeBaseline(CheckResult result) throws MojoExecutionException {
         try {
-            List<Finding> baselineFindings = new ArrayList<>();
-            baselineFindings.addAll(result.acceptedFindings());
-            baselineFindings.addAll(result.findings());
-            int count = new BaselineWriter().write(baselineFindings, writeBaseline.toPath());
+            int count = new BaselineWriter().write(result.baselineCandidates(), writeBaseline.toPath());
             getLog().info("flower-check: wrote " + count + " baseline "
                     + (count == 1 ? "finding" : "findings") + " to " + writeBaseline);
+            if (!result.parseDiagnostics().isEmpty()) {
+                getLog().warn("flower-check: " + result.parseDiagnostics().size()
+                        + " parse diagnostic(s) were not written to the baseline");
+            }
         } catch (RuntimeException e) {
             throw new MojoExecutionException("flower-check baseline write error: " + e.getMessage(), e);
         }

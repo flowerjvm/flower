@@ -29,6 +29,7 @@ import io.github.flowerjvm.flower.check.rule.Severity;
  *   - ProjectSchedulerApproved
  * baselineFile: flower-check-baseline.txt
  * agentRulesEnabled: true
+ * strictParsing: true
  * </pre>
  */
 public final class ConfigLoader {
@@ -117,6 +118,8 @@ public final class ConfigLoader {
 
             if ("failon".equals(normalized)) {
                 builder.failOn(parseSeverity(lineNo, value));
+            } else if ("strictparsing".equals(normalized) || "strictparse".equals(normalized)) {
+                builder.strictParsing(parseBoolean(lineNo, value));
             } else if ("agentrulesenabled".equals(normalized) || "agentrules".equals(normalized)) {
                 builder.agentRulesEnabled(parseBoolean(lineNo, value));
             } else if ("stepbaseclasses".equals(normalized)) {

@@ -249,6 +249,20 @@ are not checkpointed. Durable flows may use `event(Type.class)`,
 `signal(name, key)`, and `deadlineIn(millis)`. Predicate-based awaits are still
 runtime-only and fail fast if used by a durable flow.
 
+Effect ordering is part of the durability contract:
+
+- `await(...).thenRun/thenPublish` saves the await checkpoint before running
+  the effect. A process failure in that gap can recover the wait even though
+  the outbound effect was never dispatched.
+- effects on `next`, `goTo`, `finish`, or `fail` run before the next or terminal
+  checkpoint. A process failure in that gap can cause application recovery to
+  observe the earlier position after the effect already happened.
+
+This asymmetry prevents synchronous responses from being lost, but it is not
+an exactly-once guarantee. Important external work needs a durable intent or
+outbox, a stable operation/idempotency key, and recovery that observes that
+same operation.
+
 To resume a durable flow, rebuild the flow definition, call
 `recoverFrom(checkpoint)`, and submit it to a worker that uses the same
 `EventFlowCheckpointStore`. During recovery the worker calls

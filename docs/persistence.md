@@ -150,6 +150,25 @@ durable checkpoints. Durable Flows reject it. Store long-lived deadlines in
 domain state, or use event-loop await deadlines when the deadline itself must
 survive restart.
 
+## Effect And Checkpoint Ordering
+
+Durable event-loop effects deliberately use two orderings:
+
+| Result | Ordering | Process-failure window |
+| --- | --- | --- |
+| `await(...).thenRun/thenPublish` | register awaits, save checkpoint, run effect | The checkpoint may survive even though the effect was never dispatched. |
+| `next/goTo/finish/fail` with an effect | run effect, then save the next or terminal checkpoint | The effect may have happened even though recovery still sees the earlier position. |
+
+The AWAIT ordering prevents a synchronously published response from arriving
+before its subscription exists. Reversing it would reintroduce lost responses;
+it would not create exactly-once delivery.
+
+For an important external command, persist a stable operation id and outbound
+intent in domain state or an outbox before dispatch. Persist completion or
+failure before signaling Flower. Recovery should observe the same operation
+instead of dispatching again merely because an in-memory handle disappeared.
+Flower checkpoint/resume does not provide exactly-once effects.
+
 ## Operational Boundaries
 
 Flower's in-memory Flow ownership is scoped to one JVM and one `Engine`.

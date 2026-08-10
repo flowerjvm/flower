@@ -13,6 +13,7 @@ on:
       - flower-eventloop-persistence-jdbc/**
       - flower-spring-boot-starter/**
       - flower-observability/**
+      - flower-evaluation/**
       - flower-testkit/**
       - flower-check-annotations/**
       - flower-check/**
@@ -30,6 +31,7 @@ on:
       - flower-eventloop-persistence-jdbc/**
       - flower-spring-boot-starter/**
       - flower-observability/**
+      - flower-evaluation/**
       - flower-testkit/**
       - flower-check-annotations/**
       - flower-check/**
@@ -44,6 +46,26 @@ permissions:
   packages: read
 
 jobs:
+  java8-compatible-modules:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Java 8
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '8'
+          cache: maven
+
+      - name: Test Java 8 compatible modules on a Java 8 runtime
+        run: >-
+          mvn -B -ntp
+          -pl flower-core,flower-eventloop,flower-persistence-jdbc,flower-eventloop-persistence-jdbc,flower-observability,flower-evaluation,flower-testkit,flower-check-annotations,flower-check,flower-check-maven-plugin
+          -am test
+
   verify:
     runs-on: ubuntu-latest
 
@@ -80,3 +102,20 @@ jobs:
           JRELEASER_MAVENCENTRAL_USERNAME: unused-for-config-validation
           JRELEASER_MAVENCENTRAL_PASSWORD: unused-for-config-validation
           JRELEASER_GITHUB_TOKEN: unused-for-config-validation
+
+  verify-java21:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      - name: Verify full reactor on Java 21
+        run: mvn -B -ntp verify

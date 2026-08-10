@@ -78,6 +78,23 @@ class FlowerCheckMojoTest {
                 .isEqualTo("FLOWER-CHECK-001 demo/WaitStep.java:4\n");
     }
 
+    @Test
+    void strictParsingFailsBuildOnIncompleteAnalysis(@TempDir Path root) throws Exception {
+        Path sourceRoot = root.resolve("src/main/java");
+        writeJava(sourceRoot, "demo/Broken.java",
+                "package demo;",
+                "class Broken {",
+                "    void run( {",
+                "}");
+
+        FlowerCheckMojo mojo = mojo(root, sourceRoot);
+        set(mojo, "strictParsing", true);
+
+        assertThatThrownBy(mojo::execute)
+                .isInstanceOf(MojoFailureException.class)
+                .hasMessageContaining("flower-check failed");
+    }
+
     private static FlowerCheckMojo mojo(Path root, Path sourceRoot) throws Exception {
         FlowerCheckMojo mojo = new FlowerCheckMojo();
         mojo.setLog(new TestLog());

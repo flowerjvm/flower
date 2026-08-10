@@ -33,6 +33,9 @@ import java.util.List;
  */
 public final class FlowerCheckEngine {
 
+    /** Integrity diagnostic emitted when a source file receives only fallback analysis. */
+    public static final String PARSE_DIAGNOSTIC_ID = "FLOWER-CHECK-PARSE";
+
     private final Parser parser;
     private final RuleRegistry registry;
     private final FlowerCheckConfig config;
@@ -57,9 +60,14 @@ public final class FlowerCheckEngine {
         // Load + parse.
         List<SourceFile> files = sourceLoader.load(roots);
         List<SourceUnit> units = new ArrayList<>(files.size());
+        List<Finding> parseDiagnostics = new ArrayList<>();
         List<Suppression> suppressions = new ArrayList<>();
         for (SourceFile file : files) {
-            units.add(parser.parse(file));
+            SourceUnit unit = parser.parse(file);
+            units.add(unit);
+            if (!unit.parsed()) {
+                parseDiagnostics.add(parseDiagnostic(unit));
+            }
             suppressions.addAll(suppressionScanner.scan(file));
         }
 
@@ -80,11 +88,31 @@ public final class FlowerCheckEngine {
         }
         collector.suppressAll(suppressions);
         List<Finding> acceptedFindings = collector.acceptBaseline(config.baselineEntries());
+        // Parser integrity diagnostics are deliberately added after suppression
+        // and baseline handling. Incomplete analysis cannot be waived as debt.
+        collector.addAll(parseDiagnostics);
 
         // Decide failure.
         List<Finding> findings = collector.findings();
         Severity worst = collector.worstSeverity();
         boolean failed = worst != null && worst.atLeast(config.failOn());
         return new CheckResult(findings, acceptedFindings, worst, failed);
+    }
+
+    private Finding parseDiagnostic(SourceUnit unit) {
+        String detail = unit.parseFailure().orElse("parser did not provide failure details")
+                .replace('\r', ' ')
+                .replace('\n', ' ')
+                .trim();
+        return Finding.builder()
+                .ruleId(PARSE_DIAGNOSTIC_ID)
+                .severity(config.strictParsing() ? Severity.ERROR : Severity.WARNING)
+                .file(unit.file().relativePath())
+                .line(1)
+                .column(1)
+                .what("Java source could not be parsed; only conservative fallback checks ran. " + detail)
+                .why("Structural Flower rules require an AST, so this file was not analyzed completely.")
+                .fix("Fix the source syntax or parser compatibility; use strictParsing in CI to fail closed.")
+                .build();
     }
 }

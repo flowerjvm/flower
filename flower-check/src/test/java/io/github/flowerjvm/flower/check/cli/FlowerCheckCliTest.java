@@ -232,6 +232,69 @@ class FlowerCheckCliTest {
         assertThat(err.toString()).contains("invalid report format");
     }
 
+    @Test
+    void parseFallbackIsVisibleButDoesNotFailByDefault(@TempDir Path root) throws IOException {
+        writeJava(root, "Broken.java",
+                "package demo;",
+                "class Broken {",
+                "    void run( {",
+                "}");
+
+        StringBuilder out = new StringBuilder();
+        StringBuilder err = new StringBuilder();
+        int code = new FlowerCheckCli().execute(new String[] {
+                root.toString()
+        }, out, err);
+
+        assertThat(code).isEqualTo(ExitCode.OK);
+        assertThat(out.toString()).contains("FLOWER-CHECK-PARSE  WARNING");
+        assertThat(out.toString()).doesNotContain("flower-check: no findings");
+        assertThat(err.toString()).isEmpty();
+    }
+
+    @Test
+    void strictParsingFailsClosedOnParseFallback(@TempDir Path root) throws IOException {
+        writeJava(root, "Broken.java",
+                "package demo;",
+                "class Broken {",
+                "    void run( {",
+                "}");
+
+        StringBuilder out = new StringBuilder();
+        StringBuilder err = new StringBuilder();
+        int code = new FlowerCheckCli().execute(new String[] {
+                "--strict-parsing",
+                root.toString()
+        }, out, err);
+
+        assertThat(code).isEqualTo(ExitCode.FINDINGS);
+        assertThat(out.toString()).contains("FLOWER-CHECK-PARSE  ERROR");
+        assertThat(err.toString()).isEmpty();
+    }
+
+    @Test
+    void parseDiagnosticsAreNotWrittenToBaseline(@TempDir Path root) throws IOException {
+        Path baseline = root.resolve("flower-check-baseline.txt");
+        writeJava(root, "Broken.java",
+                "package demo;",
+                "class Broken {",
+                "    void run( {",
+                "}");
+
+        StringBuilder out = new StringBuilder();
+        StringBuilder err = new StringBuilder();
+        int code = new FlowerCheckCli().execute(new String[] {
+                "--write-baseline", baseline.toString(),
+                root.toString()
+        }, out, err);
+
+        assertThat(code).isEqualTo(ExitCode.OK);
+        assertThat(Files.readAllBytes(baseline)).isEmpty();
+        assertThat(out.toString()).contains("FLOWER-CHECK-PARSE  WARNING");
+        assertThat(out.toString()).contains("parse diagnostics are not baseline-eligible");
+        assertThat(err.toString()).isEmpty();
+    }
+
     private static void writeJava(Path root, String name, String... lines) throws IOException {
         Path file = root.resolve(name);
         Files.write(file, String.join("\n", lines).getBytes(StandardCharsets.UTF_8));

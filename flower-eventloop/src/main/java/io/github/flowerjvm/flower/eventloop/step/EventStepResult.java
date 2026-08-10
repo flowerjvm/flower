@@ -109,7 +109,13 @@ public final class EventStepResult {
      *
      * <p>For {@link Type#AWAIT}, effects run after event subscriptions and
      * deadlines are registered. This lets steps safely publish outbound
-     * requests without losing synchronous response events.
+     * requests without losing synchronous response events. In a durable flow,
+     * the await checkpoint is saved before the effect; a process failure in
+     * that gap can recover the wait without having dispatched the effect.
+     * Effects on transition results run before the next/terminal checkpoint
+     * and may therefore have happened while recovery still sees the earlier
+     * position. Use a durable intent/outbox and stable operation id for
+     * important external work; this API does not provide exactly-once effects.
      */
     public EventStepResult thenRun(EventEffect effect) {
         if (effect == null) {

@@ -21,6 +21,7 @@ public class FlowerCheckExtension {
     private final Property<Boolean> includeTests;
     private final Property<String> failOn;
     private final Property<String> format;
+    private final Property<Boolean> strictParsing;
 
     public FlowerCheckExtension(Project project) {
         ObjectFactory objects = project.getObjects();
@@ -34,6 +35,7 @@ public class FlowerCheckExtension {
         this.includeTests = objects.property(Boolean.class);
         this.failOn = objects.property(String.class);
         this.format = objects.property(String.class);
+        this.strictParsing = objects.property(Boolean.class);
     }
 
     public ConfigurableFileCollection getSourceRoots() {
@@ -74,5 +76,9 @@ public class FlowerCheckExtension {
 
     public Property<String> getFormat() {
         return format;
+    }
+
+    public Property<Boolean> getStrictParsing() {
+        return strictParsing;
     }
 }

@@ -76,12 +76,14 @@
                             <mainClass>io.github.flowerjvm.flower.check.cli.FlowerCheckVerify</mainClass>
                             <classpathScope>runtime</classpathScope>
                             <arguments>
+                                <argument>--strict-parsing</argument>
                                 <argument>${project.basedir}/../flower-core/src/main/java</argument>
                                 <argument>${project.basedir}/../flower-eventloop/src/main/java</argument>
                                 <argument>${project.basedir}/../flower-persistence-jdbc/src/main/java</argument>
                                 <argument>${project.basedir}/../flower-eventloop-persistence-jdbc/src/main/java</argument>
                                 <argument>${project.basedir}/../flower-spring-boot-starter/src/main/java</argument>
                                 <argument>${project.basedir}/../flower-observability/src/main/java</argument>
+                                <argument>${project.basedir}/../flower-evaluation/src/main/java</argument>
                                 <argument>${project.basedir}/../flower-testkit/src/main/java</argument>
                                 <argument>${project.basedir}/../flower-check-annotations/src/main/java</argument>
                                 <argument>${project.basedir}/src/main/java</argument>

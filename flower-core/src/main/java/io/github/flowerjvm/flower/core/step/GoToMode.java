@@ -4,9 +4,10 @@ package io.github.flowerjvm.flower.core.step;
  * How a Flow should treat the current Step when {@link StepResult#goTo(String)}
  * is returned.
  *
- * <p>The current runtime supports {@link #COMPLETE_CURRENT}. Additional jump
- * semantics can be added later if an application needs a different lifecycle
- * behavior.
+ * <p>The runtime interprets this value when applying a {@code GOTO} result.
+ * The current runtime supports {@link #COMPLETE_CURRENT}. Additional jump
+ * semantics require an explicit lifecycle implementation before a new value
+ * is added.
  */
 public enum GoToMode {
     /**

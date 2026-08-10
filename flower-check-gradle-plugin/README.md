@@ -45,6 +45,7 @@ Useful properties:
 ./gradlew check -Pflower.check.skip=true
 ./gradlew check -Pflower.check.config=flower-check.config
 ./gradlew check -Pflower.check.failOn=warning
+./gradlew check -Pflower.check.strictParsing=true
 ./gradlew check -Pflower.check.includeTests=true
 ./gradlew check -Pflower.check.format=sarif -Pflower.check.outputFile=build/reports/flower-check.sarif
 ./gradlew check -Pflower.check.writeBaseline=flower-check-baseline.txt
@@ -57,6 +58,7 @@ flowerCheck {
     includeTests.set(false)
     configFile.set(layout.projectDirectory.file("flower-check.config"))
     failOn.set("warning")
+    strictParsing.set(true)
     outputFile.set(layout.buildDirectory.file("reports/flower-check.sarif"))
     format.set("sarif")
 }

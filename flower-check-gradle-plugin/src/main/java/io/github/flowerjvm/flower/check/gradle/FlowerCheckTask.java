@@ -5,7 +5,6 @@ import io.github.flowerjvm.flower.check.config.FlowerCheckConfig;
 import io.github.flowerjvm.flower.check.engine.CheckResult;
 import io.github.flowerjvm.flower.check.engine.FlowerCheckEngine;
 import io.github.flowerjvm.flower.check.finding.BaselineWriter;
-import io.github.flowerjvm.flower.check.finding.Finding;
 import io.github.flowerjvm.flower.check.report.PlainTextReporter;
 import io.github.flowerjvm.flower.check.report.ReportFormat;
 import io.github.flowerjvm.flower.check.report.Reporter;
@@ -47,6 +46,7 @@ public class FlowerCheckTask extends DefaultTask {
     private final Property<Boolean> includeTests;
     private final Property<String> failOn;
     private final Property<String> format;
+    private final Property<Boolean> strictParsing;
 
     public FlowerCheckTask() {
         this.sourceRoots = getProject().files();
@@ -59,6 +59,7 @@ public class FlowerCheckTask extends DefaultTask {
         this.includeTests = getProject().getObjects().property(Boolean.class);
         this.failOn = getProject().getObjects().property(String.class);
         this.format = getProject().getObjects().property(String.class);
+        this.strictParsing = getProject().getObjects().property(Boolean.class);
 
         setGroup("verification");
         setDescription("Runs flower-check against Flower source usage.");
@@ -82,6 +83,10 @@ public class FlowerCheckTask extends DefaultTask {
 
         if (writeBaseline.isPresent()) {
             writeBaseline(result);
+            if (result.hasFailingParseDiagnostic()) {
+                throw new GradleException(
+                        "flower-check strict parsing failed; parse diagnostics cannot be baselined");
+            }
             return;
         }
 
@@ -144,6 +149,11 @@ public class FlowerCheckTask extends DefaultTask {
         return format;
     }
 
+    @Input
+    public Property<Boolean> getStrictParsing() {
+        return strictParsing;
+    }
+
     private List<String> collectSourceRoots() {
         Set<String> roots = new LinkedHashSet<>();
         addExistingRoots(roots, sourceRoots);
@@ -171,6 +181,11 @@ public class FlowerCheckTask extends DefaultTask {
                         .failOn(parseSeverity(failOn.get()))
                         .build();
             }
+            if (Boolean.TRUE.equals(strictParsing.getOrElse(false))) {
+                config = config.toBuilder()
+                        .strictParsing(true)
+                        .build();
+            }
             return config;
         } catch (RuntimeException e) {
             throw new GradleException("flower-check configuration error: " + e.getMessage(), e);
@@ -189,13 +204,14 @@ public class FlowerCheckTask extends DefaultTask {
 
     private void writeBaseline(CheckResult result) {
         try {
-            List<Finding> baselineFindings = new ArrayList<>();
-            baselineFindings.addAll(result.acceptedFindings());
-            baselineFindings.addAll(result.findings());
             File baseline = writeBaseline.get().getAsFile();
-            int count = new BaselineWriter().write(baselineFindings, baseline.toPath());
+            int count = new BaselineWriter().write(result.baselineCandidates(), baseline.toPath());
             getLogger().lifecycle("flower-check: wrote " + count + " baseline "
                     + (count == 1 ? "finding" : "findings") + " to " + baseline);
+            if (!result.parseDiagnostics().isEmpty()) {
+                getLogger().warn("flower-check: " + result.parseDiagnostics().size()
+                        + " parse diagnostic(s) were not written to the baseline");
+            }
         } catch (RuntimeException e) {
             throw new GradleException("flower-check baseline write error: " + e.getMessage(), e);
         }

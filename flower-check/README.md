@@ -90,6 +90,7 @@ CLI:
 
 ```bash
 flower-check src/main/java
+flower-check --strict-parsing src/main/java
 flower-check --write-baseline flower-check-baseline.txt src/main/java
 flower-check --list-rules
 ```
@@ -147,6 +148,12 @@ mvn -Dflower.check.skip=true verify
 This scans the host project's `src/main/java` by default. Any active finding at
 or above `failOn` fails that host build.
 
+If JavaParser cannot parse a source file, `flower-check` always reports a
+`FLOWER-CHECK-PARSE` WARNING instead of claiming there are no findings. Enable
+`strictParsing: true` in `flower-check.config`, or pass `--strict-parsing`, to
+promote incomplete analysis to ERROR. Parse diagnostics cannot be suppressed
+or added to a baseline.
+
 The annotations dependency is optional unless the project needs an official
 approval marker such as `@FlowerSchedulerApproved` for intentional recurring
 schedulers. Projects may still configure their own approval annotation names.
@@ -202,7 +209,8 @@ Current implementation:
 
 ```text
 1. CLI scans Java source files.
-2. JavaParser is primary; conservative text fallback remains.
+2. JavaParser is primary; conservative text fallback remains visible through
+   a non-suppressible `FLOWER-CHECK-PARSE` diagnostic.
 3. Rules are discovered through ServiceLoader.
 4. Plain text and SARIF reporters are available.
 5. Existing findings can be written to a baseline file for controlled adoption.

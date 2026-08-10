@@ -93,10 +93,16 @@ Primary:   JavaParser (com.github.javaparser)
 
 Fallback:  conservative text scan
            - used only when a file fails to parse
-           - emits a low-severity "could not analyze" note, never a hard rule
-             violation, so broken/generated files do not fail the build on a
-             parse error alone
+           - always emits a FLOWER-CHECK-PARSE WARNING so incomplete analysis
+             can never look like a clean run
+           - strictParsing promotes that diagnostic to ERROR; Flower's own CI
+             uses strict parsing
 ```
+
+Parse diagnostics are checker-integrity diagnostics, not rule findings. Inline
+suppressions and baselines cannot hide them. A baseline records known source
+violations; it must never turn an incompletely analyzed file into accepted
+debt.
 
 v1 deliberately avoids a full type-resolution symbol solver. The rules are
 designed to work from *simple names and syntactic shape* (e.g. a class whose
@@ -232,6 +238,7 @@ flower-check.config (or flower-check section in build config)
   stepBaseClasses:                 # extra project-specific Step base classes
     - com.acme.flow.AbstractDomainStep
   baselineFile: flower-check-baseline.txt
+  strictParsing: true                  # fail instead of warn on AST fallback
 ```
 
 ## CLI And Exit Codes
@@ -239,6 +246,7 @@ flower-check.config (or flower-check section in build config)
 ```bash
 flower-check src/main/java
 flower-check --config flower-check.config src/main/java another/src
+flower-check --strict-parsing src/main/java
 flower-check --format sarif src/main/java > flower-check.sarif
 flower-check --write-baseline flower-check-baseline.txt src/main/java
 flower-check:check
@@ -272,7 +280,9 @@ code is checked before merge.
 - **Two passes** because the rules that matter are cross-file (step-id
   resolution, durable-flow shape), not single-line greps.
 - **AST primary, text fallback** because Flower rules are structural, but a
-  single un-parseable generated file must not take down the whole build.
+  single un-parseable generated file should still receive conservative checks.
+  The explicit parse diagnostic prevents fallback from being mistaken for a
+  complete clean analysis, and strict mode lets CI fail closed.
 - **Pure rules + shared model** so rules are independently testable and the
   `flower-sample` modules can be used as a zero-finding regression baseline.
 - **what/why/fix on every finding** because the product is enforcement people

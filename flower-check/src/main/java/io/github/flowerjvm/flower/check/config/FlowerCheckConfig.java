@@ -36,6 +36,7 @@ public final class FlowerCheckConfig {
     private final List<String> schedulerApprovalAnnotations;
     private final List<BaselineEntry> baselineEntries;
     private final boolean agentRulesEnabled;
+    private final boolean strictParsing;
 
     private FlowerCheckConfig(Builder b) {
         this.failOn = b.failOn;
@@ -47,6 +48,7 @@ public final class FlowerCheckConfig {
                 Collections.unmodifiableList(new ArrayList<>(b.schedulerApprovalAnnotations));
         this.baselineEntries = Collections.unmodifiableList(new ArrayList<>(b.baselineEntries));
         this.agentRulesEnabled = b.agentRulesEnabled;
+        this.strictParsing = b.strictParsing;
     }
 
     /** Strict defaults: fail on ERROR, all non-agent rules enabled. */
@@ -92,6 +94,11 @@ public final class FlowerCheckConfig {
         return agentRulesEnabled;
     }
 
+    /** Whether a parser fallback is an ERROR instead of a WARNING. */
+    public boolean strictParsing() {
+        return strictParsing;
+    }
+
     public static Builder builder() {
         return new Builder();
     }
@@ -99,7 +106,8 @@ public final class FlowerCheckConfig {
     public Builder toBuilder() {
         Builder copy = builder()
                 .failOn(failOn)
-                .agentRulesEnabled(agentRulesEnabled);
+                .agentRulesEnabled(agentRulesEnabled)
+                .strictParsing(strictParsing);
         for (Map.Entry<String, Severity> e : severityOverrides.entrySet()) {
             copy.overrideSeverity(e.getKey(), e.getValue());
         }
@@ -131,6 +139,7 @@ public final class FlowerCheckConfig {
                 new ArrayList<>(DEFAULT_SCHEDULER_APPROVAL_ANNOTATIONS);
         private final List<BaselineEntry> baselineEntries = new ArrayList<>();
         private boolean agentRulesEnabled = false; // Tier 2 is opt-in
+        private boolean strictParsing;
 
         public Builder failOn(Severity failOn) {
             this.failOn = failOn;
@@ -176,6 +185,11 @@ public final class FlowerCheckConfig {
 
         public Builder agentRulesEnabled(boolean enabled) {
             this.agentRulesEnabled = enabled;
+            return this;
+        }
+
+        public Builder strictParsing(boolean enabled) {
+            this.strictParsing = enabled;
             return this;
         }
 

@@ -7,7 +7,7 @@ depends_on:
   - 01-architecture.md
   - 02-rule-catalog.md
 supersedes: []
-last_reviewed: 2026-06-11
+last_reviewed: 2026-08-10
 ---
 
 # 03. Host Project Adoption
@@ -43,6 +43,17 @@ runtime dependency on `flower-core`, and they must keep strict defaults:
 failOn: error
 agentRulesEnabled: false
 ```
+
+Every parse fallback is reported as `FLOWER-CHECK-PARSE`. It is a WARNING by
+default so one unsupported/generated file does not unexpectedly break an
+existing adoption. Safety-sensitive CI should set:
+
+```text
+strictParsing: true
+```
+
+This promotes parse fallback to ERROR. Parse diagnostics cannot be suppressed
+or accepted through the baseline.
 
 Agent rules stay opt-in because not every Flower host application has an
 agent/action layer. Scheduler approval stays default-on because recurring
@@ -177,7 +188,9 @@ baselineFile: flower-check-baseline.txt
 ```
 
 in `flower-check.config`. Baselined findings are accepted debt; new findings
-still fail.
+still fail. Do not regenerate the baseline in normal CI, and review baseline
+diffs so accepted debt cannot grow unnoticed. Parse diagnostics are never
+written to or accepted from a baseline.
 
 Prefer baselines for migration debt, inline suppressions for one justified
 source site, and rule disablement only when a rule truly does not apply to the

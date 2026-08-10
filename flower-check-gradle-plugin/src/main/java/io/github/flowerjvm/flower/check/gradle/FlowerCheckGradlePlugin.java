@@ -18,6 +18,7 @@ public final class FlowerCheckGradlePlugin implements Plugin<Project> {
 
         extension.getSkip().convention(booleanProperty(project, "flower.check.skip", false));
         extension.getIncludeTests().convention(booleanProperty(project, "flower.check.includeTests", false));
+        extension.getStrictParsing().convention(booleanProperty(project, "flower.check.strictParsing", false));
         extension.getFormat().convention(project.getProviders()
                 .gradleProperty("flower.check.format")
                 .orElse("plain"));
@@ -40,6 +41,7 @@ public final class FlowerCheckGradlePlugin implements Plugin<Project> {
                 .register("flowerCheck", FlowerCheckTask.class, task -> {
                     task.getSkip().set(extension.getSkip());
                     task.getIncludeTests().set(extension.getIncludeTests());
+                    task.getStrictParsing().set(extension.getStrictParsing());
                     task.getFormat().set(extension.getFormat());
                     task.getFailOn().set(extension.getFailOn());
                     task.getConfigFile().set(extension.getConfigFile());
