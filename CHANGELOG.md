@@ -4,6 +4,25 @@ This project records notable changes here.
 
 ## Unreleased
 
+## 0.1.3
+
+- Fixed Flow definition aliasing so builder reuse cannot mutate an already
+  built Flow, and rejected nested manual Worker ticks that could execute
+  sibling Flows and durable checkpoint effects twice.
+- Made `GoToMode.COMPLETE_CURRENT` an explicit runtime contract: Flower runs
+  the current Step's exit lifecycle and cleanup before moving to the target,
+  and fails closed for unsupported future modes.
+- Preserved checkpoint-relevant event-loop transition state and documented
+  durability boundaries for event publication and checkpoint failures.
+- Made `flower-check` report parser fallback diagnostics, added strict
+  baseline controls to its CLI, Maven plugin, and Gradle plugin, and improved
+  configuration and remediation documentation.
+- Fixed async trace and observation shutdown so closing a sink cannot
+  interrupt and lose an in-flight storage write.
+- Added Java 8 runtime CI for compatible modules, documented the separate
+  Java requirements for core and the Spring Boot starter, enabled
+  reproducible build timestamps, and packaged LICENSE and NOTICE metadata.
+
 ## 0.1.2
 
 - Added payload-light runtime tracing across ordinary and event-loop flows,

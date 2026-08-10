@@ -1,7 +1,7 @@
 # 🌸 Flower
 
 [![CI](https://github.com/flowerjvm/flower/actions/workflows/ci.yml/badge.svg)](https://github.com/flowerjvm/flower/actions/workflows/ci.yml)
-[![Maven Central](https://img.shields.io/maven-central/v/io.github.flowerjvm/flower-core.svg?label=Maven%20Central)](https://central.sonatype.com/artifact/io.github.flowerjvm/flower-core/0.1.2)
+[![Maven Central](https://img.shields.io/maven-central/v/io.github.flowerjvm/flower-core.svg?label=Maven%20Central)](https://central.sonatype.com/artifact/io.github.flowerjvm/flower-core/0.1.3)
 
 Flower is a small in-JVM orchestration runtime that makes long-running Java
 and Spring application flows explicit, testable, observable, and operable.
@@ -10,8 +10,7 @@ and Spring application flows explicit, testable, observable, and operable.
 Engine -> Worker -> Flow -> Step -> StepResult
 ```
 
-Latest release: `0.1.2`. The `main` branch is developing
-`0.1.3-SNAPSHOT`. The stable center is `flower-core`; modules marked MVP are
+Latest release: `0.1.3`. The stable center is `flower-core`; modules marked MVP are
 usable but may change more quickly before a 1.0 release. See
 [CONTRIBUTING.md](CONTRIBUTING.md), [SECURITY.md](SECURITY.md), and
 [ROADMAP.md](ROADMAP.md) for project process and planned work.
@@ -327,7 +326,7 @@ worker.tickOnce();
 
 ## Install From Maven Central
 
-Flower `0.1.2` is published to Maven Central under the
+Flower `0.1.3` is published to Maven Central under the
 `io.github.flowerjvm` group. No custom repository or `mavenLocal()` is
 required.
 
@@ -337,7 +336,7 @@ Gradle Kotlin DSL:
 
 ```kotlin
 dependencies {
-    implementation("io.github.flowerjvm:flower-core:0.1.2")
+    implementation("io.github.flowerjvm:flower-core:0.1.3")
 }
 ```
 
@@ -347,7 +346,7 @@ Maven:
 <dependency>
     <groupId>io.github.flowerjvm</groupId>
     <artifactId>flower-core</artifactId>
-    <version>0.1.2</version>
+    <version>0.1.3</version>
 </dependency>
 ```
 
@@ -355,7 +354,7 @@ For Spring Boot applications, use the starter instead:
 
 ```kotlin
 dependencies {
-    implementation("io.github.flowerjvm:flower-spring-boot-starter:0.1.2")
+    implementation("io.github.flowerjvm:flower-spring-boot-starter:0.1.3")
 }
 ```
 
@@ -363,14 +362,14 @@ Add only the modules your application needs:
 
 | Use case | Artifact |
 | --- | --- |
-| Core Flow / Worker runtime | `io.github.flowerjvm:flower-core:0.1.2` |
-| Spring Boot auto-configuration | `io.github.flowerjvm:flower-spring-boot-starter:0.1.2` |
-| JDBC checkpoints | `io.github.flowerjvm:flower-persistence-jdbc:0.1.2` |
-| Logging, metrics, tracing, and dumps | `io.github.flowerjvm:flower-observability:0.1.2` |
-| Offline datasets, experiments, and evaluators | `io.github.flowerjvm:flower-evaluation:0.1.2` |
-| Deterministic test helpers | `io.github.flowerjvm:flower-testkit:0.1.2` |
-| Event-driven execution | `io.github.flowerjvm:flower-eventloop:0.1.2` |
-| Event-loop JDBC checkpoints | `io.github.flowerjvm:flower-eventloop-persistence-jdbc:0.1.2` |
+| Core Flow / Worker runtime | `io.github.flowerjvm:flower-core:0.1.3` |
+| Spring Boot auto-configuration | `io.github.flowerjvm:flower-spring-boot-starter:0.1.3` |
+| JDBC checkpoints | `io.github.flowerjvm:flower-persistence-jdbc:0.1.3` |
+| Logging, metrics, tracing, and dumps | `io.github.flowerjvm:flower-observability:0.1.3` |
+| Offline datasets, experiments, and evaluators | `io.github.flowerjvm:flower-evaluation:0.1.3` |
+| Deterministic test helpers | `io.github.flowerjvm:flower-testkit:0.1.3` |
+| Event-driven execution | `io.github.flowerjvm:flower-eventloop:0.1.3` |
+| Event-loop JDBC checkpoints | `io.github.flowerjvm:flower-eventloop-persistence-jdbc:0.1.3` |
 
 See [Modules And Maturity](#modules-and-maturity) before adopting an MVP
 module. The Bloom adapter is published separately as
@@ -392,7 +391,7 @@ compiled for Java 17.
 Build-time Flower usage checks are available through the
 [`flower-check-maven-plugin`](flower-check-maven-plugin/README.md) and
 [`flower-check-gradle-plugin`](flower-check-gradle-plugin/README.md), both at
-version `0.1.2`.
+version `0.1.3`.
 
 ## Use Flower With ChatGPT And Codex
 
@@ -1324,7 +1323,7 @@ Add it as a test dependency:
 <dependency>
     <groupId>io.github.flowerjvm</groupId>
     <artifactId>flower-testkit</artifactId>
-    <version>0.1.2</version>
+    <version>0.1.3</version>
     <scope>test</scope>
 </dependency>
 ```
@@ -1443,7 +1442,7 @@ To build and test the repository locally:
 mvn -B verify
 ```
 
-Applications should normally consume the released `0.1.2` artifacts from
+Applications should normally consume the released `0.1.3` artifacts from
 Maven Central as shown in [Install From Maven Central](#install-from-maven-central).
 Contributors working on the separately built Gradle checker should follow the
 additional local development steps in [CONTRIBUTING.md](CONTRIBUTING.md).
