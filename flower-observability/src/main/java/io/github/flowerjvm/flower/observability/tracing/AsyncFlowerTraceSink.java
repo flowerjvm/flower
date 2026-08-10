@@ -89,14 +89,15 @@ public final class AsyncFlowerTraceSink implements FlowerTraceSink, AutoCloseabl
     /**
      * Stops accepting events and waits up to the requested time for queued
      * events to drain. A zero timeout returns immediately; queued events may
-     * still be delivered by the daemon consumer.
+     * still be delivered by the daemon consumer. Shutdown never interrupts an
+     * in-flight delegate call; an idle consumer notices shutdown within the
+     * polling interval.
      */
     public void close(long timeoutMillis) {
         if (timeoutMillis < 0) {
             throw new IllegalArgumentException("timeoutMillis must not be negative: " + timeoutMillis);
         }
         running = false;
-        consumer.interrupt();
         if (timeoutMillis == 0) {
             return;
         }

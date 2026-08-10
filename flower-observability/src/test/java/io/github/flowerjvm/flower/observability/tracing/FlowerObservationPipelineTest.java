@@ -17,6 +17,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -163,6 +164,41 @@ class FlowerObservationPipelineTest {
         }
 
         assertThat(returnedWithoutWaiting).isTrue();
+    }
+
+    @Test
+    void async_sink_close_does_not_interrupt_an_in_flight_delegate() throws Exception {
+        CountDownLatch consumerEntered = new CountDownLatch(1);
+        CountDownLatch releaseConsumer = new CountDownLatch(1);
+        CountDownLatch delegateInterrupted = new CountDownLatch(1);
+        AtomicBoolean interrupted = new AtomicBoolean();
+        AsyncFlowerObservationSink sink = new AsyncFlowerObservationSink(event -> {
+            consumerEntered.countDown();
+            while (true) {
+                try {
+                    releaseConsumer.await();
+                    return;
+                } catch (InterruptedException failure) {
+                    interrupted.set(true);
+                    delegateInterrupted.countDown();
+                }
+            }
+        }, 1, "observation-close-interrupt-test");
+        Thread closer = new Thread(sink::close, "observation-close-caller");
+
+        try {
+            sink.publish(event("trace-1", 1, Collections.emptyMap()));
+            assertThat(consumerEntered.await(2, TimeUnit.SECONDS)).isTrue();
+            closer.start();
+            assertThat(delegateInterrupted.await(250, TimeUnit.MILLISECONDS)).isFalse();
+        } finally {
+            releaseConsumer.countDown();
+            closer.join(2_000L);
+            sink.close();
+        }
+
+        assertThat(interrupted).isFalse();
+        assertThat(sink.publishedCount()).isEqualTo(1);
     }
 
     private static void awaitUninterruptibly(CountDownLatch latch) {
