@@ -25,8 +25,7 @@ Other application sketches use host-defined services, repositories, and events.
 ## Install From Maven Central
 
 Flower `0.1.3` is published to Maven Central under the
-`io.github.flowerjvm` group. No custom repository or `mavenLocal()` is
-required.
+`io.github.flowerjvm` group.
 
 For a plain Java application, start with `flower-core`:
 

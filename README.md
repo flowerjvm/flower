@@ -240,8 +240,6 @@ dependencies {
 }
 ```
 
-No custom Maven repository or `mavenLocal()` is required.
-
 ### 2. Declare A Flow, Wait For An Event, And Advance It
 
 Run the following `FlowerQuickStart` class with Core on the classpath.
@@ -588,17 +586,12 @@ outside Core:
 | Project | Responsibility |
 | --- | --- |
 | Flower Core | Application Flow execution, current Step, and explicit waits and transitions. |
-| [Flower Agent](https://github.com/flowerjvm/flower-agent) | AgentRun, model turns, transcripts, tool calls, budgets, and completion. |
 | [Flower AI Harness](https://github.com/flowerjvm/flower-ai-harness) | Final structured-output validation and whole-task refinement or retry. |
 | [Flower Action Runtime](https://github.com/flowerjvm/flower-action-runtime) | Mutating actions with policy, approval, idempotency, and audit. |
 
 A model call belongs in an application service or adapter, dispatched without
 blocking the Worker. Making "approval" a Step does not itself implement
 authorization; the application or Action Runtime must enforce it.
-
-[Flower Agent Samples](https://github.com/flowerjvm/flower-agent-samples)
-provides a runnable Spring Boot integration with an OpenAI-compatible cloud or
-local model.
 
 <a id="use-flower-with-chatgpt-and-codex"></a>
 

@@ -240,8 +240,6 @@ dependencies {
 }
 ```
 
-별도 Maven 저장소나 `mavenLocal()` 설정은 필요하지 않습니다.
-
 ### 2. Flow를 선언하고, 이벤트를 기다리고, 다음 단계로 진행
 
 Core를 의존성에 추가한 프로젝트에서 아래 `FlowerQuickStart` 클래스를 실행하세요.
@@ -577,16 +575,12 @@ AI 작업도 조율할 수 있습니다.
 | 프로젝트 | 책임 |
 | --- | --- |
 | Flower Core | 애플리케이션 Flow 실행, 현재 Step, 명시적인 대기와 전이. |
-| [Flower Agent](https://github.com/flowerjvm/flower-agent) | AgentRun, 모델 턴, 대화 이력, 도구 호출, 예산, 완료. |
 | [Flower AI Harness](https://github.com/flowerjvm/flower-ai-harness) | 최종 구조화 출력 검증, 전체 작업 단위의 보완·재시도. |
 | [Flower Action Runtime](https://github.com/flowerjvm/flower-action-runtime) | 정책·승인·멱등성·감사를 적용하는 변경 액션 실행. |
 
 모델 호출은 애플리케이션 서비스나 adapter에 두고 Worker를 차단하지 않는
 방식으로 요청하세요. "승인"을 Step으로 표현하는 것만으로 권한 검사가 구현되지는
 않습니다. 실제 통제는 애플리케이션이나 Action Runtime이 수행해야 합니다.
-
-[Flower Agent Samples](https://github.com/flowerjvm/flower-agent-samples)는
-OpenAI 호환 클라우드·로컬 모델과 연동하는 실행 가능한 Spring Boot 예제를 제공합니다.
 
 <a id="use-flower-with-chatgpt-and-codex"></a>
 
