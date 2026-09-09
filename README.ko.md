@@ -23,7 +23,7 @@ Flower는 Java 애플리케이션 안에서 동작하는 작은 런타임입니�
 ```java
 Flow flow = Flow.builder("order", orderId)
         .step("accept", new AcceptOrderStep(orderService))
-        .step("payment", new WaitForPaymentStep())
+        .step("payment", new WaitForPaymentStep(orders))
         .step("fulfill", new FulfillOrderStep(warehouseService))
         .build();
 
@@ -145,37 +145,86 @@ Flow 구성, Worker를 차단하지 않는 Step 작성, 대기 표현, 애플리
 
 ## 적용 전후: 실행 순서를 보이게 만들기
 
-결제 흐름은 처음에 여러 곳에 나뉘어 구현될 수 있습니다.
+> **기존에는 코드를 따라가며 업무 흐름을 추론해야 합니다.**
+>
+> **Flower에서는 Flow를 보고 필요한 코드로 들어갑니다.**
 
-```text
-주기적 Poller    → 처리 중인 주문을 조회하고 status로 분기
-이벤트 Listener  → 공유된 paid 플래그 설정
-Deadline 필드    → 대기 시간 초과 판단
-Service 메서드   → 주문 준비와 이행
+업무 흐름은 대개 평범한 애플리케이션 코드에서 시작합니다.
+대기, 이벤트, 시간 초과, 재시도 요구가 하나씩 추가되면서 실행 순서를
+이해하려면 처리기, 이벤트 핸들러, 상태 변경, 서비스 호출을 함께 따라가야 합니다.
+
+아래 코드는 같은 애플리케이션 서비스와 주문 상태 조회를 사용하는 비교 예시입니다.
+결제 알림은 조회 대상 상태를 갱신하고, 주문 준비 과정에서 결제 마감 시각을
+설정합니다. 예제의 상태 조회와 서비스 호출은 빠르게 반환하며,
+생성자와 애플리케이션 타입 정의는 생략했습니다.
+
+### Before: 처리 코드를 따라갑니다
+
+주기적으로 호출되는 처리기가 애플리케이션의 `stage` 필드로 실행 위치를 관리합니다.
+
+```java
+// Called by the application's scheduled processor.
+void process(OrderRun run) {
+    switch (run.stage) {
+        case ACCEPT:
+            orderService.prepare(run.orderId);
+            run.stage = Stage.PAYMENT;
+            break;
+        case PAYMENT:
+            if (orders.isPaymentApproved(run.orderId)) {
+                run.stage = Stage.FULFILL;
+            } else if (clock.currentTimeMillis()
+                    >= orders.paymentDeadlineMillis(run.orderId)) {
+                run.stage = Stage.FAILED;
+            }
+            break;
+        case FULFILL:
+            warehouseService.fulfill(run.orderId);
+            run.stage = Stage.COMPLETE;
+            break;
+        default:
+            break;
+    }
+}
 ```
 
-각각은 익숙한 코드입니다. 다만 하나의 업무 흐름을 이해하려면 이 모든 곳을
-따라가야 합니다. Flower에서는 앞서 본 builder로 실행 단계를 한곳에서 선언하고,
-대기 Step에서 필요한 이벤트를 구독하고 완료 조건을 확인한 뒤 결과를 반환합니다.
+실행 순서는 존재합니다. 다만 `stage`에 어떤 값을 넣는지 따라가고,
+결제 상태가 어디에서 갱신되는지, 마감 시각이 어떻게 정해지는지 찾아보며
+흐름을 재구성해야 합니다. 결제 대기를 살펴보려면 먼저 이 조율 코드 안에서
+해당 분기를 찾아야 합니다.
+
+### After: Flow부터 읽습니다
+
+```java
+Flow flow = Flow.builder("order", orderId)
+        .step("accept", new AcceptOrderStep(orderService))
+        .step("payment", new WaitForPaymentStep(orders))
+        .step("fulfill", new FulfillOrderStep(warehouseService))
+        .build();
+
+worker.submit(flow);
+```
+
+Step 구현을 열기 전부터 `accept → payment → fulfill` 순서가 보입니다.
+결제 대기를 살펴보려면 `WaitForPaymentStep`으로 바로 들어가면 됩니다.
+같은 결제 상태와 마감 시각을 확인하고, 판단 결과를 런타임에 반환합니다.
 
 ```java
 final class WaitForPaymentStep extends Step {
-    @Override
-    protected void onEnter(StepContext ctx) {
-        ctx.startTimeout(30_000);
-        ctx.subscribe(PaymentApproved.class, event -> {
-            if (event.orderId().equals(ctx.flowId().flowKey())) {
-                ctx.signal("paid");
-            }
-        });
+    private final OrderStateView orders;
+
+    WaitForPaymentStep(OrderStateView orders) {
+        this.orders = orders;
     }
 
     @Override
     protected StepResult onTick(StepContext ctx) {
-        if (ctx.hasSignal("paid")) {
+        String orderId = ctx.flowId().flowKey();
+        if (orders.isPaymentApproved(orderId)) {
             return StepResult.done();
         }
-        if (ctx.timedOut()) {
+        if (ctx.clock().currentTimeMillis()
+                >= orders.paymentDeadlineMillis(orderId)) {
             return StepResult.fail(
                     new IllegalStateException("payment timeout"));
         }
@@ -184,15 +233,19 @@ final class WaitForPaymentStep extends Step {
 }
 ```
 
-대기가 코드에 드러납니다. 다음 전이는 반환값으로 표현됩니다.
-`StepContext`를 통해 만든 구독은 Step 이탈, 초기화 또는 Flow 종료 시
-Flower가 정리합니다.
+`stay()`는 결제 단계에서 대기하고, `done()`은 주문 이행 단계로 진행하며,
+`fail(...)`은 Flow를 실패로 종료합니다.
+현재 실행 위치를 관리하고 이 전이를 적용하는 일은 Flower가 맡습니다.
 
-이 예제는 **메모리 안에서만 유지되는 비영속 대기**입니다. 구독 전에 발행된
-이벤트는 이 Step을 위해 보관되지 않습니다. signal은 영속적인 업무 사실이 아니며,
-`startTimeout(...)`도 재시작 후 복구되는 deadline이 아닙니다.
-복구가 필요하면 복구 가능한 도메인 상태와 명시적인 체크포인트 전략을
-함께 사용해야 합니다. [실행 범위와 보장 경계](#execution-boundaries)를 참고하세요.
+실제 업무 수행과 데이터 관리는 여전히 도메인 서비스가 담당합니다.
+유지보수의 출발점이 명확해집니다. 먼저 Flow를 읽어 순서를 파악하고,
+확인하거나 바꿔야 할 동작을 담당하는 Step으로 들어갑니다.
+Flower는 실행 흐름에 하나의 보이는 구조와 공통 실행 계약을 제공합니다.
+
+위 코드는 애플리케이션 구성 예시입니다. 아래 [빠른 시작](#quick-start)에는
+이벤트 구독과 메모리 내 timeout을 사용하는 완전한 실행 예제가 있습니다.
+재시작 복구는 별도로 선택할 기능이며,
+[실행 범위와 보장 경계](#execution-boundaries)를 참고하세요.
 
 <a id="more-than-splitting-a-method-into-smaller-methods"></a>
 
@@ -248,6 +301,11 @@ Spring, 데이터베이스, 백그라운드 스케줄러, `Thread.sleep`이 필�
 
 `PrintStep`은 예제를 위한 출력입니다. 이벤트는 대기 Step의 구독이 등록된
 뒤에 의도적으로 발행합니다.
+
+이 빠른 시작은 일시적인 signal과 timeout을 사용합니다. 구독 전에 발행된
+이벤트는 대기 Step을 위해 보관되지 않으며, signal과 timeout도 재시작 후
+복구되지 않습니다. 영속 상태와 복구는
+[실행 범위와 보장 경계](#execution-boundaries)를 참고하세요.
 
 ```java
 import io.github.flowerjvm.flower.core.engine.Engine;

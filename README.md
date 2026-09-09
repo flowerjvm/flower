@@ -24,7 +24,7 @@ constraints, supported by Flower Skill, `flower-check`, and deterministic tests.
 ```java
 Flow flow = Flow.builder("order", orderId)
         .step("accept", new AcceptOrderStep(orderService))
-        .step("payment", new WaitForPaymentStep())
+        .step("payment", new WaitForPaymentStep(orders))
         .step("fulfill", new FulfillOrderStep(warehouseService))
         .build();
 
@@ -146,38 +146,87 @@ See [Skill and build setup](#use-flower-with-chatgpt-and-codex).
 
 ## Before And After: Make The Sequence Visible
 
-A payment workflow may begin with execution logic spread across several places:
+> **Before Flower, you read the code to reconstruct the flow.**
+>
+> **With Flower, you read the Flow to navigate the code.**
 
-```text
-Scheduled poller   → scan active orders and switch on status
-Event listener    → set a shared "paid" flag
-Deadline field    → decide when waiting has timed out
-Service methods   → prepare and fulfill the order
+A workflow usually starts as ordinary application code. Waiting, events,
+timeouts, and retries arrive one requirement at a time. Understanding the
+execution sequence then means following the processor, event handlers, state
+changes, and service calls together.
+
+The excerpts below compare coordination around the same application services
+and order-state view. Payment notifications update that view, and preparation
+establishes the payment deadline. State queries and service calls here return
+promptly; constructors and application types are omitted.
+
+### Before: Follow The Processor
+
+A scheduled processor tracks execution in an application-owned `stage` field:
+
+```java
+// Called by the application's scheduled processor.
+void process(OrderRun run) {
+    switch (run.stage) {
+        case ACCEPT:
+            orderService.prepare(run.orderId);
+            run.stage = Stage.PAYMENT;
+            break;
+        case PAYMENT:
+            if (orders.isPaymentApproved(run.orderId)) {
+                run.stage = Stage.FULFILL;
+            } else if (clock.currentTimeMillis()
+                    >= orders.paymentDeadlineMillis(run.orderId)) {
+                run.stage = Stage.FAILED;
+            }
+            break;
+        case FULFILL:
+            warehouseService.fulfill(run.orderId);
+            run.stage = Stage.COMPLETE;
+            break;
+        default:
+            break;
+    }
+}
 ```
 
-Each piece is familiar. Understanding one workflow, though, requires following
-all of them. With Flower, the builder above declares the stages together, and
-a waiting Step registers its interest, checks its completion condition, and
-returns a result:
+The sequence is there, but you reconstruct it by following assignments to
+`stage`, checking where payment state comes from, and finding how the deadline
+is set. To investigate a payment wait, you first have to locate the relevant
+branch within that coordination code.
+
+### After: Start With The Flow
+
+```java
+Flow flow = Flow.builder("order", orderId)
+        .step("accept", new AcceptOrderStep(orderService))
+        .step("payment", new WaitForPaymentStep(orders))
+        .step("fulfill", new FulfillOrderStep(warehouseService))
+        .build();
+
+worker.submit(flow);
+```
+
+The declaration shows `accept → payment → fulfill` before you open any Step.
+For a payment wait, go directly to `WaitForPaymentStep`. It checks the same
+payment facts and deadline, and returns the decision to the runtime:
 
 ```java
 final class WaitForPaymentStep extends Step {
-    @Override
-    protected void onEnter(StepContext ctx) {
-        ctx.startTimeout(30_000);
-        ctx.subscribe(PaymentApproved.class, event -> {
-            if (event.orderId().equals(ctx.flowId().flowKey())) {
-                ctx.signal("paid");
-            }
-        });
+    private final OrderStateView orders;
+
+    WaitForPaymentStep(OrderStateView orders) {
+        this.orders = orders;
     }
 
     @Override
     protected StepResult onTick(StepContext ctx) {
-        if (ctx.hasSignal("paid")) {
+        String orderId = ctx.flowId().flowKey();
+        if (orders.isPaymentApproved(orderId)) {
             return StepResult.done();
         }
-        if (ctx.timedOut()) {
+        if (ctx.clock().currentTimeMillis()
+                >= orders.paymentDeadlineMillis(orderId)) {
             return StepResult.fail(
                     new IllegalStateException("payment timeout"));
         }
@@ -186,15 +235,20 @@ final class WaitForPaymentStep extends Step {
 }
 ```
 
-The wait is explicit. The next transition is a return value. Flower releases
-subscriptions created through `StepContext` when the Step exits, resets, or the
-Flow terminates.
+`stay()` keeps the Flow at payment, `done()` advances to fulfillment, and
+`fail(...)` terminates the Flow with an error. Flower tracks the execution
+position and applies those transitions.
 
-This is a **transient, in-memory wait**. An event published before subscription
-is not retained for this Step. Signals are not durable business facts, and
-`startTimeout(...)` is not a durable deadline. Recovery requires recoverable
-domain state and an explicit checkpoint strategy; see
-[Execution boundaries](#execution-boundaries).
+Your domain services still perform the business work and own its data.
+The maintenance benefit is a clear starting point: read the Flow to understand
+the sequence, then open the Step whose behavior you need to inspect or change.
+Flower gives that execution flow one visible structure and one common runtime
+contract.
+
+These are application integration sketches. The
+[quick start](#quick-start) below includes a complete runnable example of an
+event subscription and an in-memory timeout. Restart recovery is a separate
+choice; see [Execution boundaries](#execution-boundaries).
 
 ## More Than Splitting A Method Into Smaller Methods
 
@@ -248,6 +302,11 @@ without Spring, a database, a background scheduler, or `Thread.sleep`.
 
 `PrintStep` represents demo work. The event is deliberately published after
 the waiting Step has subscribed.
+
+This quick start uses transient signals and timeouts. Events published before
+subscription are not retained for the waiting Step, and its signals and timeout
+are not restored after a restart. See [Execution boundaries](#execution-boundaries)
+for durable state and recovery.
 
 ```java
 import io.github.flowerjvm.flower.core.engine.Engine;
