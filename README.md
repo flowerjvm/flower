@@ -1,115 +1,25 @@
 # 🌸 Flower
 
+**English** | [한국어](README.ko.md)
+
+**One execution model. From Java business workflows to AI agents.**
+
+Make application flows explicit with **Flow → Step → StepResult**.
+
+Flower is a small in-JVM runtime for Java applications. It gives multi-phase
+business workflows, event-driven coordination, and AI application flows the
+same execution structure, while keeping your domain model and application
+framework in place.
+
+The same model gives people readable flows and coding agents structural
+constraints, supported by Flower Skill, `flower-check`, and deterministic tests.
+
 [![CI](https://github.com/flowerjvm/flower/actions/workflows/ci.yml/badge.svg)](https://github.com/flowerjvm/flower/actions/workflows/ci.yml)
 [![Maven Central](https://img.shields.io/maven-central/v/io.github.flowerjvm/flower-core.svg?label=Maven%20Central)](https://central.sonatype.com/artifact/io.github.flowerjvm/flower-core/0.1.3)
 
-Flower is a small in-JVM orchestration runtime that makes long-running Java
-and Spring application flows explicit, testable, observable, and operable.
-
-```text
-Engine -> Worker -> Flow -> Step -> StepResult
-```
-
-Latest release: `0.1.3`. The `main` branch is developing
-`0.1.4-SNAPSHOT`. The stable center is `flower-core`; modules marked MVP are
-usable but may change more quickly before a 1.0 release. See
-[CONTRIBUTING.md](CONTRIBUTING.md), [SECURITY.md](SECURITY.md), and
-[ROADMAP.md](ROADMAP.md) for project process and planned work.
-
-## The Flow Is Already There
-
-Your app has flows. You just cannot see them yet.
-
-Hand your service to a new engineer and watch where they get stuck. Not on the
-class diagram. That part may be clean. They get stuck on one question no diagram
-answers: when a request comes in, what actually happens, and in what order?
-
-Because the answer is not in any single place. It is spread across a poller, a
-background thread, an event listener, a shared flag, and a catch-all service
-class that quietly became the home for leftover orchestration.
-
-The person who knows the whole sequence will eventually move on, and the flow
-moves with them.
-
-Flower is how you write that flow down before that happens: one flow, small
-steps, explicit transitions, and one place to look.
-
-## Flower, In One Screen
-
-Flower is a tiny in-JVM runtime for long-running Spring application flows. It
-gives application code an explicit, testable, human-operable execution shape
-inside one JVM, without replacing your application framework or your domain
-model.
-
-```text
-Engine
-  -> Worker
-      -> Flow
-          -> Step
-              -> StepResult
-```
-
-A flow has a current step. A step returns an explicit result. Waiting is
-modeled through events, signals, timeouts, or durable domain state instead of
-hidden sleeps and ad-hoc polling loops.
-
-That is the whole discipline, borrowed from equipment-control software where
-long-running work has always been modeled this way: make the current state
-visible, make every transition explicit, keep each unit small, and leave a
-trace a human can inspect.
-
-## Before / After
-
-This is the shape the "already there" flow usually starts in: orchestration
-scattered across a status string, a scheduled scan, and a side-channel flag.
-
-```java
-@Entity
-class Order {
-    String id;
-    String status; // "NEW", "WAITING_PAYMENT", "PAID", "FULFILLED", "FAILED"
-    Instant paymentDeadline;
-}
-
-@Component
-class OrderPoller {
-    @Scheduled(fixedDelay = 1000)
-    void tick() {
-        for (Order order : orders.findActive()) {
-            switch (order.status) {
-                case "NEW" -> {
-                    prepare(order);
-                    order.status = "WAITING_PAYMENT";
-                    order.paymentDeadline = now().plusSeconds(30);
-                }
-                case "WAITING_PAYMENT" -> {
-                    if (paidFlags.contains(order.id)) {
-                        order.status = "PAID";
-                    } else if (now().isAfter(order.paymentDeadline)) {
-                        order.status = "FAILED";
-                    }
-                }
-                case "PAID" -> {
-                    fulfill(order);
-                    order.status = "FULFILLED";
-                }
-            }
-            orders.save(order);
-        }
-    }
-}
-
-@EventListener
-void onPaid(PaymentApproved event) {
-    paidFlags.add(event.orderId());
-}
-```
-
-The state machine is implicit in strings and a switch. Waiting is hidden in a
-shared flag. Recovery means "whatever the status column happened to be."
-Nobody can see the flow, because there is no flow, only fragments.
-
-After: the same behavior as an explicit Flow of Steps:
+[Quick start](#quick-start) · [Execution model](#the-execution-contract) ·
+[Coding agents](#one-execution-model-for-humans-and-coding-agents) ·
+[Runtime reference](docs/runtime-reference.md) · [Modules](#modules)
 
 ```java
 Flow flow = Flow.builder("order", orderId)
@@ -120,6 +30,135 @@ Flow flow = Flow.builder("order", orderId)
 
 worker.submit(flow);
 ```
+
+These Step classes belong to your application. Flower supplies the execution
+model. A complete, self-contained example follows in [Quick start](#quick-start).
+
+Start with `flower-core`: **Java 8+, one JVM, no separate Flower server, and no
+database required for transient flows**. Spring Boot integration, checkpoints,
+observability, and developer tooling are optional. The Spring Boot starter
+requires Java 17 and Spring Boot 3.x.
+
+Examples use `0.1.3`; `main` develops `0.1.4-SNAPSHOT`.
+
+`flower-core` is built around an established execution contract:
+`Worker → Flow → Step → StepResult`. Core development focuses on preserving
+this model and compatibility with existing application code. Optional modules
+and ecosystem projects evolve around it; MVP labels identify individual
+components whose APIs are still being refined.
+
+## The Flow Is Already There
+
+Your app has flows. You just cannot see them yet.
+
+An order waits for payment. A device waits for a response. A game waits for a
+player. An AI application waits for a model, a tool, or an approval.
+
+The flow exists, but its execution logic may be scattered across service
+methods, scheduled jobs, event listeners, callbacks, status fields, and shared
+flags. When something stops progressing, someone has to reconstruct the sequence:
+
+> What is running? Which phase is it in? What is it waiting for?
+> What makes it move forward?
+
+Flower gives that sequence a place in the code: one Flow, small Steps, and
+explicit transition results. Domain rules stay in your application; Steps
+coordinate when the work can proceed.
+
+<a id="flower-in-one-screen"></a>
+
+## Different Workflows, One Model
+
+| Application | Example phases, expressed as Steps |
+| --- | --- |
+| Business service | Accept order → wait for payment → fulfill order |
+| Logistics or equipment coordination | Validate work → dispatch request → wait for completion → finalize |
+| Game server | Prepare turn → wait for player input → wait for animation → complete turn |
+| AI application | Prepare context → run model or agent → validate result → request approval → execute action |
+
+The builder does not change for an AI application:
+
+```java
+Flow aiFlow = Flow.builder("assistant-task", taskId)
+        .step("context", prepareContextStep)
+        .step("model", waitForModelResultStep)
+        .step("validate", validateOutputStep)
+        .step("action", executeGovernedActionStep)
+        .build();
+
+worker.submit(aiFlow);
+```
+
+This is an application sketch: the Step variables represent application-created
+instances, not built-in AI components. Each workflow uses the same three concepts:
+
+| Concept | Responsibility |
+| --- | --- |
+| `Flow` | The declared execution stages for one instance of work, with a current position. |
+| `Step` | A small, stateful unit that coordinates the current stage. |
+| `StepResult` | An explicit decision: keep waiting, advance, repeat, jump, finish, or fail. |
+
+The runtime manages the current Step and interprets its result. Your application
+implements the work inside and around those stages. Model turns, transcripts,
+tools, validation, and action authorization belong to application services or
+optional higher-level runtimes.
+
+You can change what the workflow does without changing how its execution is expressed.
+
+<a id="structure-for-generated-code"></a>
+<a id="notes-for-ai-agents"></a>
+<a id="give-generated-java-code-an-explicit-execution-structure"></a>
+
+## One Execution Model For Humans And Coding Agents
+
+Flower gives coding agents a constrained execution model, not a blank Java
+codebase. The agent expresses orchestration through `Flow → Step → StepResult`:
+declare the stages, keep each Step small, and return an explicit transition.
+Business rules remain in ordinary Java services and domain objects.
+
+Humans get readable flows. Coding agents get structural constraints.
+`flower-check` and deterministic tests close the feedback loop.
+
+```text
+GUIDE       Flower Skill
+              ↓
+CONSTRAIN   Flow / Step / StepResult
+              ↓
+VERIFY      flower-check + deterministic tests
+```
+
+[Flower Skill](https://github.com/flowerjvm/flower-agent-skills/blob/main/agent-skills/flower-app-guide/SKILL.md)
+guides generation: how to compose Flows, write non-blocking Steps, model waits,
+and keep domain responsibilities in application services. The execution model
+gives the generated code a common structure that people and tools can inspect.
+
+When wired into the host build, [flower-check](flower-check/README.md) enforces
+supported usage rules and fails the build for violations at the configured
+severity. Deterministic tests verify the expected transitions, waits, failures,
+and recovery behavior. These checks give the agent concrete feedback to revise
+its code, while giving reviewers a consistent structure to follow.
+
+Use this development workflow for ordinary Java applications as well as AI
+applications. The application itself does not need an LLM dependency.
+See [Skill and build setup](#use-flower-with-chatgpt-and-codex).
+
+<a id="before--after"></a>
+
+## Before And After: Make The Sequence Visible
+
+A payment workflow may begin with execution logic spread across several places:
+
+```text
+Scheduled poller   → scan active orders and switch on status
+Event listener    → set a shared "paid" flag
+Deadline field    → decide when waiting has timed out
+Service methods   → prepare and fulfill the order
+```
+
+Each piece is familiar. Understanding one workflow, though, requires following
+all of them. With Flower, the builder above declares the stages together, and
+a waiting Step registers its interest, checks its completion condition, and
+returns a result:
 
 ```java
 final class WaitForPaymentStep extends Step {
@@ -139,121 +178,78 @@ final class WaitForPaymentStep extends Step {
             return StepResult.done();
         }
         if (ctx.timedOut()) {
-            return StepResult.fail(new IllegalStateException("payment timeout"));
+            return StepResult.fail(
+                    new IllegalStateException("payment timeout"));
         }
         return StepResult.stay();
     }
 }
 ```
 
-Now the current step is visible. The transition is the return value. The wait
-is a subscription plus a timeout that Flower cleans up for you. The same flow
-can be tested with a manual clock and `tickOnce()`, without starting a
-scheduler or database. That is the readable shape a new engineer can follow
-and repair.
+The wait is explicit. The next transition is a return value. Flower releases
+subscriptions created through `StepContext` when the Step exits, resets, or the
+Flow terminates.
 
-## Where It Comes From
+This is a **transient, in-memory wait**. An event published before subscription
+is not retained for this Step. Signals are not durable business facts, and
+`startTimeout(...)` is not a durable deadline. Recovery requires recoverable
+domain state and an explicit checkpoint strategy; see
+[Execution boundaries](#execution-boundaries).
 
-Flower's `Worker -> Flow -> Step -> StepResult` execution model was shaped by
-practical experience gained while developing industrial equipment control
-systems and business applications.
+## More Than Splitting A Method Into Smaller Methods
 
-It generalizes recurring patterns observed in long-running, stage-based
-processes into a reusable workflow runtime for Java applications: explicit
-execution stages, result-driven transitions, waits, timeouts, retries, human
-intervention, and inspectable execution traces.
+Small methods organize code. Flower also supplies a common execution contract
+for work that progresses over time.
 
-The underlying discipline is simple: make the current state visible, make
-transitions explicit, keep each unit of work small, and leave a trace that a
-human can inspect.
-
-## Why And When To Use It
-
-Use Flower when application work has multiple phases and should progress over
-time or in response to events:
-
-- order processing that waits for payment, inventory, or fulfillment signals
-- game turns where a flow waits for player input and animation completion
-- logistics or device workflows where each unit of work moves through zones
-- retryable background coordination that should remain testable
-- AI agent applications that coordinate model turns, tools, context, and
-  governed domain actions
-- AI-assisted work that waits for model, tool, approval, or action results
-- demos and simulations that need deterministic manual ticks
-
-Flower makes this kind of logic easier to reason about because every flow has a
-current step, every step returns an explicit result, and time/event waiting is
-represented by `StepContext` instead of ad-hoc threads and sleeps.
-
-## AI Automation And AI-Assisted Development
-
-Flower is not an LLM SDK, but it provides a useful execution structure around
-AI work. Model calls, tool waits, validation, approvals, governed actions, and
-operator intervention can be represented as visible Flow phases instead of a
-hidden callback chain:
-
-```text
-prepare context
-  -> run model or agent
-  -> wait for tools
-  -> validate result
-  -> request approval when required
-  -> execute governed action
-  -> observe final state
-```
-
-The wider Flower JVM ecosystem keeps those responsibilities separate:
-
-| Project | AI automation responsibility |
+| Need | Flower's contribution |
 | --- | --- |
-| Flower | Runs the surrounding application Flow and explicit waits. |
-| [Flower Agent](https://github.com/flowerjvm/flower-agent) | Owns AgentRun, model turns, transcripts, tool calls, budgets, and completion. |
-| [Flower AI Harness](https://github.com/flowerjvm/flower-ai-harness) | Validates final structured output and controls whole-task refinement or retry. |
-| [Flower Action Runtime](https://github.com/flowerjvm/flower-action-runtime) | Governs mutating actions with policy, approval, idempotency, and audit. |
+| See the execution structure | Declared Flow stages, stable Step IDs, and an inspectable current Step. |
+| Express transitions consistently | `StepResult` instead of application-specific flags and return codes. |
+| Wait for external work | Step-owned subscriptions, signals, and timeout helpers. |
+| Test without real scheduling | `engine.attach()`, `worker.tickOnce()`, and a controllable clock. |
+| Inspect a running application | `Engine.dump()`, lifecycle listeners, and optional tracing and console views. |
+| Resume selected work after restart | Opt-in checkpoint/resume with an explicit per-Step recovery policy. |
 
-See [Flower Agent Samples](https://github.com/flowerjvm/flower-agent-samples)
-for a runnable Spring Boot application that combines these layers with an
-OpenAI-compatible cloud or local model.
-
-Flower also helps when coding agents generate ordinary application code. The
-small `Flow -> Step -> StepResult` contract gives human reviewers and coding
-agents one execution shape to inspect. The Flower plugin provides guidance
-before generation, `flower-check` detects known misuse during the build, and
-deterministic tests verify behavior afterward. Flower structures the generated
-or hand-written orchestration; it does not replace the coding agent itself.
-
-## What Flower Is Not
-
-Once the flow is visible, it is worth being precise about scope.
-
-Flower is not BPMN, Temporal, Camunda, a distributed scheduler, or a durable
-saga engine. It stays in one JVM on purpose. If you need cross-service
-distributed transactions, durable execution replay, a BPMN designer, or a
-multi-node scheduler, reach for those tools. That is not what Flower is for.
-
-For small flows, an enum and a switch are genuinely enough. Use them.
-Spring StateMachine is a good fit when your main problem is modeling
-formal states, events, transitions, and guards.
-
-Flower is for the other case: your domain model stays in your Spring Boot
-application, but a long-running internal flow needs a small runtime to execute
-it, one that waits for events, handles timeouts, checkpoints, resumes,
-inspects, and tests inside one JVM. State machines model state. Flower runs
-flows.
-
-The cost of "just build it yourself" is that, one requirement at a time, you
-rebuild a runtime you did not mean to write.
-
-| What the flow eventually needs | Hand-rolled around an enum | With Flower |
-| --- | --- | --- |
-| Wait for an event, then clean up the subscription | Register/deregister listeners by hand; leaks are easy to miss. | `ctx.subscribe(...)` in `onEnter`, released automatically on exit/reset/finish. |
-| Timeout on a wait | Deadline field plus a scheduler that checks it. | `ctx.startTimeout(30_000)` and `ctx.timedOut()`. |
-| Retry or explicit failure transition | Extra state, counters, and branches in the switch. | `StepResult.repeat()` / `StepResult.fail(cause)`. |
-| Checkpoint and resume after restart | Serialize position, persist it, rebuild, and resume. | `durable()` plus a `FlowCheckpointStore`. |
-| Deterministic tests | Abstract the clock, bypass the scheduler, and fake the bus yourself. | `ManualClock` plus `worker.tickOnce()`. |
-| Inspect what is running right now | Build your own dump/admin view. | `Engine.dump()` plus optional console. |
+Building these facilities one requirement at a time can turn application code
+into a runtime of its own. Flower supplies that shared machinery. Keep domain
+behavior in services and domain objects, and keep Steps focused on coordination.
 
 ## Quick Start
+
+<a id="install-from-maven-central"></a>
+
+### 1. Add Core
+
+For a plain Java application, add only `flower-core`.
+
+Maven:
+
+```xml
+<dependency>
+    <groupId>io.github.flowerjvm</groupId>
+    <artifactId>flower-core</artifactId>
+    <version>0.1.3</version>
+</dependency>
+```
+
+Gradle Kotlin DSL:
+
+```kotlin
+dependencies {
+    implementation("io.github.flowerjvm:flower-core:0.1.3")
+}
+```
+
+No custom Maven repository or `mavenLocal()` is required.
+
+### 2. Declare A Flow, Wait For An Event, And Advance It
+
+Run the following `FlowerQuickStart` class with Core on the classpath.
+It defines all application classes it uses and advances the Worker manually,
+without Spring, a database, a background scheduler, or `Thread.sleep`.
+
+`PrintStep` represents demo work. The event is deliberately published after
+the waiting Step has subscribed.
 
 ```java
 import io.github.flowerjvm.flower.core.engine.Engine;
@@ -266,92 +262,215 @@ import io.github.flowerjvm.flower.core.time.SystemClock;
 import io.github.flowerjvm.flower.core.worker.Worker;
 
 public final class FlowerQuickStart {
-
-    static final class PrepareOrderStep extends Step {
-        @Override
-        protected StepResult onTick(StepContext ctx) {
-            System.out.println("prepare " + ctx.flowId());
-            return StepResult.done();
-        }
-    }
-
-    static final class CompleteOrderStep extends Step {
-        @Override
-        protected StepResult onTick(StepContext ctx) {
-            System.out.println("complete " + ctx.flowId());
-            return StepResult.done();
-        }
-    }
-
     public static void main(String[] args) throws Exception {
-        Worker worker = Worker.builder("orders")
-                .intervalMillis(100)
-                .build();
-
+        Worker worker = Worker.builder("orders").build();
         Engine engine = Engine.builder()
                 .clock(SystemClock.INSTANCE)
                 .eventBus(InMemoryEventBus.create())
                 .worker(worker)
                 .build();
 
-        Flow flow = Flow.builder("order", "order-1")
-                .step("prepare", new PrepareOrderStep())
-                .step("complete", new CompleteOrderStep())
+        Flow flow = Flow.builder("order", "ORD-1")
+                .step("accept", new PrintStep("accepted"))
+                .step("payment", new WaitForPaymentStep())
+                .step("fulfill", new PrintStep("fulfilled"))
                 .build();
 
-        engine.start();
-        worker.submit(flow);
+        engine.attach();
+        try {
+            worker.submit(flow);
+            worker.tickOnce(); // Complete accept; payment is next.
+            worker.tickOnce(); // Enter payment, subscribe, and stay.
+            System.out.println("waiting at " + flow.currentStepId());
 
-        Thread.sleep(500);
-        engine.stop();
+            engine.eventBus().publish(new PaymentApproved("ORD-1"));
+
+            worker.tickOnce(); // Complete payment; fulfill is next.
+            worker.tickOnce(); // Complete fulfill and finish the Flow.
+            System.out.println("flow " + flow.state());
+        } finally {
+            engine.stop();
+        }
+    }
+
+    static final class PrintStep extends Step {
+        private final String message;
+
+        PrintStep(String message) {
+            this.message = message;
+        }
+
+        @Override
+        protected StepResult onTick(StepContext ctx) {
+            System.out.println(message + " " + ctx.flowId().flowKey());
+            return StepResult.done();
+        }
+    }
+
+    static final class WaitForPaymentStep extends Step {
+        @Override
+        protected void onEnter(StepContext ctx) {
+            ctx.startTimeout(30_000);
+            ctx.subscribe(PaymentApproved.class, event -> {
+                if (event.orderId().equals(ctx.flowId().flowKey())) {
+                    ctx.signal("paid");
+                }
+            });
+        }
+
+        @Override
+        protected StepResult onTick(StepContext ctx) {
+            if (ctx.hasSignal("paid")) {
+                return StepResult.done();
+            }
+            if (ctx.timedOut()) {
+                return StepResult.fail(
+                        new IllegalStateException("payment timeout"));
+            }
+            return StepResult.stay();
+        }
+    }
+
+    static final class PaymentApproved {
+        private final String orderId;
+
+        PaymentApproved(String orderId) {
+            this.orderId = orderId;
+        }
+
+        String orderId() {
+            return orderId;
+        }
     }
 }
 ```
 
-For deterministic tests, use `engine.attach()` and `worker.tickOnce()` instead
-of starting the scheduler.
+Output:
 
-```java
-Worker worker = Worker.builder("test").build();
-Engine engine = Engine.builder()
-        .eventBus(InMemoryEventBus.create())
-        .worker(worker)
-        .build();
-
-engine.attach();
-worker.submit(flow);
-
-worker.tickOnce();
-worker.tickOnce();
+```text
+accepted ORD-1
+waiting at payment
+fulfilled ORD-1
+flow FINISHED
 ```
 
-## Install From Maven Central
+Each Worker tick calls at most one `onTick` per active Flow. Completing
+`accept` selects `payment`; its `onEnter` runs on the following tick.
+Once the final Step returns `done()`, the Flow finishes and the Worker removes
+it from its active set.
 
-Flower `0.1.3` is published to Maven Central under the
-`io.github.flowerjvm` group. No custom repository or `mavenLocal()` is
-required.
+For scheduled execution, use `engine.start()` and stop the Engine with the
+application's lifecycle. Let the scheduler drive the Worker; do not call
+`tickOnce()` in scheduled mode. Spring Boot users can let the starter manage
+that lifecycle. To test elapsed time deterministically, use `ManualClock`;
+see [Testing](#testing).
 
-For a plain Java application, start with `flower-core`:
+<a id="mental-model"></a>
 
-Gradle Kotlin DSL:
+## The Execution Contract
 
-```kotlin
-dependencies {
-    implementation("io.github.flowerjvm:flower-core:0.1.3")
-}
+Application code is organized as `Flow → Step → StepResult`. The runtime hosts it as:
+
+```text
+Engine
+  └─ Worker
+      └─ Flow
+          └─ Step
+              └─ StepResult
 ```
 
-Maven:
+`Engine` owns runtime services such as the clock, event bus, Workers, and
+listeners. In scheduled mode, each Core Worker ticks its active Flows on one
+scheduler thread. `FlowId(flowType, flowKey)` identifies a Flow and is unique
+across Workers within the same Engine.
 
-```xml
-<dependency>
-    <groupId>io.github.flowerjvm</groupId>
-    <artifactId>flower-core</artifactId>
-    <version>0.1.3</version>
-</dependency>
+### Step Lifecycle
+
+| Callback | Purpose |
+| --- | --- |
+| `onEnter(ctx)` | Run when a Step enters; initiate work or subscribe for completion. |
+| `onTick(ctx)` | Make a short, repeatable decision and return a `StepResult`. |
+| `onExit(ctx)` | Clean up when the current Step exits, including cancellation. |
+| `onReset(ctx)` | Reset for `repeat()`, before the Step re-enters. |
+
+Entry occurs again on re-entry. Durable recovery uses the Step's declared
+recovery policy; see [Checkpoint / Resume](docs/runtime-reference.md#checkpoint--resume).
+
+### Explicit Results
+
+| Result | Meaning |
+| --- | --- |
+| `stay()` | Keep the current Step and tick again later. |
+| `done()` | Advance to the next declared Step, or finish if this is the last. |
+| `repeat()` | Reset the current Step and run it again from the beginning. |
+| `goTo("stepId")` | Move to a declared Step by its stable ID. |
+| `finish()` | Finish successfully without running later Steps. |
+| `fail(cause)` | Fail the Flow. |
+
+These are `StepResult` factory methods. `repeat()` means reset and re-enter;
+it does not supply a business-safe retry or backoff policy by itself.
+
+<a id="step-design-rules"></a>
+<a id="step-ids-stepno-and-shared-state"></a>
+<a id="event-driven-steps"></a>
+
+Keep Steps small and non-blocking. Have application services own external work,
+and observe completion through signals, events, or domain state. A blocking
+network call or sleep in `onEnter` or `onTick` stalls other Flows on that Worker.
+Dispatch slow work through an appropriate asynchronous service or executor.
+
+Create fresh Step instances when building each Flow and pass service
+dependencies through constructors. Use `stepNo` only for a small local cursor,
+and keep recoverable business state in domain storage. See
+[Step design](docs/runtime-reference.md#step-design-rules) and
+[events and waits](docs/runtime-reference.md#event-driven-steps).
+
+<a id="typical-use-with-kafka"></a>
+<a id="production-notes-for-kafka"></a>
+<a id="flow-submission"></a>
+<a id="execution-context"></a>
+<a id="event-bus-choices"></a>
+<a id="bloom-event-example"></a>
+
+## Fits Inside Your Application
+
+Flower is an execution layer. Your domain model and dependency-injection
+container keep their existing responsibilities.
+
+```text
+REST / Kafka input
+        ↓
+Application workflow: Flow + Step classes
+        ↓
+Domain services, repositories, SDK adapters
 ```
 
-For Spring Boot applications, use the starter instead:
+In a multi-module Spring application, the workflow module can depend on Flower
+while the domain module keeps its own objects, rules, and services.
+
+For Kafka-backed work, preserve the distinction:
+
+```text
+Kafka event  = something happened
+Flower Step  = decide whether execution can advance
+Database     = remember the business fact
+```
+
+Persist the domain fact, publish an in-JVM notification, and let the Step decide
+whether to advance. Submit a Flow after commit when it depends on newly stored
+state. The host application handles duplicate events, inbox/outbox patterns
+where needed, and startup recovery of active work.
+
+See [Kafka integration](docs/runtime-reference.md#typical-use-with-kafka),
+[Flow submission](docs/runtime-reference.md#flow-submission),
+[Bloom integration](docs/runtime-reference.md#event-bus-choices), and
+[Execution context](docs/runtime-reference.md#execution-context).
+`ExecutionContext` carries execution identity; its `tenantId` does not change
+the `FlowId` used for duplicate detection.
+
+## Spring Boot
+
+Use `flower-spring-boot-starter` for Java 17 / Spring Boot 3.x applications:
 
 ```kotlin
 dependencies {
@@ -359,1098 +478,268 @@ dependencies {
 }
 ```
 
-Add only the modules your application needs:
-
-| Use case | Artifact |
-| --- | --- |
-| Core Flow / Worker runtime | `io.github.flowerjvm:flower-core:0.1.3` |
-| Spring Boot auto-configuration | `io.github.flowerjvm:flower-spring-boot-starter:0.1.3` |
-| JDBC checkpoints | `io.github.flowerjvm:flower-persistence-jdbc:0.1.3` |
-| Logging, metrics, tracing, and dumps | `io.github.flowerjvm:flower-observability:0.1.3` |
-| Offline datasets, experiments, and evaluators | `io.github.flowerjvm:flower-evaluation:0.1.3` |
-| Deterministic test helpers | `io.github.flowerjvm:flower-testkit:0.1.3` |
-| Event-driven execution | `io.github.flowerjvm:flower-eventloop:0.1.3` |
-| Event-loop JDBC checkpoints | `io.github.flowerjvm:flower-eventloop-persistence-jdbc:0.1.3` |
-
-See [Modules And Maturity](#modules-and-maturity) before adopting an MVP
-module. The Bloom adapter is published separately as
-`io.github.flowerjvm:bloom-flower-adapter:0.1.1`.
-
-### Java compatibility
-
-| Build or artifact | Minimum Java |
-| --- | --- |
-| `flower-core`, event-loop, persistence, observability, evaluation, testkit, and Flower Check artifacts | Java 8 |
-| `flower-spring-boot-starter` | Java 17 and Spring Boot 3.x |
-| Full Flower repository build | JDK 17 |
-
-CI runs the Java 8-compatible modules on a Java 8 runtime and verifies the full
-reactor on JDK 17 and 21. A Java 8/11 application can use the compatible
-artifacts, but it cannot load the Spring Boot starter because that artifact is
-compiled for Java 17.
-
-Build-time Flower usage checks are available through the
-[`flower-check-maven-plugin`](flower-check-maven-plugin/README.md) and
-[`flower-check-gradle-plugin`](flower-check-gradle-plugin/README.md), both at
-version `0.1.3`.
-
-## Use Flower With ChatGPT And Codex
-
-Install the [Flower plugin for ChatGPT and Codex](https://chatgpt.com/plugins/plugins_6a6b70b4903081918ec3eb37651cf01f).
-Coding agents can build, verify, and maintain Flower workflows directly in
-your Java project. The plugin includes guidance for Flower application
-workflows and governed actions with Flower Action Runtime.
-
-## Typical Use With Kafka
-
-Flower works well when Kafka tells a Spring Boot service that something
-happened and the service needs to advance an internal flow.
-
-Kafka tells the application that something happened. Flower decides whether the
-current step can move forward. The database remembers the business fact.
-
-This example keeps Kafka concerns such as duplicate handling, inbox/outbox, and
-startup recovery out of the main flow. Those belong in production code, not in
-the first shape.
-
-```java
-@Component
-final class OrderKafkaListener {
-    private final Engine engine;
-    private final OrderRepository orders;
-    private final OrderFlowFactory flows;
-
-    @KafkaListener(topics = "order-created")
-    void onOrderCreated(OrderCreated event) {
-        orders.markCreated(event.orderId());
-
-        engine.worker("orders").submit(
-                flows.createOrderFlow(event.orderId()),
-                DuplicatePolicy.IGNORE);
-    }
-
-    @KafkaListener(topics = "payment-approved")
-    void onPaymentApproved(PaymentApproved event) {
-        orders.markPaymentApproved(event.orderId());
-        engine.eventBus().publish(event);
-    }
-}
-
-final class OrderFlowFactory {
-    private final OrderRepository orders;
-
-    OrderFlowFactory(OrderRepository orders) {
-        this.orders = orders;
-    }
-
-    Flow createOrderFlow(String orderId) {
-        return Flow.builder("order", orderId)
-                .step("accept", new AcceptOrderStep())
-                .step("payment", new WaitPaymentStep(orders))
-                .step("complete", new CompleteOrderStep())
-                .build();
-    }
-}
-
-final class WaitPaymentStep extends Step {
-    private final OrderRepository orders;
-
-    WaitPaymentStep(OrderRepository orders) {
-        this.orders = orders;
-    }
-
-    @Override
-    protected void onEnter(StepContext ctx) {
-        ctx.startTimeout(30_000);
-        ctx.subscribe(PaymentApproved.class, event -> {
-            if (event.orderId().equals(ctx.flowId().flowKey())) {
-                ctx.signal("paid"); // event arrived; check the DB on the next tick
-            }
-        });
-    }
-
-    @Override
-    protected StepResult onTick(StepContext ctx) {
-        String orderId = ctx.flowId().flowKey();
-        if (orders.isPaymentApproved(orderId)) {
-            return StepResult.done();
-        }
-        if (ctx.timedOut()) {
-            return StepResult.fail(new IllegalStateException("payment timeout"));
-        }
-        return StepResult.stay();
-    }
-}
-```
-
-The event handler does not complete the Step directly. It records a signal, and
-the next `onTick` completes the Step by returning `StepResult.done()` after the
-database says the payment is approved.
-
-The split is simple:
-
-```text
-Kafka event  = something happened
-Flower Step  = decide stay, done, or fail
-Database     = remember the business fact
-```
-
-In a Spring multi-module application, Flower usually belongs in the workflow
-module rather than the domain model itself:
-
-```text
-order-api       REST/Kafka input
-order-domain    Order, OrderStatus, repository, domain service
-order-workflow  Flower FlowFactory and Step classes
-order-events    Kafka event DTOs, publisher, listener
-order-infra     DB, Kafka, Flower engine config
-```
-
-The Kafka listener stays thin: persist the domain fact, publish the event to
-Flower's in-JVM event bus, and let the Step decide whether the flow can advance.
-
-### Production Notes For Kafka
-
-Keep the boundaries boring on purpose:
-
-- Kafka carries domain events.
-- Flower keeps the internal execution position.
-- The DB keeps business facts and recovery state.
-- Flower signals are hints, not business facts.
-- Use an inbox or event id check for duplicate Kafka events when needed.
-- Use an outbox for external events or commands that must be published
-  reliably.
-- On startup, recover or submit flows for DB records that are still active but
-  not currently running.
-
-## Operational Boundaries
-
-Flower core is deliberately small, so its runtime contract is also explicit:
-
-- Concurrency: a Worker ticks its Flows on one scheduler thread. Submit/cancel
-  requests are queued. Event callbacks may call `ctx.signal(...)`; do not mutate
-  Step fields directly from callback threads.
-- Recovery: durable Flows checkpoint the current step id, `stepNo`, execution
-  context, and definition version. Recovery rebuilds a fresh Flow and resumes
-  from that checkpoint. It is not deterministic replay or exactly-once side
-  effect execution, so external writes and API calls should be idempotent.
-- Durable event-loop effects have explicit crash windows. An `await(...).thenRun`
-  or `thenPublish` effect runs after the await checkpoint, so a process failure
-  in between can leave the saved wait without having dispatched the effect.
-  Effects attached to `next`, `goTo`, `finish`, or `fail` run before the next or
-  terminal checkpoint, so a recovered application may repeat them. Important
-  external work needs a durable intent/outbox or operation record with a stable
-  idempotency key; Flower does not make either ordering exactly-once.
-- Scale: the default Worker is tick-based and simple to test. It is a good fit
-  for small to medium in-process workloads. Very large numbers of idle Flows may
-  need application-level sharding or a different Worker scheduling strategy.
-  Possible scheduling optimizations are tracked in [ROADMAP.md](ROADMAP.md).
-
-## Mental Model
-
-```text
-Engine
-  -> Worker
-      -> Flow
-          -> Step
-              -> StepResult
-              -> stepNo
-```
-
-- `Engine`: top-level runtime. Owns `Clock`, `EventBus`, `Worker`s, and
-  listeners.
-- `Worker`: single-threaded tick loop. Owns active flows and ticks each
-  non-terminal flow once per worker tick.
-- `Flow`: one ordered sequence of steps for one domain instance, identified by
-  `FlowId(flowType, flowKey)`.
-- `Step`: a small stateful orchestration unit. It receives a `StepContext` and
-  returns `StepResult`.
-- `StepResult`: the explicit transition returned by a Step.
-- `stepId`: a stable flow-level string id used by `goTo`, dumps, checkpoints,
-  and admin views.
-- `stepNo`: optional step-local cursor for tiny sub-state inside one step.
-
-## Structure For Generated Code
-
-Flower core is not an AI framework, and it does not depend on an LLM. Its
-relevance in the AI coding era is structure.
-
-AI can generate more orchestration code than humans can comfortably review
-when that code becomes scattered callbacks, service methods, scheduled jobs,
-and background threads. Flower's contribution is to force that behavior into a
-small, inspectable shape:
-
-```text
-Engine -> Worker -> Flow -> Step -> StepResult
-```
-
-Generated and hand-written orchestration both become easier to inspect, test,
-recover, observe, and change. A step starts work, checks state, and returns an
-explicit result, so a reviewer, tool, or coding agent can follow it.
-
-`flower-check` is available as build-time tooling for host applications. It can
-reject known Flower anti-patterns such as blocking a worker tick or hiding
-orchestration outside the Flow / Step boundary. Longer-term developer tooling
-ideas live in [ROADMAP.md](ROADMAP.md); they are intentionally outside
-`flower-core`.
-
-## Step Lifecycle
-
-```text
-onEnter(ctx)       called once when the step becomes current
-onTick(ctx)        called once per worker tick while the step is current
-onExit(ctx)        called when the step leaves by done, goTo, finish, or fail
-onReset(ctx)       called for StepResult.repeat(), then the step re-enters
-```
-
-`onTick` returns one of:
-
-| Result | Meaning |
-| --- | --- |
-| `StepResult.stay()` | Keep this step and tick again later. |
-| `StepResult.done()` | Finish this step and move to the next declared step, or finish the flow if this was the last step. |
-| `StepResult.repeat()` | Reset this step and run it from the beginning. |
-| `StepResult.goTo("stepId")` | Jump to another flow-level step id. |
-| `StepResult.finish()` | Finish the flow successfully without running later steps. |
-| `StepResult.fail(Throwable)` | Fail the flow. |
-
-## Step IDs, stepNo, And Shared State
-
-Flower already has step ids. They are flow-level string ids:
-
-```java
-Flow flow = Flow.builder("order", orderId)
-        .step("accept", new AcceptOrderStep(orderService))
-        .step("payment", new WaitForPaymentStep())
-        .step("fulfill", new FulfillOrderStep(warehouseService))
-        .build();
-
-return StepResult.goTo("payment");
-```
-
-The core keeps step ids as strings because the same ids must be readable in
-logs, dumps, checkpoints, admin screens, and external configuration. If you
-want type safety in application code, wrap them with an enum:
-
-```java
-enum OrderStep {
-    ACCEPT("accept"),
-    PAYMENT("payment"),
-    FULFILL("fulfill");
-
-    private final String id;
-
-    OrderStep(String id) {
-        this.id = id;
-    }
-
-    String id() {
-        return id;
-    }
-}
-```
-
-```java
-Flow flow = Flow.builder("order", orderId)
-        .step(OrderStep.ACCEPT.id(), new AcceptOrderStep(orderService))
-        .step(OrderStep.PAYMENT.id(), new WaitForPaymentStep())
-        .step(OrderStep.FULFILL.id(),
-                new FulfillOrderStep(warehouseService))
-        .build();
-```
-
-Use `stepNo` only as a small cursor inside one Step. If it starts representing
-business states such as `WAITING_PAYMENT`, `RETRYING`, `FULFILLING`, or
-`FAILED`, split the behavior into explicit Steps.
-
-When multiple Steps need shared values, do not hide them in `stepNo` or
-step-local signals. Use domain state, or pass a small run context object while
-building the Flow:
-
-```java
-final class OrderFlowRun {
-    final String orderId;
-    PaymentResult paymentResult;
-    FulfillmentPlan fulfillmentPlan;
-
-    OrderFlowRun(String orderId) {
-        this.orderId = orderId;
-    }
-}
-```
-
-```java
-OrderFlowRun run = new OrderFlowRun(orderId);
-
-Flow flow = Flow.builder("order", orderId)
-        .step(OrderStep.ACCEPT.id(), new AcceptOrderStep(run, orderService))
-        .step(OrderStep.PAYMENT.id(), new WaitForPaymentStep(run, paymentService))
-        .step(OrderStep.FULFILL.id(),
-                new FulfillOrderStep(run, warehouseService))
-        .build();
-```
-
-For durable flows, keep recoverable business state in your domain storage. A
-run context object is convenient for transient coordination, but it is not a
-durable source of truth after process restart.
-
-## Event-Driven Steps
-
-Steps should be asynchronous in shape. Do not block a worker thread while
-waiting for outside work. Start or subscribe in `onEnter`, return `stay()` while
-waiting, and return `done()` when a signal or timeout says the work is ready.
-
-```java
-final class WaitForPaymentStep extends Step {
-
-    @Override
-    protected void onEnter(StepContext ctx) {
-        ctx.startTimeout(30_000);
-        ctx.subscribe(PaymentApproved.class, event -> {
-            if (event.orderId().equals(ctx.flowId().flowKey())) {
-                ctx.signal("paid");
-            }
-        });
-    }
-
-    @Override
-    protected StepResult onTick(StepContext ctx) {
-        if (ctx.hasSignal("paid")) {
-            return StepResult.done();
-        }
-        if (ctx.timedOut()) {
-            return StepResult.fail(new IllegalStateException("payment timeout"));
-        }
-        return StepResult.stay();
-    }
-}
-```
-
-If `onTick` needs the event data, attach it to the signal. Flower keeps only
-the latest payload for each signal name, which is usually what a waiting step
-needs:
-
-```java
-ctx.subscribe(PaymentApproved.class, event -> ctx.signal("paid", event));
-
-PaymentApproved approved = ctx.consumeSignal("paid", PaymentApproved.class);
-if (approved != null) {
-    return StepResult.done();
-}
-```
-
-Subscriptions made through `StepContext.subscribe(...)` are cleaned up
-automatically when the step exits, resets, or the flow terminates.
-
-You may also unsubscribe a specific event while a step is still running. Keep
-that pattern small. If the step starts to need its own large internal state
-machine, split the behavior into multiple explicit Steps instead.
-
-## Step Design Rules
-
-- Keep `onTick` short and non-blocking. No `sleep`, long polling, network waits,
-  or database loops inside the worker tick.
-- Start external work in `onEnter`, then observe completion through events,
-  signals, stored domain state, or timeouts.
-- Use `StepContext.subscribe(...)` for step-owned event subscriptions so Flower
-  can release them automatically.
-- Use `StepContext.eventBus().publish(...)` when a step needs to emit an event.
-- Use `stepNo` for small internal cursors, not for large hidden state machines.
-  If the cursor turns into business state, split the Step.
-- Put heavy domain logic in services. A step should orchestrate, not become the
-  domain model.
-- Pass dependencies through step constructors. Flower does not instantiate steps
-  by reflection and does not provide a DI container in core.
-- Give every step a stable, meaningful flow-level id. `goTo(...)` targets that
-  id, not the Java class name. Wrap ids in an enum when application code needs
-  type safety.
-- Keep shared values in domain state or an explicit run context object. Durable
-  flows must be recoverable from domain state and checkpoints, not from
-  transient Step fields alone.
-- Prefer immutable events and exact event classes. The default event buses match
-  by exact runtime type.
-- Treat a `Step` instance as owned by one `Flow`. Create fresh step instances
-  when building a new flow.
-- Use `Guard` for "do not enter this step yet" rules. Use `StepResult.stay()`
-  for "I entered and am waiting" rules.
-- Make terminal outcomes explicit. Return `done()` for success and
-  `fail(cause)` for failure.
-
-## Flow Submission
-
-```java
-Flow flow = Flow.builder("order", orderId)
-        .step("accept", new AcceptOrderStep(orderService))
-        .step("payment", new WaitForPaymentStep())
-        .step("fulfill", new FulfillOrderStep(warehouseService))
-        .build();
-
-worker.submit(flow);
-```
-
-`flowType` and `flowKey` form the `FlowId`. Submitting a duplicate flow defaults
-to `DuplicatePolicy.REJECT`. You can also use `IGNORE` or `REPLACE`.
-
-```java
-worker.submit(flow, DuplicatePolicy.REPLACE);
-```
-
-## Execution Context
-
-A `FlowId(flowType, flowKey)` answers "which domain instance is this flow for?"
-`ExecutionContext` answers "whose execution is this?"
-
-Use it when logs, dumps, checkpoints, admin views, or future audit/eval tooling
-need to connect one flow run to a tenant, user, session, run id, trace id, or
-correlation id.
-
-Existing code does not need to change. Flows default to
-`ExecutionContext.empty()`.
-
-```java
-import io.github.flowerjvm.flower.core.context.ExecutionContext;
-
-ExecutionContext execution = ExecutionContext.builder()
-        .tenantId("office-a")
-        .userId("user-1")
-        .sessionId("session-1")
-        .runId("run-123")
-        .traceId("trace-abc")
-        .correlationId("request-789")
-        .build();
-
-Flow flow = Flow.builder("order", "ORD-1")
-        .executionContext(execution)
-        .step("accept", new AcceptOrderStep(orderService))
-        .step("payment", new WaitForPaymentStep())
-        .build();
-```
-
-Steps can read it when they need execution identity:
-
-```java
-String tenantId = ctx.executionContext().tenantId().orElse("default");
-String runId = ctx.executionContext().runId().orElse("unknown");
-```
-
-Keep this context small. It is an execution id card, not a business context.
-Do not put roles, permissions, approval state, domain objects, agent ids,
-action ids, or policy decisions in Flower core context. Keep that state in the
-host application's own runtime or in a higher-level integration layer.
-
-`ExecutionContext` is attached to the `Flow`, not to a `ThreadLocal`. That keeps
-the same identity visible from steps, listeners, dumps, checkpoints, and
-recovery even when events or callbacks happen on other threads.
-
-Important: `tenantId` does not change Flower's duplicate-flow identity.
-`Worker` still uses only `FlowId(flowType, flowKey)` to detect duplicates. If
-two tenants can have the same domain key, make the `flowKey` globally unique in
-the host application, for example `office-a:DOC-1`.
-
-## Event Bus Choices
-
-`flower-core` includes `InMemoryEventBus` for simple setups and deterministic
-tests. Bloom is the small in-memory event bus provided in the Flower ecosystem.
-To share events with Bloom, use Bloom's optional `bloom-flower-adapter` module:
-
-```java
-EventBus bloom = LocalEventBus.create();
-
-Engine engine = Engine.builder()
-        .eventBus(BloomEventBus.wrap(bloom))
-        .worker(Worker.builder("main").build())
-        .build();
-```
-
-The adapter preserves the dispatch semantics of the wrapped Bloom bus.
-The adapter is owned by the Bloom repository so Flower's default build remains
-independent of Bloom.
-
-### Bloom Event Example
-
-When Flower is backed by Bloom, application code can publish to Bloom directly.
-Flower steps subscribed through `ctx.subscribe(...)` will receive the same
-events.
-
-```java
-EventBus bloom = LocalEventBus.create();
-
-Engine engine = Engine.builder()
-        .eventBus(BloomEventBus.wrap(bloom))
-        .worker(Worker.builder("orders").intervalMillis(100).build())
-        .build();
-```
-
-Application code publishes an ordinary Bloom event:
-
-```java
-final class PaymentService {
-    private final EventBus bloom;
-    private final OrderRepository orders;
-
-    PaymentService(EventBus bloom, OrderRepository orders) {
-        this.bloom = bloom;
-        this.orders = orders;
-    }
-
-    void approvePayment(String orderId) {
-        orders.markPaymentApproved(orderId); // business fact
-        bloom.publish(new PaymentApproved(orderId)); // wake waiting steps
-    }
-}
-```
-
-The waiting Flower step receives that Bloom event through the adapter:
-
-```java
-final class WaitPaymentStep extends Step {
-    private final OrderRepository orders;
-
-    WaitPaymentStep(OrderRepository orders) {
-        this.orders = orders;
-    }
-
-    @Override
-    protected void onEnter(StepContext ctx) {
-        ctx.startTimeout(30_000);
-        ctx.subscribe(PaymentApproved.class, event -> {
-            if (event.orderId().equals(ctx.flowId().flowKey())) {
-                ctx.signal("payment-approved");
-            }
-        });
-    }
-
-    @Override
-    protected StepResult onTick(StepContext ctx) {
-        if (orders.isPaymentApproved(ctx.flowId().flowKey())) {
-            return StepResult.done();
-        }
-        if (ctx.timedOut()) {
-            return StepResult.fail(new IllegalStateException("payment timeout"));
-        }
-        return StepResult.stay();
-    }
-}
-```
-
-In this setup Bloom remains the application event bus, while Flower uses the
-same events to advance the internal flow. The signal is only a wake-up hint; the
-database remains the source of truth.
-
-## Spring Boot
-
-`flower-spring-boot-starter` auto-configures:
-
-- a `Clock` bean, defaulting to `SystemClock.INSTANCE`
-- an `EventBus` bean, defaulting to `InMemoryEventBus`
-- a `FlowCheckpointStore`, when JDBC persistence is explicitly enabled
-- an `Engine` bean
-- a lifecycle bean that starts and stops the engine with the application context
-
-Example configuration:
-
 ```yaml
 flower:
   enabled: true
   auto-start: true
-  persistence:
-    type: none
   workers:
     - name: orders
       interval-ms: 100
-    - name: alerts
-      interval-ms: 250
 ```
 
-Provide your own `Engine`, `EventBus`, `Clock`, or `FlowerListener` beans when
-you need more control. The auto-configuration backs off where appropriate.
+The starter configures the Engine and its lifecycle, with clock and event-bus
+defaults. JDBC checkpoints remain an explicit opt-in. Java 8/11 applications
+can use the compatible Core artifacts but cannot load this starter.
 
-For durable flows with JDBC checkpoints, add `flower-persistence-jdbc`, create
-the table using the packaged schema SQL, and enable the store explicitly:
+See [Spring Boot configuration](docs/runtime-reference.md#spring-boot).
 
-```yaml
-flower:
-  persistence:
-    type: jdbc
-    jdbc:
-      dialect: postgresql
-      initialize-schema: never
-```
+<a id="testing-with-flower-testkit"></a>
 
-Supported dialects are `postgresql`, `mysql`, `oracle`, and `h2`. The starter
-does not create tables automatically; `initialize-schema` is reserved and
-currently only supports `never`. If you need a custom backend, provide a
-`FlowCheckpointStore` bean and the auto-configured `Engine` will use it.
+## Testing
 
-## Checkpoint / Resume
+Core supports manual execution through `engine.attach()` and `worker.tickOnce()`.
+`ManualClock` lets tests control time. The optional MVP `flower-testkit` bundles
+common test setup and assertions.
 
-Flower's durable mode is checkpoint/resume, not durable execution replay.
-It stores only the current Flow position so an application can rebuild a fresh
-Flow and resume ticking from that position.
+With the testkit dependency added, this example reuses the nested classes from
+`FlowerQuickStart` above:
 
 ```java
-Flow flow = Flow.builder("order", orderId)
-        .durable()
-        .durableStep("payment", new WaitPaymentStep(orderService),
-                RecoveryPolicy.REENTER_IDEMPOTENT)
-        .durableStep("fulfill", new FulfillOrderStep(warehouseService),
-                RecoveryPolicy.REENTER_IDEMPOTENT)
-        .build();
+try (FlowTestHarness harness = FlowTestHarness.create()) {
+    Flow flow = Flow.builder("order", "ORD-1")
+            .step("accept", new FlowerQuickStart.PrintStep("accepted"))
+            .step("payment", new FlowerQuickStart.WaitForPaymentStep())
+            .build();
+
+    harness.submit(flow)
+            .tick() // Complete accept and select payment.
+            .tick() // Enter payment and subscribe before publishing.
+            .assertFlow("order", "ORD-1")
+            .isRunning()
+            .currentStepIs("payment");
+
+    harness.publish(new FlowerQuickStart.PaymentApproved("ORD-1"))
+            .tick()
+            .assertFlow("order", "ORD-1")
+            .isFinished();
+}
 ```
 
-Durable flows require every step to declare a recovery policy. A regular
-`Step` may opt in through `durableStep(...)` with
-`RecoveryPolicy.REENTER_IDEMPOTENT` when re-running `onEnter` is safe. If
-initial entry and recovery setup must be different, extend `DurableStep` with
-`RecoveryPolicy.RESUME_ONLY` and implement `onResume(ctx)`.
+Import `io.github.flowerjvm.flower.testkit.FlowTestHarness` and `Flow`.
+This uses a two-Step Flow: `accept → payment`, with payment as the final Step.
+The three-Step quick-start Flow has an additional fulfillment stage.
 
-```java
-Flow recovered = Flow.builder("order", orderId)
-        .durable()
-        .durableStep("payment", new WaitPaymentStep(orderService),
-                RecoveryPolicy.REENTER_IDEMPOTENT)
-        .durableStep("fulfill", new FulfillOrderStep(warehouseService),
-                RecoveryPolicy.REENTER_IDEMPOTENT)
-        .build()
-        .recoverFrom(checkpoint);
-```
+See [Testkit setup and recovery tests](docs/runtime-reference.md#testing-with-flower-testkit).
 
-Applications that want a small startup helper can register factories by
-`flowType` and recover the checkpoints they choose:
+<a id="observability"></a>
+<a id="spring-boot-dump-endpoint"></a>
+<a id="spring-boot-console"></a>
 
-```java
-FlowFactoryRegistry registry = FlowFactoryRegistry.builder()
-        .register("order", id -> buildOrderFlow(id.flowKey()))
-        .build();
+## Inspect The Same Model At Runtime
 
-FlowRecoveryService recovery = FlowRecoveryService.create(store, registry);
-recovery.recoverActiveForWorker(engine.worker("orders"));
-```
+The Flow you declare is also the structure you inspect when the application
+is running.
 
-The helper only rebuilds fresh Flows and submits them to the chosen Worker. It
-does not start Workers, create schema, lock rows, delete failed checkpoints, or
-turn Flower into an event replay engine.
+`Engine.dump()` exposes active Flows, their current Step, declared Step order,
+and execution context. Lifecycle listeners observe submission, entry, exit,
+completion, cancellation, and failure. Optional trace listeners and sinks add
+execution history and correlated run information.
 
-Core exposes `FlowCheckpointStore` as the storage boundary. The default store
-is no-op, so existing transient flows are unaffected. Core does not create DB
-tables. JDBC, Redis, JPA, or file-backed checkpoint stores should live in
-optional modules or in the host application, and schema initialization should
-be explicit and opt-in.
+The Spring Boot starter can expose an opt-in internal console in the
+application's existing web server:
 
-Durable checkpoints keep the `ExecutionContext` with the saved flow position.
-After recovery, the same logical run keeps the same `runId`, `traceId`, tenant,
-and user identifiers. Flower does not regenerate a new run id during recovery.
+![Flower console showing Workers, active Flows, current Steps, and execution context](assets/flower-console-runtime.png)
 
-Core `StepContext.startTimeout(...)` is a runtime-only helper and is not stored
-in durable checkpoints. Durable Flows reject it so a restart cannot silently
-reset or lose a deadline. For durable waits, store `dueAtMillis` or equivalent
-deadline data in domain state, or use the event-loop runtime's await deadlines.
+[Flower Studio](https://github.com/flowerjvm/flower-studio) is a separate
+read-only local trace consumer. It explores execution paths, waits, recovery,
+evaluation results, and optional Agent, Harness, and Action overlays.
+Production metrics and alerts remain the host observability platform's responsibility.
 
-`flower-persistence-jdbc` provides a JDBC implementation:
+Admin endpoints are disabled by default. Protect them with application
+authentication and appropriate network controls; they can expose execution
+identifiers and operational state.
 
-```java
-FlowCheckpointStore store = JdbcFlowCheckpointStore.create(
-        dataSource,
-        JdbcCheckpointDialects.postgresql());
+See [Observability, tracing, and console configuration](docs/runtime-reference.md#observability).
 
-Engine engine = Engine.builder()
-        .eventBus(InMemoryEventBus.create())
-        .worker(Worker.builder("orders").build())
-        .checkpointStore(store)
-        .build();
-```
+<a id="ai-automation-and-ai-assisted-development"></a>
 
-`flower-eventloop-persistence-jdbc` provides a separate JDBC implementation for
-event-loop checkpoints. Schema SQL is packaged for PostgreSQL, MySQL, Oracle,
-H2, and SQLite. Apply the SQL yourself, or copy it into Flyway/Liquibase. The
-JDBC stores do not create tables automatically.
+## AI Is A Use Case, Not A Dependency
 
-SQLite support is aimed at embedded desktop and agent applications that ship a
-local database file. The host supplies the SQLite JDBC driver and may use the
-same `DataSource` for its own tables and both Flower checkpoint stores. See
-[Persistence](docs/persistence.md) for the SQLite dialect, schema paths, and
-single-process operating guidance.
+The same execution model used by people and coding agents can also coordinate
+AI work inside an application.
 
-For dialect paths, execution-context columns, and migration notes, see
-[Persistence](docs/persistence.md).
+### Run AI Application Workflows
 
-Signals are still in-memory wake-up hints. Durable step decisions should be
-based on domain state that can be checked again after restart, not on signal
-payloads alone.
-
-Operational boundaries to remember:
-
-- Flow ownership is enforced inside one `Engine`, not across JVMs. If multiple
-  processes recover from the same checkpoint store, the application must
-  coordinate recovery with its own lock, lease, or leader election.
-- Checkpoint `save(...)` and `delete(...)` run synchronously on the Worker tick
-  path or EventWorker loop path. Slow storage slows Flow progress.
-- Terminal durable Flows save a terminal tombstone before cleanup delete, so
-  normal completion may perform both a save and a delete.
-- `definitionVersion` is checked only when both the Flow and checkpoint have a
-  non-null version.
-
-## Observability
-
-Attach `FlowerListener` implementations to observe flow submission, step
-entry/exit, flow completion, cancellation, failure, listener errors, and worker
-errors. `Engine.dump()` gives a snapshot of the current engine and worker
-state, including active flows, current step id, current step index, current
-stepNo, and the declared step list for admin/console views.
-
-The `0.1.2` runtime also emits payload-light `FlowerTraceEvent`
-records to opt-in `FlowerTraceListener` implementations. Unlike the older
-coarse lifecycle callbacks, these events include per-runtime sequence numbers,
-distinct `stepRunId` values for repeated Step attempts, effective transition
-outcomes, event-loop wait/resume reasons, and durable checkpoint/recovery
-facts. Existing `FlowerListener` implementations remain unchanged and do not
-pay Trace allocation cost.
-
-`flower-observability` provides `FlowerTraceSinkListener`, in-memory and
-composite sinks, `AsyncFlowerTraceSink`, `OpenTelemetryFlowerTraceSink`, and an
-append-only `JsonLinesFlowerTraceSink`. Storage and security adapters include
-fail-closed `TraceSanitizer`, deterministic trace-level sampling, explicit
-content capture policy, and a local content-addressed artifact store.
-
-For cross-project traces, `FlowerObservationEvent` is the common envelope and
-`FlowerObservationSink` is the shared destination. `FlowerTraceObservationSink`
-maps Core Flow events into it; separate Agent, AI Harness, and Action Runtime
-modules map their native lifecycle events without adding those domain types to
-Flower Core.
-
-Keep fast sanitization and sampling on the listener path, then hand selected
-events to the bounded asynchronous sink before file, artifact, database, HTTP,
-OpenTelemetry, or messaging I/O:
+Express the surrounding application phases using the same Core model:
 
 ```text
-Worker -> sanitize -> sample -> bounded async queue -> content/artifact -> storage
+Prepare context
+  → run model or agent
+  → wait for results
+  → validate output
+  → request approval when required
+  → execute a governed action
+  → observe the outcome
 ```
 
-Flower Core never captures prompts, Tool results, business payloads, or API
-keys. Higher layers must opt in to content capture and configure their own
-sanitization policy. Monitor each sink's drop/failure counters; trace
-backpressure never stops business Flow execution.
-
-[Flower Studio](https://github.com/flowerjvm/flower-studio) is the read-only
-local consumer for this correlated stream. It
-can open common observation JSON Lines or legacy Core trace JSON Lines and show
-Trace outcomes, nested runs, event timing, Step transitions, waits, recovery,
-and optional Agent, Harness, Tool, approval, and Action overlays. It also reads
-`flower-evaluation` result and feedback streams to show candidate quality,
-cases, scores, baseline regressions, and Trace references. Its Monitoring view
-adds bounded Trace outcomes, operation failure/duration, Step-transition,
-activity, source, token, approval, and evaluation-quality aggregates. It can
-also overlay a selected Core Flow run on an optional static
-`flower.flow-graph/v4` snapshot, keeping declared structure, observed paths,
-version mismatches, and runtime-only transitions visibly distinct. These views
-describe the currently loaded local files; production metrics and alerts remain
-the job of Micrometer/OpenTelemetry and the host observability platform. See the
-[Flower Studio repository](https://github.com/flowerjvm/flower-studio) for the
-included runnable demo and its local-reference operating boundary.
-
-`flower-evaluation` supplies versioned Dataset, Example, Candidate, Experiment,
-Evaluator, Score, and Feedback contracts, deterministic rules, failure-isolated
-offline execution, baseline comparison, and local JSON Lines reference stores.
-It evaluates completed behavior; it does not replace AI Harness validation,
-Agent loops, or Action Runtime authorization. See the
-[Flower Evaluation README](flower-evaluation/README.md).
-
-See [Tracing, Studio, And Evaluation Architecture](docs/tracing-studio-evaluation.md)
-for the event contract and phased Studio/evaluation plan, and
-[Trace Storage And Security](docs/tracing-storage-security.md) for the reference
-pipeline and operating boundaries. [Domain Observation Adapters](docs/domain-observation-adapters.md)
-shows how Flow, Agent, Harness, and Action events share one correlated stream.
-
-Lifecycle listener snapshots stay lightweight. The declared step list is only
-materialized for dump/admin views so observability does not add work to every
-listener callback.
-
-### Spring Boot Dump Endpoint
-
-`flower-spring-boot-starter` can expose a read-only Engine dump endpoint when
-the application is already a Spring MVC web application. It is disabled by
-default because dump output can include flow keys, execution context, and
-operational state.
-
-```yaml
-flower:
-  admin:
-    dump:
-      enabled: true
-      path: /internal/flower/dump
-      pretty: false
-```
-
-With the default path, the endpoint is:
-
-```text
-GET /internal/flower/dump
-GET /internal/flower/dump?pretty=true
-```
-
-The endpoint uses the host application's web server. Flower does not start a
-separate console server. In production, keep this endpoint behind application
-authentication, a private network, VPN, or an admin gateway.
-
-### Spring Boot Console
-
-For a small built-in web view, enable the console endpoint:
-
-```yaml
-flower:
-  admin:
-    console:
-      enabled: true
-      path: /internal/flower/console
-      api-path: /internal/flower/console/dump
-      poll-interval-ms: 3000
-      flow-graph-url: http://localhost:8790/
-```
-
-Then open:
-
-```text
-GET /internal/flower/console
-```
-
-The console is served by the same Spring Boot application and polls the
-same-origin `api-path`. It shows Engine, Worker, Flow, current Step, stepNo,
-declared Step order, and execution context. The UI has Start, Stop, Refresh,
-and polling interval controls. Its `Flow Graph` button opens the configured
-read-only local source graph in a new tab. The Console itself does not analyze
-or serve source code. Use the optional development-only graph starter to manage
-the loopback server with the Spring lifecycle, or run the Maven plugin or CLI
-separately. Set `flow-graph-url` to an empty string to hide the button.
-
-Example runtime view:
-
-![Flower Spring Boot Console showing Workers, active Flows, current Steps, and execution context](assets/flower-console-runtime.png)
-
-To start the local graph with a Spring Boot development profile, add the
-separate Flower Flow Graph starter:
-
-```xml
-<dependency>
-  <groupId>io.github.flowerjvm</groupId>
-  <artifactId>flower-flow-graph-spring-boot-starter</artifactId>
-  <version>0.1.0</version>
-  <scope>runtime</scope>
-</dependency>
-```
-
-```yaml
-flower:
-  flow-graph:
-    enabled: true
-    project-root: .
-    port: 8790
-```
-
-The graph starter is disabled by default and binds only to the loopback
-interface. Omit it or leave it disabled in production.
-
-This is an internal/admin surface, not a public endpoint. Do not expose it
-directly to the internet.
-
-## Modules And Maturity
-
-The main stable center is `flower-core`. Everything else orbits it.
-
-Core:
-
-- `flower-core`: stable center. Engine, Worker, Flow, Step, event bus, clock,
-  and listener APIs.
-
-Persistence / integration:
-
-- `flower-persistence-jdbc`: JDBC `FlowCheckpointStore` plus schema SQL for
-  PostgreSQL, MySQL, Oracle, H2, and SQLite.
-- `flower-spring-boot-starter`: Spring Boot auto-configuration for an `Engine`
-  and optional checkpoint store wiring.
-
-Bloom integration:
-
-- `bloom-flower-adapter`: maintained in the Bloom repository; adapts Bloom's
-  event bus to Flower's `EventBus` SPI.
-
-Observability / testing:
-
-- `flower-observability`: listeners and helpers for logging, dumps, metrics,
-  tracing, and awaiting flow completion.
-- [`flower-studio`](https://github.com/flowerjvm/flower-studio) (separate
-  project): read-only local JSON Lines Trace, Run, and event explorer with
-  optional artifact links, evaluation views, execution graphs, and a bounded
-  monitoring dashboard.
-- `flower-evaluation` (MVP): post-run datasets, experiments, evaluators,
-  baseline regression comparison, feedback, and local JSON Lines stores.
-- `flower-testkit` (MVP): deterministic Flow test helpers.
-
-Developer tooling:
-
-- `flower-check` (MVP): build-time Flower usage checker for host applications.
-- `flower-check-annotations` (MVP): SOURCE-retained approval markers consumed
-  by `flower-check`.
-- `flower-check-maven-plugin` (MVP): Maven `verify` integration for
-  `flower-check`.
-- `flower-check-gradle-plugin` (MVP): companion Gradle plugin project for
-  running `flower-check` from Gradle `check`.
-
-Early execution line:
-
-- `flower-eventloop` (MVP): separate event-driven runtime for explicit waits
-  such as callbacks, signals, approvals, LLM/tool responses, and deadlines.
-- `flower-eventloop-persistence-jdbc` (MVP): JDBC `EventFlowCheckpointStore`
-  plus event-loop schema SQL.
-
-Read the MVP labels literally. These modules are useful enough to try, but
-their APIs may move more than `flower-core`. The event loop is a separate
-execution line, not a replacement for the tick-driven Worker / Flow / Step
-model. Work that is not shipped in this repository is tracked in
-[ROADMAP.md](ROADMAP.md).
-
-## Testing With Flower Testkit
-
-`flower-testkit` keeps testing helpers outside `flower-core`. It does not
-change the runtime model; it only bundles the setup most tests repeat:
-
-```text
-Engine + Worker + ManualClock + InMemoryEventBus
-+ RecordingFlowerListener + FakeCheckpointStore
-```
-
-Add it as a test dependency:
-
-```xml
-<dependency>
-    <groupId>io.github.flowerjvm</groupId>
-    <artifactId>flower-testkit</artifactId>
-    <version>0.1.3</version>
-    <scope>test</scope>
-</dependency>
-```
-
-Example:
-
-```java
-FlowTestHarness harness = FlowTestHarness.create();
-
-Flow flow = Flow.builder("order", "ORD-1")
-        .executionContext(TestExecutionContexts.tenantRun("office-a", "run-1"))
-        .step("accept", new AcceptOrderStep(orderService))
-        .step("payment", new WaitForPaymentStep())
-        .build();
-
-harness.submit(flow)
-        .tick()
-        .assertFlow("order", "ORD-1")
-        .isRunning()
-        .currentStepIs("payment")
-        .tenantIdIs("office-a")
-        .runIdIs("run-1");
-
-harness.publish(new PaymentApproved("ORD-1"))
-        .tick()
-        .assertFlow("order", "ORD-1")
-        .isFinished();
-```
-
-For durable Flow recovery tests, reuse the same fake checkpoint store through
-`restart()` and recover with a `FlowFactoryRegistry`:
-
-```java
-FlowTestHarness restarted = harness.restart();
-
-int recovered = restarted.recoverActiveCount(registry);
-
-restarted.tick()
-        .assertFlow("order", "ORD-1")
-        .currentStepIs("payment")
-        .runIdIs("run-1");
-```
-
-The first version intentionally avoids a large assertion DSL or a JUnit-only
-API. Failed `FlowAssertions` checks throw `AssertionError`, so the helpers work
-with JUnit, AssertJ, or plain test code.
-
-## Where Flower Is Being Hardened
-
-Flower is being dogfooded against real application code, not only toy
-examples. It is currently being run and hardened in:
-
-- architecture-office SaaS document workflows
-- a Terminal Operating System execution layer
-- game server workflow and turn/state coordination
-- controlled AI automation through Flower Agent, Flower AI Harness, and Flower
-  Action Runtime
-
-These projects keep Flower honest about practical needs: explicit flow
-structure, small steps, recoverable execution, observable state, and code that
-stays understandable as systems grow. This is not a claim of broad external
-adoption; it is a statement about the real projects driving Flower's design.
-
-## Notes For AI Agents
-
-When generating Flower code, prefer this pattern:
-
-- Model business phases as explicit steps with stable ids.
-- Keep each step small: start work, check state, emit result.
-- Use `stay()` for asynchronous waits and `done()` only when the condition is
-  definitely satisfied.
-- Do not create background threads inside steps unless the application service
-  owns them.
-- Do not block a worker tick. Flower gets its composability from quick,
-  repeatable ticks.
-- Use constructor-injected services and plain Java objects.
-- Use events for cross-step or external completion signals.
-- Write tests with `engine.attach()` and `worker.tickOnce()` so behavior is
-  deterministic.
-- Prefer readable flow builders over hidden reflection or annotation magic in
-  core code.
-
-That shape keeps Flower flows easy for humans and AI tools to inspect: the
-current step is visible, transitions are explicit, and waiting behavior is
-encoded as small repeatable decisions.
-
-AI coding agents should treat Flower as a structure provider, not just another
-library call. The goal is not to generate more code faster. The goal is to make
-generated orchestration small enough that a human can read it, test it, and
-repair it later.
-
-`flower-check` is the build-time enforcement tool for this direction. It can
-fail a build when generated code uses known bad patterns, such as blocking a
-worker tick or hiding orchestration outside Flower's Flow/Step boundary.
-
-The Flower plugin makes the same rules available before code is written:
-
-```text
-AI coding agent
--> uses the Flower plugin for the right pattern
--> generates Flow / Step code
--> flower-check verifies the result
--> tests prove the behavior
-```
-
-A future developer MCP may provide richer tool-driven access to Flower
-concepts, examples, and checks. It is an optional extension of the current
-loop: guidance before generation, explicit structure in code, checks during
-build, and deterministic tests for behavior.
-
-## Build
-
-To build and test the repository locally:
+These phases remain Flows and Steps. Their AI-specific responsibilities stay
+outside Core:
+
+| Project | Responsibility |
+| --- | --- |
+| Flower Core | Application Flow execution, current Step, and explicit waits and transitions. |
+| [Flower Agent](https://github.com/flowerjvm/flower-agent) | AgentRun, model turns, transcripts, tool calls, budgets, and completion. |
+| [Flower AI Harness](https://github.com/flowerjvm/flower-ai-harness) | Final structured-output validation and whole-task refinement or retry. |
+| [Flower Action Runtime](https://github.com/flowerjvm/flower-action-runtime) | Mutating actions with policy, approval, idempotency, and audit. |
+
+A model call belongs in an application service or adapter, dispatched without
+blocking the Worker. Making "approval" a Step does not itself implement
+authorization; the application or Action Runtime must enforce it.
+
+[Flower Agent Samples](https://github.com/flowerjvm/flower-agent-samples)
+provides a runnable Spring Boot integration with an OpenAI-compatible cloud or
+local model.
+
+<a id="use-flower-with-chatgpt-and-codex"></a>
+
+### Set Up Coding-Agent Guidance And Checks
+
+The [Flower plugin for ChatGPT and Codex](https://chatgpt.com/plugins/plugins_6a6b70b4903081918ec3eb37651cf01f)
+provides the Flower skills. The guidance is also available in the
+[Flower Skills repository](https://github.com/flowerjvm/flower-agent-skills).
+
+Add the [Maven](flower-check-maven-plugin/README.md) or
+[Gradle](flower-check-gradle-plugin/README.md) checker to the host build, and
+use [deterministic tests](#testing) to exercise the application's behavior.
+`flower-check` detects supported structural and usage violations, such as
+blocking Worker ticks; tests check the application-specific outcomes.
+
+<a id="what-flower-is-not"></a>
+<a id="operational-boundaries"></a>
+<a id="checkpoint--resume"></a>
+
+## Execution Boundaries
+
+Flower's small footprint comes with an explicit scope.
+
+| Boundary | What to expect |
+| --- | --- |
+| One JVM | Core is not a distributed scheduler, multi-node coordinator, BPMN engine, or durable saga engine. |
+| Tick-based Core | In scheduled mode, a Worker ticks active Flows on one scheduler thread. `stay()` does not turn Core into a wake-only event loop. |
+| In-memory notifications | Signals and subscriptions are not a durable event log. Recheck durable business facts when recovery matters. |
+| Opt-in checkpoint/resume | Rebuild a fresh Flow and resume from a saved position and execution identity. Step objects, signals, and arbitrary business state are not serialized. This is not execution replay. |
+| External side effects | Checkpoints do not make database writes, messages, or API calls exactly-once. Use application-level idempotency and durable intent/outbox records where needed. |
+| Durable deadlines | Core `startTimeout(...)` is runtime-only and rejected in durable Flows. Store recoverable deadlines in domain state, or use the separate event-loop runtime's await deadlines. |
+| Storage and ownership | Checkpoint writes are synchronous. Multi-process recovery requires host-managed locking, leases, or leader election. |
+| Scale | Core targets small-to-medium in-process workloads. Very large idle-Flow populations may need sharding or another scheduling strategy. |
+
+The MVP [flower-eventloop](flower-eventloop/README.md) module is a separate
+execution line. It has its own API and recovery behavior; these Core examples
+describe the tick-driven Worker / Flow / Step contract.
+
+For checkpoint policies, event-loop crash windows, and recovery ownership,
+read [Checkpoint / Resume](docs/runtime-reference.md#checkpoint--resume),
+[Operational boundaries](docs/runtime-reference.md#operational-boundaries),
+and [Persistence](docs/persistence.md).
+
+<a id="why-and-when-to-use-it"></a>
+
+## When To Use Flower
+
+Use Flower when work has meaningful execution phases, especially when it waits
+for events, needs timeouts, revisits stages, or needs an inspectable current position.
+
+For a short `validate → save → return` method, ordinary Java methods may be
+enough. For a small state machine, an enum and a switch may be enough. Flower
+is useful when the surrounding execution machinery becomes a concern of its own.
+
+It is domain-independent, not a requirement to rewrite every kind of Java code as a Flow.
+
+<a id="modules-and-maturity"></a>
+
+## Modules
+
+**Start with Core. Add only what you need.**
+
+| Module | Adds | Status |
+| --- | --- | --- |
+| `flower-core` | Engine, Worker, Flow, Step, event bus, clock, and listener APIs. | Established execution model |
+| `flower-spring-boot-starter` | Spring Boot configuration and lifecycle integration. | Optional |
+| `flower-persistence-jdbc` | JDBC checkpoints with explicit schema setup. | Optional |
+| `flower-observability` | Logging, tracing, metrics integration, and trace sinks. | Optional |
+| `flower-testkit` | Deterministic test helpers. | MVP |
+| [flower-check and build plugins](flower-check/README.md) | Build-time checks for known Flower anti-patterns. | MVP |
+| [flower-evaluation](flower-evaluation/README.md) | Offline datasets, evaluators, comparisons, and feedback. | MVP |
+| [flower-eventloop](flower-eventloop/README.md) and `flower-eventloop-persistence-jdbc` | Separate event-driven execution and checkpoints. | MVP |
+
+MVP labels describe the individual optional modules above. Their APIs are being
+refined around Core's established execution model.
+
+JDBC stores include schema SQL for PostgreSQL, MySQL, Oracle, H2, and SQLite.
+The host supplies its driver and applies the schema explicitly.
+
+These modules do not all need to be installed together. Bloom's separately
+published adapter connects an existing Bloom event bus; Flower Core already
+includes `InMemoryEventBus`.
+
+<a id="java-compatibility"></a>
+
+See [Module details and maturity](docs/runtime-reference.md#modules-and-maturity)
+and [Java compatibility](docs/runtime-reference.md#java-compatibility).
+
+## Where It Comes From
+
+Flower's `Worker → Flow → Step → StepResult` execution model was shaped by
+practical experience gained while developing industrial equipment control
+systems and business applications.
+
+It generalizes recurring patterns observed in long-running, stage-based
+processes into a reusable workflow runtime for Java applications: explicit
+execution stages, result-driven transitions, waits, timeouts, retries, human
+intervention, and inspectable execution traces.
+
+The underlying discipline is simple: make the current state visible, make
+transitions explicit, keep each unit of work small, and leave a trace that a
+human can inspect.
+
+<a id="where-flower-is-being-hardened"></a>
+
+Flower is being exercised in architecture-office SaaS document workflows, a
+Terminal Operating System execution layer, game-server coordination, and
+controlled AI automation. These projects help harden the design; they are
+not a claim of broad independent adoption.
+
+## Documentation And Project Status
+
+The [Runtime reference](docs/runtime-reference.md) covers detailed API guidance,
+Kafka and Bloom integration, Spring configuration, checkpoints, execution
+context, observability, tests, and module maturity. The reference is currently
+in English; this introduction is available in both English and Korean.
+
+For deeper topics, see [Persistence](docs/persistence.md),
+[Tracing, Studio, and Evaluation](docs/tracing-studio-evaluation.md),
+[Trace Storage and Security](docs/tracing-storage-security.md), and
+[Domain Observation Adapters](docs/domain-observation-adapters.md).
+
+Project process: [Contributing](CONTRIBUTING.md) · [Security](SECURITY.md) ·
+[Roadmap](ROADMAP.md) · [Releasing](docs/RELEASING.md).
+
+<a id="build"></a>
+
+To build the repository:
 
 ```bash
 mvn -B verify
 ```
 
-Applications should normally consume the released `0.1.3` artifacts from
-Maven Central as shown in [Install From Maven Central](#install-from-maven-central).
-Contributors working on the separately built Gradle checker should follow the
-additional local development steps in [CONTRIBUTING.md](CONTRIBUTING.md).
-
-Release preparation and Maven Central publisher setup are documented in
-[docs/RELEASING.md](docs/RELEASING.md).
+The full repository build requires JDK 17. Applications should normally consume
+released Maven Central artifacts. Contributors working on the separately
+built Gradle checker should follow [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License
 
-Flower is licensed under the Apache License 2.0.
+Flower is licensed under the [Apache License 2.0](LICENSE).
+
+**Different domains. The same execution model.**
+
+Make the flow explicit. Keep the domain yours.
