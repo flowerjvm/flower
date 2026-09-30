@@ -1,0 +1,1203 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Flower EventLoop 사용 매뉴얼</title>
+<style>
+:root{
+  --sans:"Pretendard Variable",Pretendard,system-ui,-apple-system,"Segoe UI","Malgun Gothic","Apple SD Gothic Neo",sans-serif;
+  --mono:"JetBrains Mono","Cascadia Mono",Consolas,"SFMono-Regular",Menlo,"D2Coding",monospace;
+  --bg:#F5F3F7; --surface:#FFFFFF; --surface-2:#EEEAF2; --chip:#E7E2EC;
+  --line:#DBD4E2; --line-2:#C2B8CD;
+  --ink:#1A1520; --ink-2:#453C51; --muted:#6D6379;
+  --accent:#A4174C; --accent-soft:#F7E4EB;
+  --ok:#1D6B4B; --ok-soft:#E0F0E8;
+  --warn:#8A5900; --warn-soft:#F8EEDA;
+  --crit:#A6231A; --crit-soft:#FAE5E2;
+  --info:#2A5C86; --info-soft:#E2EDF5;
+  --code-bg:#F1EDF4;
+  --shadow:0 1px 2px rgba(26,21,32,.05),0 8px 24px -16px rgba(26,21,32,.28);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#131018; --surface:#1A1622; --surface-2:#221D2C; --chip:#2A2436;
+    --line:#332B40; --line-2:#4B4159;
+    --ink:#EFEAF4; --ink-2:#CCC3D8; --muted:#978CA6;
+    --accent:#F0819F; --accent-soft:#3A1E2B;
+    --ok:#6FCFA1; --ok-soft:#16301F;
+    --warn:#E0AC55; --warn-soft:#332612;
+    --crit:#F08B7F; --crit-soft:#3A1D19;
+    --info:#82B4DC; --info-soft:#152A3A;
+    --code-bg:#201B2A;
+    --shadow:0 1px 2px rgba(0,0,0,.4),0 10px 30px -18px rgba(0,0,0,.8);
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#131018; --surface:#1A1622; --surface-2:#221D2C; --chip:#2A2436;
+  --line:#332B40; --line-2:#4B4159;
+  --ink:#EFEAF4; --ink-2:#CCC3D8; --muted:#978CA6;
+  --accent:#F0819F; --accent-soft:#3A1E2B;
+  --ok:#6FCFA1; --ok-soft:#16301F;
+  --warn:#E0AC55; --warn-soft:#332612;
+  --crit:#F08B7F; --crit-soft:#3A1D19;
+  --info:#82B4DC; --info-soft:#152A3A;
+  --code-bg:#201B2A;
+  --shadow:0 1px 2px rgba(0,0,0,.4),0 10px 30px -18px rgba(0,0,0,.8);
+}
+
+*,*::before,*::after{box-sizing:border-box}
+html{scroll-behavior:smooth;scroll-padding-top:24px}
+@media (prefers-reduced-motion: reduce){html{scroll-behavior:auto}*{animation:none!important;transition:none!important}}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:16px;line-height:1.78;-webkit-font-smoothing:antialiased}
+a{color:var(--accent);text-underline-offset:3px;text-decoration-thickness:1px}
+a:focus-visible,button:focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius:4px}
+p{margin:0 0 1em;max-width:70ch}
+ul,ol{margin:0 0 1em;padding-left:1.35em;max-width:70ch}
+li{margin:.3em 0}
+li>ul,li>ol{margin:.3em 0}
+strong{font-weight:700;color:var(--ink)}
+
+code{font-family:var(--mono);font-size:.87em;background:var(--chip);padding:.12em .38em;border-radius:5px;color:var(--ink)}
+pre{background:var(--code-bg);border:1px solid var(--line);border-left:3px solid var(--line-2);border-radius:10px;padding:15px 18px;margin:0 0 1.2em;overflow-x:auto;font-family:var(--mono);font-size:.83rem;line-height:1.7;color:var(--ink-2)}
+pre code{background:none;padding:0;font-size:1em;color:inherit}
+pre .cm{color:var(--muted)}
+
+.topbar{position:sticky;top:0;z-index:40;background:var(--bg);background:color-mix(in srgb,var(--bg) 88%,transparent);backdrop-filter:blur(10px);border-bottom:1px solid var(--line)}
+.topbar-in{max-width:1320px;margin:0 auto;padding:9px 22px;display:flex;align-items:center;gap:14px}
+.brand{font-family:var(--mono);font-size:.72rem;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
+.brand b{color:var(--accent);font-weight:700}
+.topbar .spacer{flex:1}
+.tbtn{font-family:var(--mono);font-size:.7rem;letter-spacing:.08em;text-transform:uppercase;background:var(--surface);border:1px solid var(--line);color:var(--ink-2);padding:5px 11px;border-radius:999px;cursor:pointer;text-decoration:none}
+.tbtn:hover{border-color:var(--line-2);color:var(--ink)}
+
+.shell{max-width:1320px;margin:0 auto;display:grid;grid-template-columns:262px minmax(0,1fr);gap:44px;padding:0 22px 90px}
+.side{position:sticky;top:52px;align-self:start;max-height:calc(100vh - 64px);overflow-y:auto;padding:26px 0 40px;font-size:.83rem}
+.side h4{font-family:var(--mono);font-size:.66rem;letter-spacing:.16em;text-transform:uppercase;color:var(--muted);margin:22px 0 8px;font-weight:600}
+.side h4:first-child{margin-top:0}
+.side a{display:block;padding:3px 10px 3px 11px;color:var(--ink-2);text-decoration:none;border-left:2px solid var(--line);line-height:1.5}
+.side a:hover{color:var(--ink);border-left-color:var(--line-2);background:var(--surface-2)}
+.side a.on{color:var(--accent);border-left-color:var(--accent);background:var(--accent-soft);font-weight:600}
+.side a .n{font-family:var(--mono);font-size:.72em;color:var(--muted);margin-right:7px}
+.side a.on .n{color:var(--accent)}
+main{min-width:0;padding-top:26px}
+
+.hero{padding:34px 0 30px;border-bottom:1px solid var(--line);margin-bottom:12px}
+.eyebrow{font-family:var(--mono);font-size:.68rem;letter-spacing:.2em;text-transform:uppercase;color:var(--accent);margin-bottom:14px}
+.hero h1{font-size:clamp(2rem,4.4vw,3rem);line-height:1.12;letter-spacing:-.03em;margin:0 0 14px;text-wrap:balance;font-weight:800}
+.hero .lede{font-size:1.06rem;color:var(--ink-2);max-width:62ch;margin-bottom:22px}
+.meta{display:flex;flex-wrap:wrap;border:1px solid var(--line);border-radius:10px;background:var(--surface);overflow:hidden;font-variant-numeric:tabular-nums}
+.meta div{padding:9px 16px;border-right:1px solid var(--line);min-width:120px}
+.meta div:last-child{border-right:0}
+.meta dt{font-family:var(--mono);font-size:.62rem;letter-spacing:.13em;text-transform:uppercase;color:var(--muted)}
+.meta dd{margin:1px 0 0;font-size:.86rem;font-weight:600}
+
+section{padding:44px 0 8px;scroll-margin-top:60px}
+.part{margin:52px 0 6px;padding:14px 0 12px;border-top:2px solid var(--ink);display:flex;align-items:baseline;gap:14px;flex-wrap:wrap}
+.part .pn{font-family:var(--mono);font-size:.72rem;letter-spacing:.16em;text-transform:uppercase;color:var(--accent)}
+.part h2{margin:0;font-size:1.5rem;letter-spacing:-.02em;font-weight:800}
+.part p{margin:0;color:var(--muted);font-size:.88rem;flex-basis:100%}
+h3{font-size:1.42rem;line-height:1.3;letter-spacing:-.02em;margin:0 0 6px;font-weight:750;text-wrap:balance;display:flex;align-items:baseline;gap:11px;flex-wrap:wrap}
+h3 .sn{font-family:var(--mono);font-size:.82rem;color:var(--accent);font-weight:600}
+h4{font-size:1.02rem;margin:1.9em 0 .55em;letter-spacing:-.01em;font-weight:700}
+h5{font-size:.86rem;margin:1.5em 0 .5em;font-family:var(--mono);letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:600}
+.sub{color:var(--muted);font-size:.9rem;margin:-2px 0 20px;max-width:66ch}
+
+.scroll{overflow-x:auto;margin:0 0 1.4em;border-radius:10px;border:1px solid var(--line);background:var(--surface)}
+table{border-collapse:collapse;width:100%;font-size:.855rem;line-height:1.6}
+th,td{padding:9px 13px;text-align:left;border-bottom:1px solid var(--line);vertical-align:top}
+thead th{background:var(--surface-2);font-family:var(--mono);font-size:.68rem;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:600;white-space:nowrap}
+tbody tr:last-child td{border-bottom:0}
+td.k,td code{white-space:nowrap}
+td.k{font-family:var(--mono);font-size:.82rem;color:var(--ink);font-weight:600}
+td.num{font-variant-numeric:tabular-nums;white-space:nowrap}
+table.dense td,table.dense th{padding:6px 12px}
+
+.note,.warn,.tip,.stop{border:1px solid var(--line);border-left-width:3px;border-radius:9px;padding:13px 17px;margin:0 0 1.4em;font-size:.92rem;background:var(--surface)}
+.note{border-left-color:var(--info);background:var(--info-soft)}
+.tip{border-left-color:var(--ok);background:var(--ok-soft)}
+.warn{border-left-color:var(--warn);background:var(--warn-soft)}
+.stop{border-left-color:var(--crit);background:var(--crit-soft)}
+.note p:last-child,.warn p:last-child,.tip p:last-child,.stop p:last-child,
+.note ul:last-child,.warn ul:last-child,.tip ul:last-child,.stop ul:last-child{margin-bottom:0}
+.note b.lb,.warn b.lb,.tip b.lb,.stop b.lb{display:block;font-family:var(--mono);font-size:.65rem;letter-spacing:.14em;text-transform:uppercase;margin-bottom:5px}
+.note b.lb{color:var(--info)} .tip b.lb{color:var(--ok)}
+.warn b.lb{color:var(--warn)} .stop b.lb{color:var(--crit)}
+
+.cf{border:1px solid var(--accent);border-left-width:3px;border-radius:9px;padding:13px 17px;margin:0 0 1.4em;background:var(--accent-soft);font-size:.92rem}
+.cf b.lb{display:block;font-family:var(--mono);font-size:.65rem;letter-spacing:.14em;text-transform:uppercase;margin-bottom:8px;color:var(--accent)}
+.cf p{margin:0 0 .6em;max-width:none}
+.cf p:last-child{margin-bottom:0}
+.cf .q,.cf .a{display:inline-block;font-family:var(--mono);font-size:.64rem;letter-spacing:.06em;padding:1px 7px;border-radius:5px;margin-right:9px;border:1px solid;position:relative;top:-1px;white-space:nowrap}
+.cf .q{color:var(--muted);border-color:var(--line-2);background:var(--surface)}
+.cf .a{color:var(--accent);border-color:var(--accent);background:var(--surface);font-weight:600}
+
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(215px,1fr));gap:14px;margin:0 0 1.5em}
+.card{border:1px solid var(--line);border-radius:11px;padding:15px 17px;background:var(--surface);box-shadow:var(--shadow)}
+.card h5{margin:0 0 7px;color:var(--accent)}
+.card p{font-size:.87rem;margin:0;color:var(--ink-2);max-width:none}
+.card ul,.card ol{font-size:.87rem;margin:0;color:var(--ink-2);padding-left:1.15em}
+
+figure{margin:0 0 1.6em}
+figure .scroll{margin-bottom:0}
+figcaption{font-size:.78rem;color:var(--muted);margin-top:8px;font-family:var(--mono)}
+svg.dia{display:block;min-width:620px;width:100%;height:auto;background:var(--surface);padding:8px 4px}
+svg.dia text{font-family:var(--sans);fill:var(--ink)}
+svg.dia .mono{font-family:var(--mono)}
+svg.dia .sm{font-size:11px;fill:var(--muted)}
+svg.dia .box{fill:var(--surface-2);stroke:var(--line-2);stroke-width:1.2}
+svg.dia .box-a{fill:var(--accent-soft);stroke:var(--accent);stroke-width:1.4}
+svg.dia .box-ok{fill:var(--ok-soft);stroke:var(--ok);stroke-width:1.2}
+svg.dia .ln{stroke:var(--line-2);stroke-width:1.3;fill:none}
+svg.dia .ln-a{stroke:var(--accent);stroke-width:1.5;fill:none}
+svg.dia .dash{stroke-dasharray:5 4}
+
+dl.gloss{margin:0 0 1.5em;border-top:1px solid var(--line)}
+dl.gloss div{padding:11px 0;border-bottom:1px solid var(--line);display:grid;grid-template-columns:180px minmax(0,1fr);gap:18px}
+dl.gloss dt{font-weight:700;font-size:.92rem}
+dl.gloss dd{margin:0;font-size:.92rem;color:var(--ink-2)}
+
+.codehead{display:flex;align-items:center;gap:8px;font-family:var(--mono);font-size:.68rem;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);border:1px solid var(--line);border-bottom:0;border-radius:9px 9px 0 0;padding:6px 14px;background:var(--surface-2);margin-top:.2em}
+.codehead + pre{border-radius:0 0 10px 10px;border-left-width:1px;border-left-color:var(--line)}
+
+.pill{display:inline-block;font-family:var(--mono);font-size:.68rem;padding:1px 7px;border-radius:5px;border:1px solid var(--line-2);background:var(--chip);color:var(--ink-2);white-space:nowrap}
+.pill.ok{color:var(--ok);border-color:var(--ok);background:var(--ok-soft)}
+.pill.cr{color:var(--crit);border-color:var(--crit);background:var(--crit-soft)}
+.pill.wa{color:var(--warn);border-color:var(--warn);background:var(--warn-soft)}
+.pill.ac{color:var(--accent);border-color:var(--accent);background:var(--accent-soft)}
+
+footer{border-top:1px solid var(--line);margin-top:60px;padding:26px 0 10px;color:var(--muted);font-size:.82rem}
+footer p{max-width:none}
+
+@media (max-width:1000px){
+  .shell{grid-template-columns:1fr;gap:0}
+  .side{position:static;max-height:none;border-bottom:1px solid var(--line);margin-bottom:10px;columns:2;column-gap:26px;padding-bottom:20px}
+  .side h4{break-after:avoid}
+  dl.gloss div{grid-template-columns:1fr;gap:2px}
+}
+@media (max-width:640px){ body{font-size:15px} .side{columns:1} .meta div{min-width:50%} }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="topbar-in">
+    <span class="brand">Flower / 매뉴얼 / <b>flower&#8209;eventloop</b></span>
+    <span class="spacer"></span>
+    <a class="tbtn" href="../en/flower-eventloop.html">English</a>
+    <button class="tbtn" id="themeBtn" type="button">테마</button>
+  </div>
+</div>
+
+<div class="shell">
+
+<nav class="side" id="toc">
+  <h4>1부 · 시작하기</h4>
+  <a href="#intro"><span class="n">01</span>왜 두 번째 런타임인가</a>
+  <a href="#vs-core"><span class="n">02</span>core와 무엇이 다른가</a>
+  <a href="#quickstart"><span class="n">03</span>퀵스타트</a>
+
+  <h4>2부 · 작성하기</h4>
+  <a href="#step"><span class="n">04</span>EventStep 생명주기</a>
+  <a href="#result"><span class="n">05</span>EventStepResult</a>
+  <a href="#await"><span class="n">06</span>AwaitCondition — 대기 조건</a>
+  <a href="#effect"><span class="n">07</span>효과 — 순서가 중요한 이유</a>
+  <a href="#signal"><span class="n">08</span>EventSignal</a>
+
+  <h4>3부 · 운영</h4>
+  <a href="#durable"><span class="n">09</span>Durable — 제약과 복구</a>
+  <a href="#observe"><span class="n">10</span>관측</a>
+  <a href="#testing"><span class="n">11</span>테스트</a>
+
+  <h4>4부 · 잘 쓰기</h4>
+  <a href="#rules"><span class="n">12</span>설계 규칙과 안티패턴</a>
+  <a href="#faq"><span class="n">13</span>자주 하는 실수 · 치트시트</a>
+</nav>
+
+<main>
+
+<header class="hero">
+  <div class="eyebrow">Flower 사용 매뉴얼</div>
+  <h1>Flower EventLoop</h1>
+  <p class="lede">
+    “주기적으로 깨워서 물어보는” 대신 <strong>“깨울 이유를 미리 선언하고 잠드는”</strong> 실행 방식.
+    LLM 응답, 도구 호출, 사람의 승인처럼 <em>언제 올지 모르는 것</em>을 기다리는 흐름을 위한 별도 런타임입니다.
+  </p>
+  <dl class="meta">
+    <div><dt>모듈</dt><dd>flower-eventloop</dd></div>
+    <div><dt>버전</dt><dd>0.1.3</dd></div>
+    <div><dt>성숙도</dt><dd>MVP</dd></div>
+    <div><dt>의존성</dt><dd>flower-core</dd></div>
+    <div><dt>자바</dt><dd>Java 8+</dd></div>
+  </dl>
+</header>
+
+<div class="stop" style="margin-top:26px">
+  <b class="lb">먼저 알아두세요 · MVP</b>
+  <p>
+    이 모듈은 <strong>MVP</strong>입니다. 써 볼 만큼은 되지만 <code>flower-core</code>보다 API가 더 움직일 수 있습니다.
+    그리고 <strong>틱 기반 Worker를 대체하는 것이 아니라 별개의 실행 라인</strong>입니다. 둘 중 하나를 고르는 것이지 상위 호환이 아닙니다.
+  </p>
+</div>
+
+<div class="cards">
+  <div class="card">
+    <h5>Flower Core를 아신다면</h5>
+    <p><a href="#vs-core">02(대조표)</a> → 03 → 06 순서로. 개념 대부분이 같고 <strong>다른 부분만</strong> 빠르게 잡을 수 있습니다.</p>
+  </div>
+  <div class="card">
+    <h5>처음이라면</h5>
+    <p><a href="flower-core.html">Flower Core 매뉴얼</a>을 먼저 읽으시길 권합니다. 이 문서는 그 개념을 전제로 합니다.</p>
+  </div>
+  <div class="card">
+    <h5>분홍 상자</h5>
+    <p><strong>“헷갈리는 지점”</strong>은 실제로 오해하기 쉬운 곳에만 있습니다. 이 런타임은 특히 그런 곳이 많습니다.</p>
+  </div>
+</div>
+
+<!-- ================= 1부 ================= -->
+<div class="part">
+  <span class="pn">1부</span>
+  <h2>시작하기</h2>
+  <p>왜 두 번째 런타임이 필요했는지, 그리고 가장 작은 예제 하나.</p>
+</div>
+
+<section id="intro">
+  <h3><span class="sn">01</span>왜 두 번째 런타임인가</h3>
+  <p class="sub">한 문장: <strong>“기다림”을 폴링이 아니라 구독으로 바꾼 Flower 런타임</strong>입니다.</p>
+
+  <h4>틱 방식의 한계</h4>
+  <p>
+    <code>flower-core</code>의 Worker는 100ms마다 살아 있는 모든 Flow를 깨워 <code>onTick()</code>을 부릅니다.
+    Step은 “아직이야”(<code>stay()</code>)라고 답하고 다시 잠듭니다. 단순하고 테스트하기 좋은 모델입니다.
+  </p>
+  <p>그런데 이런 상황을 생각해 보세요.</p>
+  <ul>
+    <li>LLM 응답을 <strong>30초</strong> 기다리는 Flow가 <strong>1,000개</strong></li>
+    <li>사람의 승인을 <strong>3일</strong> 기다리는 Flow가 <strong>200개</strong></li>
+  </ul>
+  <p>
+    틱 방식이라면 100ms마다 1,200번의 <code>onTick()</code>이 호출되고 그 대부분은 <strong>“아직”이라는 답만 하고 끝납니다.</strong>
+    게다가 응답이 도착해도 <strong>최대 100ms를 더 기다려야</strong> 발견됩니다.
+  </p>
+
+  <h4>해법: 깨울 이유를 미리 선언한다</h4>
+  <p>
+    이벤트 루프에서는 Step이 “나중에 또 물어봐”라고 하지 않습니다. 대신
+    <strong>“이 조건 중 하나가 충족되면 그때 깨워”</strong>라고 선언하고 완전히 잠듭니다.
+  </p>
+
+  <div class="codehead">이 모듈의 핵심 한 줄</div>
+<pre><code>return EventStepResult.await(
+        AwaitCondition.event(LlmResponded.class),   <span class="cm">// 이 이벤트가 오면 깨워줘</span>
+        AwaitCondition.deadlineIn(30_000))          <span class="cm">// 아니면 30초 뒤에 깨워줘</span>
+        .thenPublish(new LlmRequested("hello"));    <span class="cm">// 그리고 나서 이 요청을 보내줘</span></code></pre>
+
+  <p>
+    대기 중인 Flow는 <strong>CPU를 전혀 쓰지 않습니다.</strong> 이벤트가 도착하는 그 순간 깨어나므로 지연도 없습니다.
+    Flow가 1,000개든 100,000개든 대기 비용이 거의 늘지 않습니다.
+  </p>
+
+  <h4>어떤 일에 맞나</h4>
+  <div class="scroll">
+    <table>
+      <thead><tr><th style="width:30%">상황</th><th>왜 이벤트 루프인가</th></tr></thead>
+      <tbody>
+        <tr><td class="k">LLM · 에이전트 턴</td><td>응답이 언제 올지 모릅니다. 도착 즉시 진행해야 하고 타임아웃도 필요합니다.</td></tr>
+        <tr><td class="k">도구(tool) 호출 대기</td><td><code>callId</code> 같은 상관 키로 응답을 맞춰야 합니다.</td></tr>
+        <tr><td class="k">사람의 승인</td><td>며칠이 걸릴 수 있습니다. 그동안 폴링은 완전한 낭비입니다.</td></tr>
+        <tr><td class="k">외부 콜백 · 웹훅</td><td>언제 올지 모르는 단발성 응답.</td></tr>
+        <tr><td class="k">대기 Flow가 매우 많은 경우</td><td>대기 비용이 Flow 수에 비례해 늘지 않습니다.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="warn">
+    <b class="lb">반대로 이런 건 Core가 낫습니다</b>
+    <ul>
+      <li><strong>주기적으로 확인해야 하는 일</strong> &mdash; “DB 상태가 바뀌었나?”처럼 깨울 <em>이벤트</em>가 없는 작업. 이벤트 루프에서는 마감을 반복해 거는 어색한 코드가 됩니다.</li>
+      <li><strong>단계마다 짧게 끝나는 흐름</strong> &mdash; 기다림이 없으면 이점이 없습니다.</li>
+      <li><strong>안정성이 최우선인 코드</strong> &mdash; Core는 안정화된 API, 이벤트 루프는 MVP입니다.</li>
+    </ul>
+  </div>
+</section>
+
+<section id="vs-core">
+  <h3><span class="sn">02</span>core와 무엇이 다른가</h3>
+  <p class="sub">Core를 아신다면 이 표 하나가 문서의 절반입니다. 나머지는 이 차이의 결과입니다.</p>
+
+  <figure>
+    <div class="scroll">
+      <svg class="dia" viewBox="0 0 880 200" role="img" aria-label="틱 방식과 이벤트 루프 비교">
+        <defs><marker id="cmp1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--line-2)"/></marker></defs>
+        <text class="mono" x="10" y="20" font-size="12" font-weight="700">Core · 틱 방식</text>
+        <g class="ln dash"><path d="M10 100 H430"/></g>
+        <g class="mono sm"><text x="10" y="118">0ms</text><text x="90" y="118">100</text><text x="170" y="118">200</text><text x="250" y="118">300</text><text x="330" y="118">400</text></g>
+        <g class="mono" font-size="10">
+          <rect class="box" x="10" y="62" width="66" height="30" rx="6"/><text x="43" y="78" text-anchor="middle" dominant-baseline="middle">stay</text>
+          <rect class="box" x="90" y="62" width="66" height="30" rx="6"/><text x="123" y="78" text-anchor="middle" dominant-baseline="middle">stay</text>
+          <rect class="box" x="170" y="62" width="66" height="30" rx="6"/><text x="203" y="78" text-anchor="middle" dominant-baseline="middle">stay</text>
+          <rect class="box" x="250" y="62" width="66" height="30" rx="6"/><text x="283" y="78" text-anchor="middle" dominant-baseline="middle">stay</text>
+          <rect class="box-ok" x="330" y="62" width="66" height="30" rx="6"/><text x="363" y="78" text-anchor="middle" dominant-baseline="middle" fill="var(--ink)">done</text>
+        </g>
+        <path class="ln-a" d="M300 40 V58" marker-end="url(#cmp1)"/>
+        <text class="sm" x="262" y="36">이벤트 도착</text>
+        <text class="sm" x="230" y="146">4번의 헛된 호출 + 최대 100ms 지연</text>
+
+        <text class="mono" x="470" y="20" font-size="12" font-weight="700">EventLoop · 리액터</text>
+        <g class="ln dash"><path d="M470 100 H870"/></g>
+        <g class="mono sm"><text x="470" y="118">0ms</text><text x="740" y="118">300</text></g>
+        <g class="mono" font-size="10">
+          <rect class="box-a" x="470" y="62" width="90" height="30" rx="6"/><text x="515" y="78" text-anchor="middle" dominant-baseline="middle">await(...)</text>
+          <rect class="box-ok" x="750" y="62" width="90" height="30" rx="6"/><text x="795" y="78" text-anchor="middle" dominant-baseline="middle" fill="var(--ink)">onEvent</text>
+        </g>
+        <g class="ln dash"><path d="M566 77 H744"/></g>
+        <text class="sm" x="600" y="72">완전히 잠듦 (CPU 0)</text>
+        <path class="ln-a" d="M760 40 V58" marker-end="url(#cmp1)"/>
+        <text class="sm" x="722" y="36">이벤트 도착</text>
+        <text class="sm" x="640" y="146">호출 1번 + 지연 0</text>
+      </svg>
+    </div>
+    <figcaption>대기가 없는 흐름이라면 두 방식의 차이는 거의 없습니다. 차이는 “기다림”에서 나옵니다.</figcaption>
+  </figure>
+
+  <div class="scroll">
+    <table>
+      <thead><tr><th style="width:24%">Flower Core</th><th style="width:24%">Flower EventLoop</th><th>관계</th></tr></thead>
+      <tbody>
+        <tr><td class="k">Engine</td><td class="k"><span class="pill cr">없음</span></td><td><strong>EventWorker가 스스로 최상위</strong>입니다. Clock·EventBus를 직접 지정하고 직접 start/stop 합니다.</td></tr>
+        <tr><td class="k">Worker</td><td class="k">EventWorker</td><td>틱 루프 → 큐 리액터.</td></tr>
+        <tr><td class="k">Flow</td><td class="k">EventFlow</td><td>둘 다 “Step 순서 + 현재 위치”. <code>FlowState</code>는 공유합니다.</td></tr>
+        <tr><td class="k">Step</td><td class="k">EventStep</td><td><code>onTick</code>이 없고 <code>onEvent</code>/<code>onTimeout</code>/<code>onRecover</code>가 있습니다.</td></tr>
+        <tr><td class="k">StepResult</td><td class="k">EventStepResult</td><td><code>stay()</code>가 없고 <code>await(...)</code>가 대신합니다. <code>done()</code>은 <code>next()</code>로 이름이 바뀌었습니다.</td></tr>
+        <tr><td class="k">Guard</td><td class="k"><span class="pill cr">없음</span></td><td>진입 조건은 <code>onEnter</code>에서 판단해 <code>goTo</code>하면 됩니다.</td></tr>
+        <tr><td class="k">RecoveryPolicy</td><td class="k">onRecover 훅</td><td>정책 열거형 대신 훅 하나. <strong>기본 동작은 실패</strong>입니다.</td></tr>
+        <tr><td class="k">worker.tickOnce()</td><td class="k">worker.drain()</td><td>테스트 구동 방식. <code>ManualClock</code>과 함께 쓰는 것은 동일합니다.</td></tr>
+        <tr><td class="k">FlowerListener</td><td class="k">FlowerListener</td><td><strong>그대로 재사용</strong>합니다. 트레이스 스키마도 공유합니다.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="cf">
+    <b class="lb">헷갈리는 지점 · EventWorker는 Engine에 넣을 수 없습니다</b>
+    <p><span class="q">이렇게 보입니다</span> 같은 Flower니까 <code>Engine.builder().worker(eventWorker)</code>로 함께 관리하면 되겠다.</p>
+    <p><span class="a">실제로는</span> <code>Engine.worker(...)</code>는 <strong>Core의 <code>Worker</code> 타입만</strong> 받습니다. Clock·EventBus·리스너·저장소를 <strong>EventWorker 빌더에 직접</strong> 주고 <code>start()</code>/<code>stop()</code>도 직접 호출해야 합니다.</p>
+    <p>두 런타임을 한 애플리케이션에서 같이 쓸 수는 있습니다. <strong>같은 <code>EventBus</code> 인스턴스를 공유</strong>시키면 서로 이벤트를 주고받을 수 있습니다.</p>
+  </div>
+</section>
+
+<section id="quickstart">
+  <h3><span class="sn">03</span>퀵스타트</h3>
+  <p class="sub">LLM 호출을 기다리는 흐름. 복사해서 바로 돌려볼 수 있습니다.</p>
+
+  <div class="codehead">Maven</div>
+<pre><code>&lt;dependency&gt;
+    &lt;groupId&gt;io.github.flowerjvm&lt;/groupId&gt;
+    &lt;artifactId&gt;flower-eventloop&lt;/artifactId&gt;
+    &lt;version&gt;0.1.3&lt;/version&gt;
+&lt;/dependency&gt;</code></pre>
+
+  <div class="codehead">LlmQuickStart.java</div>
+<pre><code>import io.github.flowerjvm.flower.core.event.InMemoryEventBus;
+import io.github.flowerjvm.flower.core.time.SystemClock;
+import io.github.flowerjvm.flower.eventloop.flow.EventFlow;
+import io.github.flowerjvm.flower.eventloop.step.*;
+import io.github.flowerjvm.flower.eventloop.worker.EventWorker;
+
+public class LlmQuickStart {
+
+    <span class="cm">// 주고받을 이벤트 — 불변 클래스로 (정확한 타입 매칭이 됩니다)</span>
+    static final class LlmRequested { final String prompt;
+        LlmRequested(String p) { this.prompt = p; } }
+    static final class LlmResponded { final String text;
+        LlmResponded(String t) { this.text = t; } }
+
+    <span class="cm">// onTick이 없다. 대신 "무엇이 오면 깨울지"를 선언한다.</span>
+    static final class AskStep extends EventStep {
+        @Override protected EventStepResult onEnter(EventStepContext ctx) {
+            return EventStepResult
+                    .await(AwaitCondition.event(LlmResponded.class),   <span class="cm">// 응답이 오거나</span>
+                           AwaitCondition.deadlineIn(30_000))          <span class="cm">// 30초가 지나거나</span>
+                    .thenPublish(new LlmRequested("안녕?"));           <span class="cm">// ← 구독 후에 발행된다</span>
+        }
+
+        @Override protected EventStepResult onEvent(EventStepContext ctx, Object event) {
+            LlmResponded res = (LlmResponded) event;
+            System.out.println("응답: " + res.text);
+            return EventStepResult.next();           <span class="cm">// 다음 Step으로</span>
+        }
+
+        @Override protected EventStepResult onTimeout(EventStepContext ctx) {
+            return EventStepResult.goTo("fallback");  <span class="cm">// 30초 초과 → 대체 경로</span>
+        }
+    }
+
+    static final class DoneStep extends EventStep {
+        private final String label;
+        DoneStep(String label) { this.label = label; }
+        @Override protected EventStepResult onEnter(EventStepContext ctx) {
+            System.out.println("종료: " + label);
+            return EventStepResult.finish();
+        }
+    }
+
+    public static void main(String[] args) throws Exception {
+        InMemoryEventBus bus = InMemoryEventBus.create();
+
+        <span class="cm">// Engine이 없다. Clock과 EventBus를 직접 준다. 둘 다 필수.</span>
+        EventWorker worker = EventWorker.builder("llm")
+                .clock(SystemClock.INSTANCE)
+                .eventBus(bus)
+                .build();
+
+        <span class="cm">// 바깥 세상: 요청을 받아 실제로 모델을 부르는 쪽 (여기서는 흉내만)</span>
+        bus.subscribe(LlmRequested.class, req -&gt; bus.publish(new LlmResponded("반가워!")));
+
+        EventFlow flow = EventFlow.builder("llm-call", "req-1")
+                .step("ask",      new AskStep())
+                .step("complete", new DoneStep("정상 완료"))
+                .step("fallback", new DoneStep("타임아웃 대체"))
+                .build();
+
+        worker.start();            <span class="cm">// 데몬 스레드 하나 기동</span>
+        worker.submit(flow);
+
+        Thread.sleep(500);
+        worker.stop();
+    }
+}</code></pre>
+
+  <h4>Core 코드와 다른 곳</h4>
+  <div class="scroll">
+    <table>
+      <thead><tr><th style="width:32%">여기</th><th>Core였다면</th></tr></thead>
+      <tbody>
+        <tr><td class="k">EventWorker.builder(...)<br>.clock(...).eventBus(...)</td><td><code>Engine</code>이 Clock·EventBus를 갖고 Worker에 나눠 줬습니다. <strong>여기서는 워커가 직접 받습니다</strong>(둘 다 필수).</td></tr>
+        <tr><td class="k">onEnter가 결과를 반환</td><td>Core의 <code>onEnter</code>는 <code>void</code>였습니다. 여기서는 <strong>반드시 <code>EventStepResult</code>를 반환</strong>합니다.</td></tr>
+        <tr><td class="k">await(...)</td><td><code>stay()</code>. “나중에 또 물어봐” vs “이게 오면 깨워”의 차이입니다.</td></tr>
+        <tr><td class="k">.thenPublish(...)</td><td>Core에서는 <code>onEnter</code> 안에서 그냥 발행했습니다. <strong>여기서 그러면 응답을 놓칠 수 있습니다.</strong> → <a href="#effect">07장</a></td></tr>
+        <tr><td class="k">onEvent / onTimeout</td><td><code>subscribe</code> + 시그널 + <code>onTick</code> 확인. 세 단계가 하나로 줄었습니다.</td></tr>
+        <tr><td class="k">next()</td><td><code>done()</code>. 이름만 다르고 의미는 같습니다.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h4>실행 순서</h4>
+  <div class="scroll">
+    <table class="dense">
+      <thead><tr><th style="width:9%">순번</th><th>내용</th></tr></thead>
+      <tbody>
+        <tr><td class="num">1</td><td><code>submit(flow)</code> &mdash; 워커가 Flow를 받고 “첫 Step 진입”을 예약합니다.</td></tr>
+        <tr><td class="num">2</td><td><code>onEnter(ask)</code> 호출 → <code>await(...)</code> 반환</td></tr>
+        <tr><td class="num">3</td><td>① <code>LlmResponded</code> 구독 등록 ② 30초 마감 등록 ③ (durable이면) 체크포인트 저장</td></tr>
+        <tr><td class="num">4</td><td><strong>그 다음에야</strong> <code>thenPublish</code> 효과 실행 → 요청 발행</td></tr>
+        <tr><td class="num">5</td><td>응답이 도착하면 <code>onEvent</code> 호출 → <code>next()</code></td></tr>
+        <tr><td class="num">6</td><td><code>onExit(ask)</code> → 구독·마감 전부 해제 → 다음 Step 진입</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="cf">
+    <b class="lb">헷갈리는 지점 · 대기 중인 Flow는 “실행 중”이 아닙니다</b>
+    <p><span class="q">이렇게 보입니다</span> 응답 대기 상태에서 워커는 그 Flow를 계속 돌보고 있을 것이다.</p>
+    <p><span class="a">실제로는</span> 워커는 그 Flow를 <strong>완전히 잊고 있습니다.</strong> 남아 있는 것은 이벤트 구독 하나와 마감 항목 하나뿐입니다. 그 둘 중 하나가 깨우기 전까지 이 Flow에 대해 실행되는 코드는 <strong>단 한 줄도 없습니다.</strong></p>
+    <p>그래서 대기 Flow가 10만 개여도 CPU 사용량은 0에 가깝습니다. 대신 <strong>“아무도 깨워주지 않으면 영원히 잠듭니다”</strong> &mdash; 마감 없는 <code>await</code>가 위험한 이유입니다.</p>
+  </div>
+</section>
+
+<!-- ================= 2부 ================= -->
+<div class="part">
+  <span class="pn">2부</span>
+  <h2>작성하기</h2>
+  <p>실제로 코드를 쓸 때 필요한 것들.</p>
+</div>
+
+<section id="step">
+  <h3><span class="sn">04</span>EventStep 생명주기</h3>
+  <p class="sub">훅은 다섯 개. 그중 둘은 <strong>기본 동작이 “실패”</strong>라 반드시 알아야 합니다.</p>
+
+  <div class="scroll">
+    <table>
+      <thead><tr><th style="width:20%">훅</th><th style="width:12%">필수</th><th style="width:22%">반환</th><th>언제</th></tr></thead>
+      <tbody>
+        <tr><td class="k">onEnter(ctx)</td><td><strong>필수</strong></td><td><code>EventStepResult</code></td><td>이 Step이 현재가 된 직후 1회. 보통 <code>await(...)</code>를 반환합니다.</td></tr>
+        <tr><td class="k">onEvent(ctx, event)</td><td>선택</td><td>결과 또는 <strong><code>null</code></strong></td><td>대기 조건에 걸린 이벤트가 도착했을 때. <strong>기본 구현은 <code>null</code></strong>(무시하고 계속 대기).</td></tr>
+        <tr><td class="k">onTimeout(ctx)</td><td>선택</td><td>결과 또는 <strong><code>null</code></strong></td><td>마감 도래. <span class="pill cr">기본 구현은 실패</span></td></tr>
+        <tr><td class="k">onRecover(ctx, recovery)</td><td>durable이면 필수</td><td><code>EventStepResult</code></td><td>체크포인트에서 복원될 때 <code>onEnter</code> <strong>대신</strong>. <span class="pill cr">기본 구현은 실패</span></td></tr>
+        <tr><td class="k">onExit(ctx)</td><td>선택</td><td>void</td><td>Step을 떠날 때.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <figure>
+    <div class="scroll">
+      <svg class="dia" viewBox="0 0 880 250" role="img" aria-label="EventStep 생명주기">
+        <defs><marker id="lc1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--line-2)"/></marker></defs>
+        <g class="mono" font-size="11.5">
+          <rect class="box-a" x="20" y="24" width="180" height="38" rx="8"/><text x="110" y="43" text-anchor="middle" dominant-baseline="middle">onEnter(ctx)</text>
+          <rect class="box" x="300" y="24" width="190" height="38" rx="8"/><text x="395" y="43" text-anchor="middle" dominant-baseline="middle">await(...) 등록</text>
+          <rect class="box-a" x="300" y="104" width="190" height="44" rx="8"/>
+          <text x="395" y="120" text-anchor="middle" dominant-baseline="middle">잠듦</text>
+          <text class="sm" x="395" y="138" text-anchor="middle">코드 실행 없음</text>
+          <rect class="box" x="60" y="182" width="170" height="38" rx="8"/><text x="145" y="201" text-anchor="middle" dominant-baseline="middle">onEvent(ctx, e)</text>
+          <rect class="box" x="270" y="182" width="170" height="38" rx="8"/><text x="355" y="201" text-anchor="middle" dominant-baseline="middle">onTimeout(ctx)</text>
+          <rect class="box-ok" x="600" y="104" width="230" height="44" rx="8"/>
+          <text x="715" y="120" text-anchor="middle" dominant-baseline="middle" fill="var(--ink)">next / goTo / finish / fail</text>
+          <text class="sm" x="715" y="138" text-anchor="middle">전이 결정</text>
+          <rect class="box" x="600" y="182" width="230" height="38" rx="8"/><text x="715" y="201" text-anchor="middle" dominant-baseline="middle">onExit(ctx)</text>
+        </g>
+        <g class="ln" marker-end="url(#lc1)">
+          <path d="M200 43 H296"/><path d="M395 62 V100"/>
+          <path d="M340 148 C300 165, 200 170, 160 178"/><path d="M395 148 V178"/>
+          <path d="M230 201 C300 232, 520 226, 600 212"/><path d="M440 201 C520 214, 560 168, 596 152"/>
+          <path d="M715 148 V178"/>
+        </g>
+        <path class="ln dash" d="M145 178 C120 140, 200 112, 296 122" marker-end="url(#lc1)"/>
+        <text class="sm" x="110" y="116">null 반환 → 그대로 계속 대기</text>
+        <text class="sm" x="470" y="182">await 반환 → 대기 갱신</text>
+      </svg>
+    </div>
+    <figcaption>onEnter → await → (이벤트 또는 마감) → 전이 → onExit. 깨어난 뒤 다시 await를 반환하면 대기 상태로 돌아갑니다.</figcaption>
+  </figure>
+
+  <div class="cf">
+    <b class="lb">헷갈리는 지점 · 같은 <code>null</code>인데 훅마다 뜻이 다릅니다</b>
+    <p><span class="q">이렇게 보입니다</span> 결과를 반환하지 않으면 다 똑같이 처리되겠지.</p>
+    <p><span class="a">실제로는</span> 세 갈래입니다.</p>
+    <p>· <code>onEnter</code>가 <code>null</code> → <strong>Flow 실패</strong><br>
+       · <code>onEvent</code>가 <code>null</code> → <strong>이 이벤트를 무시하고 기존 대기 유지</strong>. 정상적인 사용법입니다.<br>
+       · <code>onTimeout</code>이 <code>null</code> → <strong>마감만 제거하고</strong> 이벤트 대기는 계속 유지</p>
+    <p><code>onEvent</code>에서 <code>null</code>을 반환하는 건 “내가 기다리던 그 이벤트가 아니다”를 표현하는 정식 방법입니다. 여러 타입을 함께 기다릴 때 유용합니다.</p>
+  </div>
+
+  <div class="stop">
+    <b class="lb">기본 구현이 “실패”인 두 훅</b>
+    <p><code>onTimeout</code>과 <code>onRecover</code>는 재정의하지 않으면 <strong>흐름을 실패시킵니다.</strong> 실수를 조용히 넘기지 않으려는 의도적 설계입니다. <code>deadlineIn(...)</code>을 걸었으면 <code>onTimeout</code>을, <code>durable()</code>을 붙였으면 <code>onRecover</code>를 반드시 구현하세요.</p>
+  </div>
+</section>
+
+<section id="result">
+  <h3><span class="sn">05</span>EventStepResult</h3>
+
+  <div class="scroll">
+    <table>
+      <thead><tr><th style="width:22%">결과</th><th style="width:30%">의미</th><th>부수 동작</th></tr></thead>
+      <tbody>
+        <tr><td class="k">await(c1, c2, ...)</td><td>이 Step을 유지하고 <strong>조건 중 하나가 오면</strong> 깨어남</td><td>기존 대기 전부 해제 → 새로 등록 → 효과 실행. 조건이 0개면 예외.</td></tr>
+        <tr><td class="k">next()</td><td>이 Step 완료 → 다음 Step</td><td><code>onExit</code> 호출, 대기 해제. 마지막이면 <code>FINISHED</code>. (Core의 <code>done()</code>)</td></tr>
+        <tr><td class="k">goTo("id")</td><td>임의의 stepId로 점프</td><td><code>onExit</code> 호출, 대기 해제. 없는 id면 <strong>실패</strong>.</td></tr>
+        <tr><td class="k">finish()</td><td>남은 Step을 건너뛰고 성공 종료</td><td><code>onExit</code> → <code>FINISHED</code></td></tr>
+        <tr><td class="k">fail(cause)</td><td>Flow 실패 종료</td><td><code>onExit</code> → <code>FAILED</code></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="cf">
+    <b class="lb">헷갈리는 지점 · await는 추가가 아니라 “통째로 교체”입니다</b>
+    <p><span class="q">이렇게 보입니다</span> <code>onEvent</code>에서 <code>await(event(B.class))</code>를 반환하면 기존 A 대기에 <strong>B가 추가</strong>되겠다.</p>
+    <p><span class="a">실제로는</span> <strong>기존 대기가 전부 해제되고 B만 남습니다.</strong> 마감도 함께 사라집니다.</p>
+    <p>A와 B를 <em>둘 다</em> 기다리려면 <strong>한 번에 전부 다시 선언</strong>해야 합니다.</p>
+<pre style="margin:.6em 0 0"><code><span class="cm">// ✕ B만 남고 A와 마감은 사라짐</span>
+return EventStepResult.await(AwaitCondition.event(B.class));
+
+<span class="cm">// ✓ 계속 기다릴 것을 전부 다시 선언</span>
+return EventStepResult.await(
+        AwaitCondition.event(A.class),
+        AwaitCondition.event(B.class),
+        AwaitCondition.deadlineIn(remainingMillis));   <span class="cm">// 남은 시간도 직접 계산</span></code></pre>
+    <p><strong>마감은 “등록 시점부터 다시” 계산됩니다.</strong> 매번 <code>deadlineIn(30_000)</code>을 넣으면 이벤트가 올 때마다 마감이 30초씩 연장되는 셈이니, 전체 마감을 지키려면 <code>ctx.now()</code>로 남은 시간을 직접 계산하세요.</p>
+  </div>
+</section>
+
+<section id="await">
+  <h3><span class="sn">06</span>AwaitCondition &mdash; 대기 조건</h3>
+  <p class="sub">“무엇이 오면 깨울지”를 선언하는 세 가지 방법.</p>
+
+  <div class="scroll">
+    <table>
+      <thead><tr><th style="width:32%">생성</th><th style="width:20%">깨우는 것</th><th>비고</th></tr></thead>
+      <tbody>
+        <tr><td class="k">event(Foo.class)</td><td><code>Foo</code>가 발행될 때</td><td><strong>정확한 런타임 타입</strong> 일치만. 하위 클래스는 걸리지 않습니다.</td></tr>
+        <tr><td class="k">event(Foo.class, predicate)</td><td>타입 일치 + 조건 통과</td><td>“내 주문 것만” 같은 필터. <span class="pill cr">durable에서는 사용 불가</span></td></tr>
+        <tr><td class="k">signal("tool-call", callId)</td><td>같은 이름·키의 신호</td><td>이름과 키 모두 필수. durable에서도 안전합니다.</td></tr>
+        <tr><td class="k">deadlineIn(30_000)</td><td>등록 시점 기준 30초 후</td><td>음수면 예외. <code>0</code>이면 즉시 만료.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="cf">
+    <b class="lb">헷갈리는 지점 · 마감을 여러 개 걸면 하나로 합쳐집니다</b>
+    <p><span class="q">이렇게 보입니다</span> <code>await(event(A), deadlineIn(5000), event(B), deadlineIn(30000))</code>처럼 조건별로 다른 타임아웃을 줄 수 있겠다.</p>
+    <p><span class="a">실제로는</span> <strong>가장 이른 마감 하나만</strong> 남고 나머지는 버려집니다. 위 예에서는 5초 하나만 살아남고, 5초 뒤 <code>onTimeout</code>이 한 번 호출됩니다. <strong>“어느 조건의 타임아웃인지”는 알 수 없습니다.</strong></p>
+    <p>단계별로 다른 마감이 필요하면 <strong>Step을 나누거나</strong>, 짧은 마감으로 깨어난 뒤 <code>onTimeout</code>에서 다시 <code>await(...)</code>를 걸어 남은 시간을 재선언하세요.</p>
+  </div>
+
+  <div class="cf">
+    <b class="lb">헷갈리는 지점 · 타임아웃이 나도 이벤트 대기는 살아 있습니다</b>
+    <p><span class="q">이렇게 보입니다</span> 타임아웃이 발생하면 그 Step의 대기가 전부 끝나는 것 아닌가.</p>
+    <p><span class="a">실제로는</span> <code>onTimeout</code>이 <strong><code>null</code>을 반환하면</strong> <strong>마감만 제거되고 이벤트·시그널 대기는 그대로 유지</strong>됩니다. “일단 마감은 지났지만 응답은 계속 기다린다”를 표현하는 정식 방법입니다.</p>
+<pre style="margin:.6em 0 0"><code>@Override protected EventStepResult onTimeout(EventStepContext ctx) {
+    alertService.warn("응답 지연: " + ctx.flowId());
+    return null;      <span class="cm">// 마감만 소멸, 응답 대기는 계속</span>
+}</code></pre>
+    <p>반대로 <strong>기본 구현은 실패</strong>라 아무것도 재정의하지 않으면 흐름이 죽습니다.</p>
+  </div>
+
+  <div class="stop">
+    <b class="lb">깨우기가 조용히 무시되는 경우</b>
+    <p>이벤트를 분명히 보냈는데 아무 일도 안 일어난다면 이걸 확인하세요.</p>
+    <ul>
+      <li>런타임 타입이 정확히 일치하지 않음(상위 타입 대기는 동작하지 않음)</li>
+      <li>시그널의 <strong>이름 또는 키</strong>가 다름</li>
+      <li>그 Step이 이미 <strong>다른 <code>await</code>로 교체</strong>했거나 다음 Step으로 넘어감</li>
+      <li>같은 <code>EventBus</code> 인스턴스가 아님</li>
+    </ul>
+    <p>무시는 <strong>조용히</strong> 이루어집니다. 로그도 남지 않습니다.</p>
+  </div>
+</section>
+
+<section id="effect">
+  <h3><span class="sn">07</span>효과 &mdash; 순서가 중요한 이유</h3>
+  <p class="sub"><code>thenPublish</code>가 왜 있는지, 그리고 그것이 무엇을 보장하지 <em>않는지</em>.</p>
+
+  <h4>onEnter 안에서 그냥 publish하면 안 되는 이유</h4>
+  <p><code>InMemoryEventBus</code>는 <strong>동기</strong>입니다. 발행하면 그 자리에서 핸들러가 실행됩니다.</p>
+  <div class="codehead">✕ 응답을 놓칠 수 있는 코드</div>
+<pre><code>@Override protected EventStepResult onEnter(EventStepContext ctx) {
+    ctx.eventBus().publish(new LlmRequested("hi"));    <span class="cm">// ① 여기서 응답이 즉시 발행되면?</span>
+    return EventStepResult.await(                       <span class="cm">// ② 구독은 이 결과가 처리된 뒤에 등록됨</span>
+            AwaitCondition.event(LlmResponded.class));  <span class="cm">// → 응답을 영원히 못 받는다</span>
+}</code></pre>
+  <p>
+    요청을 받은 쪽이 캐시 히트나 동기 처리로 <strong>즉시 응답을 발행</strong>하면, 그 시점에는 아직 구독이 없습니다.
+    응답은 사라지고 Flow는 마감까지 멍하니 기다립니다. 재현이 어렵고 운영에서만 가끔 터지는 버그입니다.
+  </p>
+
+  <div class="codehead">✓ 효과로 넘기면 순서가 뒤집힌다</div>
+<pre><code>return EventStepResult
+        .await(AwaitCondition.event(LlmResponded.class))   <span class="cm">// ① 먼저 구독 등록</span>
+        .thenPublish(new LlmRequested("hi"));              <span class="cm">// ② 그 다음 발행 — 안전</span></code></pre>
+
+  <div class="scroll">
+    <table class="dense">
+      <thead><tr><th style="width:26%">체이닝</th><th style="width:22%">실행 스레드</th><th>쓸 곳</th></tr></thead>
+      <tbody>
+        <tr><td class="k">thenPublish(event)</td><td>루프 스레드</td><td>이벤트 발행. 가장 흔한 형태.</td></tr>
+        <tr><td class="k">thenRun(effect)</td><td>루프 스레드</td><td>카운터 증가, 로그 등 <strong>즉시 끝나는</strong> 동작.</td></tr>
+        <tr><td class="k">thenRunAsync(effect)</td><td>비동기 실행기</td><td>HTTP·DB·LLM 호출처럼 <strong>블로킹될 수 있는</strong> 동작.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h4>블로킹 작업 다루기</h4>
+  <div class="codehead">비동기 실행기 등록 + 사용</div>
+<pre><code>ExecutorService pool = Executors.newFixedThreadPool(8);
+
+EventWorker worker = EventWorker.builder("agent")
+        .clock(SystemClock.INSTANCE)
+        .eventBus(bus)
+        .asyncExecutor(pool)          <span class="cm">// ← 없으면 runAsync가 예외</span>
+        .build();
+
+<span class="cm">// Step 안</span>
+@Override protected EventStepResult onEnter(EventStepContext ctx) {
+    final String callId = ctx.flowId().flowKey();     <span class="cm">// ① 불변 값을 미리 캡처</span>
+    return EventStepResult
+            .await(AwaitCondition.signal("llm", callId),
+                   AwaitCondition.signal("llm-error", callId),
+                   AwaitCondition.deadlineIn(60_000))
+            .thenRunAsync(c -&gt; {                       <span class="cm">// ② 여기부터는 다른 스레드</span>
+                try {
+                    c.signal("llm", callId, llmClient.complete(prompt));
+                } catch (Exception e) {
+                    c.signal("llm-error", callId, e.getMessage());   <span class="cm">// ③ 실패도 신호로!</span>
+                }
+            });
+}</code></pre>
+
+  <div class="stop">
+    <b class="lb">비동기 작업의 예외는 Flow를 실패시키지 않습니다</b>
+    <p><code>runAsync</code>로 넘긴 작업이 예외를 던지면 <strong>Flow는 아무것도 모른 채 계속 기다립니다.</strong> 결국 마감이 올 때까지 멈춰 있게 됩니다. 그래서 위 예제처럼 <strong>실패도 반드시 신호로 알려야</strong> 하고, 그 신호도 <code>await</code>에 선언해 두어야 합니다.</p>
+  </div>
+
+  <div class="warn">
+    <b class="lb">비동기 작업 안에서 흐름 상태를 읽지 마세요</b>
+    <p>비동기 작업은 루프 스레드 <strong>밖</strong>에서 돕니다. 그 시점에 Flow는 이미 다른 Step으로 넘어갔을 수 있습니다. <code>ctx.currentStepId()</code> 같은 가변 상태를 읽지 말고, <strong>필요한 값은 결과를 반환하기 전에 지역 변수로 캡처</strong>하세요.</p>
+  </div>
+
+  <div class="stop">
+    <b class="lb">효과는 exactly-once가 아닙니다</b>
+    <p>
+      durable Flow에서 프로세스가 특정 시점에 죽으면 두 가지 문제가 각각 생길 수 있습니다.
+      <strong>대기는 저장됐는데 요청은 나가지 않은 상태</strong>로 복구되거나, 반대로 <strong>같은 효과가 두 번</strong> 실행될 수 있습니다.
+    </p>
+    <p>
+      중요한 외부 작업(결제, 메일 발송, 도구 실행)에는 <strong>durable outbox</strong>나 <strong>안정적인 연산 ID(idempotency key)</strong>를
+      반드시 함께 쓰세요. 프레임워크가 대신해 줄 수 없는 부분입니다.
+    </p>
+  </div>
+</section>
+
+<section id="signal">
+  <h3><span class="sn">08</span>EventSignal</h3>
+  <p class="sub">클래스 하나뿐이지만 durable 흐름의 핵심입니다.</p>
+
+  <p>
+    <code>EventSignal</code>은 <strong>(이름, 키, 선택적 페이로드)</strong>로 이루어진 이벤트입니다.
+    <code>ctx.signal("tool-call", callId, result)</code>로 발행하고, <code>AwaitCondition.signal("tool-call", callId)</code>로 기다립니다.
+  </p>
+
+  <div class="note">
+    <b class="lb">왜 따로 있나</b>
+    <p>
+      “내 주문의 응답만 받고 싶다”를 표현하는 방법은 두 가지입니다 &mdash; <strong>predicate</strong>(람다)를 쓰거나 <strong>데이터 모양의 키</strong>를 쓰는 것.
+      람다는 체크포인트에 저장할 수 없습니다. 그래서 <code>(이름, 키)</code>라는 <strong>저장 가능한 상관 방식</strong>이 따로 마련되어 있습니다.
+      durable 흐름에서 특정 대상을 기다릴 때는 시그널을 쓰세요.
+    </p>
+  </div>
+
+  <div class="scroll">
+    <table class="dense">
+      <thead><tr><th style="width:30%">API</th><th>비고</th></tr></thead>
+      <tbody>
+        <tr><td class="k">EventSignal.of(name, key)</td><td>페이로드 없는 신호</td></tr>
+        <tr><td class="k">EventSignal.of(name, key, payload)</td><td><strong>페이로드 null이면 예외</strong></td></tr>
+        <tr><td class="k">ctx.signal(name, key[, payload])</td><td>Step 안에서 발행하는 단축 메서드</td></tr>
+        <tr><td class="k">worker.signal(name, key[, payload])</td><td>바깥(웹훅 컨트롤러 등)에서 발행</td></tr>
+        <tr><td class="k">sig.payload(Type.class)</td><td>타입 캐스팅. 페이로드가 없으면 <code>null</code></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="cf">
+    <b class="lb">헷갈리는 지점 · Core의 “시그널”과 이름만 같습니다</b>
+    <p><span class="q">이렇게 보입니다</span> Core에서 <code>ctx.signal("paid")</code>를 썼으니 여기서도 Step 로컬 메모로 쓰면 되겠다.</p>
+    <p><span class="a">실제로는</span> 완전히 다른 물건입니다.</p>
+    <p>· <strong>Core의 시그널</strong>: Step 안의 메모. 밖으로 나가지 않고 그 Step이 끝나면 사라집니다.<br>
+       · <strong>EventLoop의 시그널</strong>: <code>EventBus</code>에 <strong>발행되는 이벤트</strong>. 같은 버스를 공유하는 모두가 볼 수 있고, <code>await</code>로 명시적으로 기다려야 전달됩니다.</p>
+    <p>즉 여기서 <code>ctx.signal(...)</code>은 “메모를 남긴다”가 아니라 <strong>“방송한다”</strong>입니다. 기다리는 <code>await</code>가 없으면 그냥 사라집니다.</p>
+  </div>
+</section>
+
+<!-- ================= 3부 ================= -->
+<div class="part">
+  <span class="pn">3부</span>
+  <h2>운영</h2>
+  <p>재시작을 견디고, 들여다보고, 테스트합니다.</p>
+</div>
+
+<section id="durable">
+  <h3><span class="sn">09</span>Durable &mdash; 제약과 복구</h3>
+  <p class="sub">Core의 durable에 “무엇을 기다리고 있었는지”가 추가로 저장됩니다.</p>
+
+  <div class="cards">
+    <div class="card">
+      <h5>저장되는 것</h5>
+      <ul>
+        <li>현재 Step과 진입 여부</li>
+        <li><strong>대기 조건 목록</strong>(이벤트 타입 이름 · 시그널 이름/키 · 마감 시각)</li>
+        <li>실행 신원(runId, traceId 등)</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h5>저장되지 않는 것</h5>
+      <ul>
+        <li>Step 인스턴스의 필드</li>
+        <li>predicate 람다</li>
+        <li>주고받은 이벤트 객체</li>
+        <li>효과의 실행 여부</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h5>마감은 절대 시각으로</h5>
+      <p>“30초 후”가 아니라 <strong>“몇 시 몇 분”</strong>으로 저장됩니다. 재시작할 때마다 마감이 뒤로 밀리지 않습니다.</p>
+    </div>
+  </div>
+
+  <h4>durable 모드의 제약</h4>
+  <div class="scroll">
+    <table>
+      <thead><tr><th style="width:30%">제약</th><th style="width:22%">언제 터지나</th><th>대응</th></tr></thead>
+      <tbody>
+        <tr><td class="k">predicate 있는 이벤트 대기 금지</td><td><strong>대기를 걸 때</strong>(런타임)</td><td><code>signal(name, key)</code>로 바꾸거나, 전부 받고 <code>onEvent</code>에서 걸러 <code>null</code>을 반환</td></tr>
+        <tr><td class="k">onRecover 구현 필수</td><td><strong>복구할 때</strong>(런타임)</td><td>기본 구현이 실패입니다. durable Step은 반드시 재정의하세요.</td></tr>
+        <tr><td class="k">durable 저장소 필수</td><td><code>submit()</code></td><td>빌드는 통과합니다. 통합 테스트에서 제출까지 해 봐야 잡힙니다.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="cf">
+    <b class="lb">헷갈리는 지점 · predicate 금지는 “그 Step이 실행될 때” 터집니다</b>
+    <p><span class="q">이렇게 보입니다</span> durable Flow에 predicate를 쓰면 빌드에서 막아 주겠지.</p>
+    <p><span class="a">실제로는</span> <code>AwaitCondition.event(Foo.class, predicate)</code> 자체는 문제없이 만들어집니다. 문제는 워커가 그 대기를 <strong>체크포인트로 저장하려는 순간</strong> 드러납니다 &mdash; 즉 <strong>그 Step이 실제로 실행될 때</strong>입니다.</p>
+    <p>흐름의 5번째 Step에서만 predicate를 썼다면 앞의 4단계는 정상 동작하다가 <strong>운영 중 그 지점에서야</strong> 실패합니다. durable로 전환할 때는 <strong>모든 Step의 <code>await</code>를 한 번씩 훑어보세요.</strong></p>
+<pre style="margin:.6em 0 0"><code><span class="cm">// ✕ durable에서 실패</span>
+AwaitCondition.event(ToolDone.class, e -&gt; e.callId().equals(myCallId))
+
+<span class="cm">// ✓ 데이터로 상관관계를 표현 — 저장 가능</span>
+AwaitCondition.signal("tool-done", myCallId)
+
+<span class="cm">// ✓ 또는 전부 받고 onEvent에서 거른다</span>
+AwaitCondition.event(ToolDone.class)
+<span class="cm">// onEvent: if (!e.callId().equals(myCallId)) return null;</span></code></pre>
+  </div>
+
+  <h4>onRecover 작성법</h4>
+  <div class="codehead">저장된 대기를 되살리는 표준형</div>
+<pre><code>@Override
+protected EventStepResult onRecover(EventStepContext ctx, EventRecoveryContext recovery) {
+    List&lt;AwaitCondition&gt; conditions = new ArrayList&lt;&gt;();
+
+    for (EventAwaitCheckpoint saved : recovery.awaits()) {
+        switch (saved.type()) {
+            case SIGNAL:
+                conditions.add(AwaitCondition.signal(saved.signalName(), saved.signalKey()));
+                break;
+            case DEADLINE:
+                <span class="cm">// 절대 시각 → 지금 기준 남은 시간 (이미 지났으면 0)</span>
+                conditions.add(AwaitCondition.deadlineIn(recovery.millisUntil(saved, ctx.now())));
+                break;
+            case EVENT:
+                conditions.add(AwaitCondition.event(ToolDone.class));
+                break;
+        }
+    }
+    <span class="cm">// ★ 여기서 요청을 다시 보내면 안 된다 — 이미 보냈다</span>
+    return EventStepResult.await(conditions.toArray(new AwaitCondition[0]));
+}</code></pre>
+
+  <div class="codehead">시작 시 복구</div>
+<pre><code>EventFlowFactoryRegistry registry = EventFlowFactoryRegistry.builder()
+        .register("llm-call", id -&gt; buildFlow(id.flowKey()))
+        .build();
+
+EventFlowRecoveryService recovery =
+        EventFlowRecoveryService.create(store, registry);
+
+worker.start();
+int restored = recovery.recoverActiveForWorker(worker);</code></pre>
+
+  <div class="cf">
+    <b class="lb">헷갈리는 지점 · 복구는 “이어서 실행”이 아니라 “다시 기다리기”입니다</b>
+    <p><span class="q">이렇게 보입니다</span> 복구하면 Flow가 알아서 원래 하던 대로 이어서 진행되겠지.</p>
+    <p><span class="a">실제로는</span> 복구가 되살리는 것은 <strong>“어느 Step에서 무엇을 기다리고 있었다”</strong>는 사실뿐입니다. 실제로 대기를 다시 거는 것은 <strong><code>onRecover</code>가 반환하는 <code>await(...)</code></strong>입니다. 즉 <strong>Step이 협조하지 않으면 복구가 완성되지 않습니다.</strong></p>
+    <p>· <code>onRecover</code> 미구현 → <strong>복구 즉시 실패</strong><br>
+       · 대기를 <em>적게</em> 선언 → 저장돼 있던 조건 일부가 <strong>영영 되살아나지 않음</strong><br>
+       · <code>onEnter</code>를 그대로 호출 → <strong>요청이 두 번</strong> 나감</p>
+    <p>이 “불편함”은 의도된 것입니다. 무엇을 다시 하고 무엇을 하지 말아야 하는지는 <strong>도메인만 알 수 있기</strong> 때문입니다.</p>
+  </div>
+
+  <div class="stop">
+    <b class="lb">여러 프로세스에서 복구할 때</b>
+    <p>중복 실행 방지는 <strong>전적으로 애플리케이션 책임</strong>입니다. 리더 선출 · DB 행 잠금 · 리스 중 하나를 적용하세요. <code>findActiveByWorker(name)</code>로 인스턴스별 워커 이름을 나누는 것이 가장 현실적인 완화책입니다.</p>
+  </div>
+</section>
+
+<section id="observe">
+  <h3><span class="sn">10</span>관측</h3>
+  <p class="sub">리스너 인터페이스는 Core와 <strong>완전히 동일</strong>합니다. 트레이스에는 두 이벤트가 추가됩니다.</p>
+
+  <div class="codehead">리스너 등록</div>
+<pre><code>EventWorker worker = EventWorker.builder("agent")
+        .clock(SystemClock.INSTANCE)
+        .eventBus(bus)
+        .listener(myListener)        <span class="cm">// Engine이 아니라 워커에 직접</span>
+        .build();</code></pre>
+  <p><code>onFlowSubmitted · onStepEntered · onStepExited · onFlowFinished · onFlowFailed · onFlowCancelled</code> &mdash; Core와 같은 콜백입니다. <strong>같은 리스너 객체를 Core Worker와 EventWorker에 함께 등록해도 됩니다.</strong></p>
+
+  <h4>대기·재개 이벤트</h4>
+  <p>트레이스 리스너를 붙이면 이 런타임에만 있는 두 이벤트가 나옵니다.</p>
+  <div class="scroll">
+    <table class="dense">
+      <thead><tr><th style="width:26%">이벤트</th><th>내용</th></tr></thead>
+      <tbody>
+        <tr><td class="k">FLOW_WAITING</td><td>대기 등록 직후. <strong>무엇을 기다리는지</strong>(조건 목록)를 담습니다.</td></tr>
+        <tr><td class="k">FLOW_RESUMED</td><td>깨어날 때. <strong>왜 깨어났는지</strong>(<code>EVENT</code>/<code>SIGNAL</code>/<code>TIMEOUT</code>/<code>RECOVERY</code>)를 담습니다.</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="tip">
+    <b class="lb">실제 대기 시간을 그대로 측정할 수 있습니다</b>
+    <p>짝을 이루는 <code>FLOW_WAITING</code>과 <code>FLOW_RESUMED</code>의 시각 차이가 <strong>실제 대기 시간</strong>이고, 재개 사유가 그 대기가 <em>어떻게</em> 끝났는지(응답/타임아웃)를 알려 줍니다. LLM 응답 지연 분포나 승인 소요 시간을 바로 얻을 수 있습니다.</p>
+  </div>
+
+  <div class="cf">
+    <b class="lb">헷갈리는 지점 · <code>stateOf()</code>가 null이면 “실패”가 아닙니다</b>
+    <p><span class="q">이렇게 보입니다</span> <code>worker.stateOf(id)</code>가 <code>null</code>이면 뭔가 잘못된 것이다.</p>
+    <p><span class="a">실제로는</span> <strong>“활성 목록에 없다”</strong>는 뜻일 뿐입니다. 정상 완료해서 제거된 경우가 가장 흔합니다. 아직 제출한 적 없어도 <code>null</code>입니다.</p>
+    <p>최종 결과를 알고 싶으면 <strong>Flow 객체의 <code>state()</code></strong>를 읽거나 종료 리스너를 쓰세요.</p>
+  </div>
+</section>
+
+<section id="testing">
+  <h3><span class="sn">11</span>테스트</h3>
+  <p class="sub">Core만큼 결정적으로 테스트할 수 있습니다. <code>tickOnce()</code> 자리에 <code>drain()</code>이 들어갑니다.</p>
+
+  <div class="codehead">기본 패턴</div>
+<pre><code>@Test
+void 응답이_오면_완료된다() {
+    ManualClock clock = new ManualClock();
+    InMemoryEventBus bus = InMemoryEventBus.create();
+    EventWorker worker = EventWorker.builder("llm")
+            .clock(clock).eventBus(bus).build();     <span class="cm">// start() 호출 안 함!</span>
+
+    EventFlow flow = buildFlow();
+    worker.submit(flow);
+    worker.drain();                                   <span class="cm">// 진입 + 대기 등록까지 전부 처리</span>
+
+    assertThat(flow.state()).isEqualTo(FlowState.RUNNING);   <span class="cm">// 대기 중</span>
+
+    bus.publish(new LlmResponded("hi"));              <span class="cm">// 동기 발행</span>
+    worker.drain();                                   <span class="cm">// 그 처리까지</span>
+
+    assertThat(flow.state()).isEqualTo(FlowState.FINISHED);
+}
+
+@Test
+void 마감이_지나면_대체경로로_간다() {
+    <span class="cm">// … 동일한 준비 …</span>
+    worker.submit(flow);
+    worker.drain();
+
+    clock.advance(30_000);                            <span class="cm">// 시간을 즉시 통과</span>
+    worker.drain();                                   <span class="cm">// 만료된 마감 처리</span>
+
+    assertThat(log).containsExactly("fallback");
+}</code></pre>
+
+  <div class="cf">
+    <b class="lb">헷갈리는 지점 · drain()과 start()는 섞을 수 없습니다</b>
+    <p><span class="q">이렇게 보입니다</span> <code>start()</code>로 띄워 두고 테스트에서 <code>drain()</code>으로 한 번 더 밀어주면 확실하겠다.</p>
+    <p><span class="a">실제로는</span> <code>drain()</code>은 백그라운드 모드면 <strong>즉시 예외</strong>를 던집니다. 테스트에서는 <strong><code>start()</code>를 아예 호출하지 않고</strong> <code>ManualClock</code> + <code>drain()</code>만 쓰세요.</p>
+  </div>
+
+  <div class="tip">
+    <b class="lb">체크리스트</b>
+    <ul>
+      <li><code>drain()</code>은 <strong>더 이상 진행할 것이 없을 때까지</strong> 반복합니다. 대기 없이 이어지는 Step 10개도 한 번에 통과합니다.</li>
+      <li>시간은 전부 <code>ManualClock.advance()</code>로.</li>
+      <li>이벤트는 <code>bus.publish(...)</code>로 테스트 스레드에서 직접 발행.</li>
+      <li><code>runAsync</code>를 쓰는 Step은 <strong>같은 스레드에서 실행하는 Executor</strong>(<code>Runnable::run</code>)를 주면 결정적으로 검증할 수 있습니다.</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ================= 4부 ================= -->
+<div class="part">
+  <span class="pn">4부</span>
+  <h2>잘 쓰기</h2>
+  <p>이 런타임 특유의 함정들.</p>
+</div>
+
+<section id="rules">
+  <h3><span class="sn">12</span>설계 규칙과 안티패턴</h3>
+
+  <div class="scroll">
+    <table>
+      <thead><tr><th style="width:44%"><span style="color:var(--crit)">✕ 이렇게 하면 안 됨</span></th><th><span style="color:var(--ok)">✓ 이렇게</span></th></tr></thead>
+      <tbody>
+        <tr><td><code>onEnter</code> 안에서 직접 <code>publish</code></td><td><code>.thenPublish(...)</code>로 넘겨 <strong>구독 후 발행</strong> 순서를 보장</td></tr>
+        <tr><td>마감 없는 <code>await</code></td><td>모든 <code>await</code>에 <code>deadlineIn(...)</code>을 함께 &mdash; 멈춘 흐름을 드러내는 유일한 장치</td></tr>
+        <tr><td><code>deadlineIn</code>만 걸고 <code>onTimeout</code> 미구현</td><td>기본값이 <strong>실패</strong>임을 기억하고 반드시 구현</td></tr>
+        <tr><td>루프 스레드에서 HTTP·DB·LLM 호출</td><td><code>thenRunAsync</code> + 비동기 실행기, 완료는 신호로</td></tr>
+        <tr><td>비동기 작업에서 예외를 그냥 던지기</td><td><code>try/catch</code>로 감싸 <strong>실패도 신호로</strong> 알리고, 그 신호도 <code>await</code>에 선언</td></tr>
+        <tr><td>비동기 작업 안에서 <code>ctx.currentStepId()</code> 읽기</td><td>필요한 값은 결과 반환 전에 <strong>지역 변수로 캡처</strong></td></tr>
+        <tr><td><code>onEvent</code>에서 일부 조건만 다시 <code>await</code></td><td>계속 기다릴 조건을 <strong>전부 다시 선언</strong>(await는 교체)</td></tr>
+        <tr><td>durable Flow에서 predicate 대기</td><td><code>signal(name, key)</code> 또는 <code>onEvent</code>에서 필터 후 <code>null</code></td></tr>
+        <tr><td><code>onRecover</code> 없이 <code>durable()</code></td><td>복구 시 무엇을 다시 걸고 무엇을 하지 말지 명시적으로 구현</td></tr>
+        <tr><td><code>onRecover</code>에서 <code>onEnter</code> 재호출</td><td>대기만 재등록. 일회성 요청은 다시 보내지 않기</td></tr>
+        <tr><td>이벤트를 상속 계층으로 만들고 상위 타입 대기</td><td>정확한 타입으로 &mdash; <strong>정확 일치</strong> 매칭입니다</td></tr>
+        <tr><td>중요한 외부 작업을 효과에만 의존</td><td>outbox 또는 idempotency key 병행 &mdash; exactly-once가 아닙니다</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="stop">
+    <b class="lb">이 런타임의 가장 흔한 장애는 “실패”가 아니라 “영원한 대기”입니다</b>
+    <p>
+      마감 없는 <code>await</code>, 예외로 죽은 비동기 작업, 조용히 무시된 깨우기 &mdash; 전부 <strong>로그에 아무것도 남지 않은 채 멈춘 Flow</strong>를 만듭니다.
+    </p>
+    <p><strong>대비책은 하나뿐입니다 &mdash; 모든 <code>await</code>에 마감을 함께 거세요.</strong> 마감이 있으면 최소한 <code>onTimeout</code>이 호출되어 문제가 드러납니다.</p>
+  </div>
+
+  <div class="note">
+    <b class="lb">한 줄 원칙</b>
+    <p><strong>“Step은 무엇을 기다릴지 선언하고, 깨어나면 판단만 한다.”</strong> 기다림을 선언하지 않은 것은 절대 오지 않습니다.</p>
+  </div>
+</section>
+
+<section id="faq">
+  <h3><span class="sn">13</span>자주 하는 실수 · 치트시트</h3>
+
+  <dl class="gloss">
+    <div>
+      <dt>Flow를 제출했는데 아무 일도 안 일어나요</dt>
+      <dd><code>start()</code>를 호출했는지 확인하세요. 테스트라면 <code>drain()</code>을 불러야 합니다.</dd>
+    </div>
+    <div>
+      <dt>이벤트를 발행했는데 안 깨어나요</dt>
+      <dd>① 정확한 런타임 타입인가 ② 같은 <code>EventBus</code>인가 ③ 그 Step이 아직 <strong>그 조건을 대기 중</strong>인가 ④ 시그널이라면 <strong>이름과 키가 모두</strong> 일치하는가.</dd>
+    </div>
+    <div>
+      <dt>Flow가 멈춰서 아무 로그도 없어요</dt>
+      <dd>마감 없는 <code>await</code>이거나, 비동기 작업이 예외로 죽었거나, 깨우기가 조용히 무시된 경우입니다.</dd>
+    </div>
+    <div>
+      <dt>drain()이 예외를 던집니다</dt>
+      <dd>이미 <code>start()</code>로 백그라운드 모드가 된 워커입니다.</dd>
+    </div>
+    <div>
+      <dt>durable로 바꿨더니 특정 단계에서만 실패해요</dt>
+      <dd>그 단계의 <code>await</code>에 predicate가 들어 있을 가능성이 큽니다.</dd>
+    </div>
+    <div>
+      <dt>복구했더니 바로 실패합니다</dt>
+      <dd><code>onRecover</code>를 구현하지 않았습니다. 기본 구현이 실패입니다.</dd>
+    </div>
+    <div>
+      <dt>onEvent에서 ClassCastException이 납니다</dt>
+      <dd>여러 타입을 함께 대기 중이라면 어떤 것이 올지 모릅니다. <code>instanceof</code>로 판별하고, 내 것이 아니면 <code>null</code>을 반환하세요.</dd>
+    </div>
+    <div>
+      <dt>Core 워커와 같이 쓸 수 있나요?</dt>
+      <dd>네. <code>Engine</code>에 넣을 수는 없지만 <strong>같은 <code>EventBus</code>를 공유</strong>시키면 두 런타임이 이벤트로 대화할 수 있습니다.</dd>
+    </div>
+    <div>
+      <dt>워커를 다시 시작할 수 있나요?</dt>
+      <dd>없습니다. <code>stop()</code> 이후에는 새로 만드세요.</dd>
+    </div>
+  </dl>
+
+  <h4>치트시트</h4>
+  <div class="cards">
+    <div class="card">
+      <h5>조립</h5>
+<pre style="margin:0;font-size:.78rem"><code>EventWorker w = EventWorker.builder("agent")
+    .clock(SystemClock.INSTANCE)   <span class="cm">// 필수</span>
+    .eventBus(bus)                 <span class="cm">// 필수</span>
+    .checkpointStore(store)        <span class="cm">// 선택</span>
+    .asyncExecutor(pool)           <span class="cm">// 선택</span>
+    .listener(myListener)
+    .build();
+w.start();   <span class="cm">// 테스트면 호출 안 함</span></code></pre>
+    </div>
+    <div class="card">
+      <h5>EventStepResult</h5>
+<pre style="margin:0;font-size:.78rem"><code>.await(c1, c2, ...)  <span class="cm">// 대기 (교체)</span>
+.next()              <span class="cm">// 다음 Step</span>
+.goTo("id")          <span class="cm">// 점프</span>
+.finish()            <span class="cm">// 성공 종료</span>
+.fail(cause)         <span class="cm">// 실패 종료</span>
+   .thenPublish(evt)
+   .thenRun(effect)
+   .thenRunAsync(effect)</code></pre>
+    </div>
+    <div class="card">
+      <h5>AwaitCondition</h5>
+<pre style="margin:0;font-size:.78rem"><code>event(Foo.class)
+event(Foo.class, pred)  <span class="cm">// durable ✕</span>
+signal("name", "key")
+deadlineIn(30_000)      <span class="cm">// 여러 개면</span>
+                        <span class="cm">// 가장 이른 것만</span></code></pre>
+    </div>
+    <div class="card">
+      <h5>훅과 기본값</h5>
+<pre style="margin:0;font-size:.78rem"><code>onEnter    필수
+onEvent    기본 null  (무시·계속 대기)
+onTimeout  기본 fail  ← 주의
+onRecover  기본 fail  ← 주의
+onExit     기본 no-op</code></pre>
+    </div>
+    <div class="card">
+      <h5>null 반환의 의미</h5>
+<pre style="margin:0;font-size:.78rem"><code>onEnter   → 실패
+onEvent   → 이 이벤트 무시,
+            기존 대기 유지
+onTimeout → 마감만 제거,
+            이벤트 대기 유지</code></pre>
+    </div>
+    <div class="card">
+      <h5>테스트</h5>
+<pre style="margin:0;font-size:.78rem"><code>ManualClock c = new ManualClock();
+<span class="cm">// start() 호출하지 않음</span>
+w.submit(flow);
+w.drain();
+bus.publish(new Res());
+w.drain();
+c.advance(30_000);
+w.drain();</code></pre>
+    </div>
+  </div>
+
+  <h4>기억해야 할 8가지</h4>
+  <ol>
+    <li>대기 중인 Flow는 <strong>코드가 한 줄도 실행되지 않는다.</strong> 깨워줄 사람이 없으면 영원히 잔다.</li>
+    <li><code>await</code>는 추가가 아니라 <strong>통째로 교체</strong>다.</li>
+    <li>마감을 여러 개 걸면 <strong>가장 이른 것 하나</strong>만 산다.</li>
+    <li><code>onTimeout</code>과 <code>onRecover</code>의 <strong>기본 동작은 실패</strong>다.</li>
+    <li><code>null</code> 반환의 의미는 훅마다 다르다.</li>
+    <li>요청은 <code>thenPublish</code>로 &mdash; <strong>구독이 먼저, 발행이 나중</strong>.</li>
+    <li>비동기 작업의 예외는 <strong>Flow에 전달되지 않는다.</strong> 실패도 신호로.</li>
+    <li>durable이면 <strong>predicate 금지, <code>onRecover</code> 필수</strong>.</li>
+  </ol>
+</section>
+
+<footer>
+  <p><strong>Flower EventLoop 사용 매뉴얼</strong> · 대상 버전 <code>0.1.3</code> · 성숙도 MVP</p>
+  <p>
+    관련 문서 &mdash;
+    <a href="flower-core.html">Flower Core 매뉴얼</a> ·
+    <a href="https://github.com/flowerjvm/flower">GitHub 저장소</a>
+  </p>
+  <p>Apache License 2.0</p>
+</footer>
+
+</main>
+</div>
+
+<script>
+(function(){
+  var root = document.documentElement, btn = document.getElementById('themeBtn'), saved = null;
+  try { saved = localStorage.getItem('flower-manual-theme'); } catch (e) {}
+  if (saved === 'dark' || saved === 'light') root.setAttribute('data-theme', saved);
+  btn.addEventListener('click', function(){
+    var cur = root.getAttribute('data-theme'), isDark;
+    if (cur) { isDark = cur === 'dark'; }
+    else { isDark = window.matchMedia('(prefers-color-scheme: dark)').matches; }
+    var next = isDark ? 'light' : 'dark';
+    root.setAttribute('data-theme', next);
+    try { localStorage.setItem('flower-manual-theme', next); } catch (e) {}
+  });
+
+  var links = Array.prototype.slice.call(document.querySelectorAll('#toc a[href^="#"]'));
+  var map = {};
+  links.forEach(function(a){ map[a.getAttribute('href').slice(1)] = a; });
+  var io = new IntersectionObserver(function(entries){
+    entries.forEach(function(en){
+      if (!en.isIntersecting) return;
+      var a = map[en.target.id];
+      if (!a) return;
+      links.forEach(function(l){ l.classList.remove('on'); });
+      a.classList.add('on');
+    });
+  }, { rootMargin: '-10% 0px -75% 0px', threshold: 0 });
+  document.querySelectorAll('main section').forEach(function(s){ io.observe(s); });
+
+  document.querySelectorAll('pre').forEach(function(pre){
+    var head = pre.previousElementSibling;
+    if (!head || !head.classList.contains('codehead')) return;
+    var b = document.createElement('button');
+    b.className = 'tbtn'; b.type = 'button'; b.textContent = 'copy';
+    b.style.marginLeft = 'auto'; b.style.padding = '2px 9px';
+    b.addEventListener('click', function(){
+      navigator.clipboard.writeText(pre.innerText).then(function(){
+        b.textContent = 'copied';
+        setTimeout(function(){ b.textContent = 'copy'; }, 1400);
+      });
+    });
+    head.appendChild(b);
+  });
+})();
+</script>
+</body>
+</html>

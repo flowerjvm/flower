@@ -1,0 +1,1175 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Flower EventLoop Manual</title>
+<style>
+:root{
+  --sans:system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  --mono:"JetBrains Mono","Cascadia Mono",Consolas,"SFMono-Regular",Menlo,monospace;
+  --bg:#F5F3F7; --surface:#FFFFFF; --surface-2:#EEEAF2; --chip:#E7E2EC;
+  --line:#DBD4E2; --line-2:#C2B8CD;
+  --ink:#1A1520; --ink-2:#453C51; --muted:#6D6379;
+  --accent:#A4174C; --accent-soft:#F7E4EB;
+  --ok:#1D6B4B; --ok-soft:#E0F0E8;
+  --warn:#8A5900; --warn-soft:#F8EEDA;
+  --crit:#A6231A; --crit-soft:#FAE5E2;
+  --info:#2A5C86; --info-soft:#E2EDF5;
+  --code-bg:#F1EDF4;
+  --shadow:0 1px 2px rgba(26,21,32,.05),0 8px 24px -16px rgba(26,21,32,.28);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#131018; --surface:#1A1622; --surface-2:#221D2C; --chip:#2A2436;
+    --line:#332B40; --line-2:#4B4159;
+    --ink:#EFEAF4; --ink-2:#CCC3D8; --muted:#978CA6;
+    --accent:#F0819F; --accent-soft:#3A1E2B;
+    --ok:#6FCFA1; --ok-soft:#16301F;
+    --warn:#E0AC55; --warn-soft:#332612;
+    --crit:#F08B7F; --crit-soft:#3A1D19;
+    --info:#82B4DC; --info-soft:#152A3A;
+    --code-bg:#201B2A;
+    --shadow:0 1px 2px rgba(0,0,0,.4),0 10px 30px -18px rgba(0,0,0,.8);
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#131018; --surface:#1A1622; --surface-2:#221D2C; --chip:#2A2436;
+  --line:#332B40; --line-2:#4B4159;
+  --ink:#EFEAF4; --ink-2:#CCC3D8; --muted:#978CA6;
+  --accent:#F0819F; --accent-soft:#3A1E2B;
+  --ok:#6FCFA1; --ok-soft:#16301F;
+  --warn:#E0AC55; --warn-soft:#332612;
+  --crit:#F08B7F; --crit-soft:#3A1D19;
+  --info:#82B4DC; --info-soft:#152A3A;
+  --code-bg:#201B2A;
+  --shadow:0 1px 2px rgba(0,0,0,.4),0 10px 30px -18px rgba(0,0,0,.8);
+}
+
+*,*::before,*::after{box-sizing:border-box}
+html{scroll-behavior:smooth;scroll-padding-top:24px}
+@media (prefers-reduced-motion: reduce){html{scroll-behavior:auto}*{animation:none!important;transition:none!important}}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:16px;line-height:1.7;-webkit-font-smoothing:antialiased}
+a{color:var(--accent);text-underline-offset:3px;text-decoration-thickness:1px}
+a:focus-visible,button:focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius:4px}
+p{margin:0 0 1em;max-width:72ch}
+ul,ol{margin:0 0 1em;padding-left:1.35em;max-width:72ch}
+li{margin:.3em 0}
+li>ul,li>ol{margin:.3em 0}
+strong{font-weight:700;color:var(--ink)}
+
+code{font-family:var(--mono);font-size:.87em;background:var(--chip);padding:.12em .38em;border-radius:5px;color:var(--ink)}
+pre{background:var(--code-bg);border:1px solid var(--line);border-left:3px solid var(--line-2);border-radius:10px;padding:15px 18px;margin:0 0 1.2em;overflow-x:auto;font-family:var(--mono);font-size:.83rem;line-height:1.7;color:var(--ink-2)}
+pre code{background:none;padding:0;font-size:1em;color:inherit}
+pre .cm{color:var(--muted)}
+
+.topbar{position:sticky;top:0;z-index:40;background:var(--bg);background:color-mix(in srgb,var(--bg) 88%,transparent);backdrop-filter:blur(10px);border-bottom:1px solid var(--line)}
+.topbar-in{max-width:1320px;margin:0 auto;padding:9px 22px;display:flex;align-items:center;gap:14px}
+.brand{font-family:var(--mono);font-size:.72rem;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
+.brand b{color:var(--accent);font-weight:700}
+.topbar .spacer{flex:1}
+.tbtn{font-family:var(--mono);font-size:.7rem;letter-spacing:.08em;text-transform:uppercase;background:var(--surface);border:1px solid var(--line);color:var(--ink-2);padding:5px 11px;border-radius:999px;cursor:pointer;text-decoration:none}
+.tbtn:hover{border-color:var(--line-2);color:var(--ink)}
+
+.shell{max-width:1320px;margin:0 auto;display:grid;grid-template-columns:268px minmax(0,1fr);gap:44px;padding:0 22px 90px}
+.side{position:sticky;top:52px;align-self:start;max-height:calc(100vh - 64px);overflow-y:auto;padding:26px 0 40px;font-size:.83rem}
+.side h4{font-family:var(--mono);font-size:.66rem;letter-spacing:.16em;text-transform:uppercase;color:var(--muted);margin:22px 0 8px;font-weight:600}
+.side h4:first-child{margin-top:0}
+.side a{display:block;padding:3px 10px 3px 11px;color:var(--ink-2);text-decoration:none;border-left:2px solid var(--line);line-height:1.5}
+.side a:hover{color:var(--ink);border-left-color:var(--line-2);background:var(--surface-2)}
+.side a.on{color:var(--accent);border-left-color:var(--accent);background:var(--accent-soft);font-weight:600}
+.side a .n{font-family:var(--mono);font-size:.72em;color:var(--muted);margin-right:7px}
+.side a.on .n{color:var(--accent)}
+main{min-width:0;padding-top:26px}
+
+.hero{padding:34px 0 30px;border-bottom:1px solid var(--line);margin-bottom:12px}
+.eyebrow{font-family:var(--mono);font-size:.68rem;letter-spacing:.2em;text-transform:uppercase;color:var(--accent);margin-bottom:14px}
+.hero h1{font-size:clamp(2rem,4.4vw,3rem);line-height:1.12;letter-spacing:-.03em;margin:0 0 14px;text-wrap:balance;font-weight:800}
+.hero .lede{font-size:1.06rem;color:var(--ink-2);max-width:64ch;margin-bottom:22px}
+.meta{display:flex;flex-wrap:wrap;border:1px solid var(--line);border-radius:10px;background:var(--surface);overflow:hidden;font-variant-numeric:tabular-nums}
+.meta div{padding:9px 16px;border-right:1px solid var(--line);min-width:120px}
+.meta div:last-child{border-right:0}
+.meta dt{font-family:var(--mono);font-size:.62rem;letter-spacing:.13em;text-transform:uppercase;color:var(--muted)}
+.meta dd{margin:1px 0 0;font-size:.86rem;font-weight:600}
+
+section{padding:44px 0 8px;scroll-margin-top:60px}
+.part{margin:52px 0 6px;padding:14px 0 12px;border-top:2px solid var(--ink);display:flex;align-items:baseline;gap:14px;flex-wrap:wrap}
+.part .pn{font-family:var(--mono);font-size:.72rem;letter-spacing:.16em;text-transform:uppercase;color:var(--accent)}
+.part h2{margin:0;font-size:1.5rem;letter-spacing:-.02em;font-weight:800}
+.part p{margin:0;color:var(--muted);font-size:.88rem;flex-basis:100%}
+h3{font-size:1.42rem;line-height:1.3;letter-spacing:-.02em;margin:0 0 6px;font-weight:750;text-wrap:balance;display:flex;align-items:baseline;gap:11px;flex-wrap:wrap}
+h3 .sn{font-family:var(--mono);font-size:.82rem;color:var(--accent);font-weight:600}
+h4{font-size:1.02rem;margin:1.9em 0 .55em;letter-spacing:-.01em;font-weight:700}
+h5{font-size:.86rem;margin:1.5em 0 .5em;font-family:var(--mono);letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:600}
+.sub{color:var(--muted);font-size:.9rem;margin:-2px 0 20px;max-width:70ch}
+
+.scroll{overflow-x:auto;margin:0 0 1.4em;border-radius:10px;border:1px solid var(--line);background:var(--surface)}
+table{border-collapse:collapse;width:100%;font-size:.855rem;line-height:1.6}
+th,td{padding:9px 13px;text-align:left;border-bottom:1px solid var(--line);vertical-align:top}
+thead th{background:var(--surface-2);font-family:var(--mono);font-size:.68rem;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:600;white-space:nowrap}
+tbody tr:last-child td{border-bottom:0}
+td.k,td code{white-space:nowrap}
+td.k{font-family:var(--mono);font-size:.82rem;color:var(--ink);font-weight:600}
+td.num{font-variant-numeric:tabular-nums;white-space:nowrap}
+table.dense td,table.dense th{padding:6px 12px}
+
+.note,.warn,.tip,.stop{border:1px solid var(--line);border-left-width:3px;border-radius:9px;padding:13px 17px;margin:0 0 1.4em;font-size:.92rem;background:var(--surface)}
+.note{border-left-color:var(--info);background:var(--info-soft)}
+.tip{border-left-color:var(--ok);background:var(--ok-soft)}
+.warn{border-left-color:var(--warn);background:var(--warn-soft)}
+.stop{border-left-color:var(--crit);background:var(--crit-soft)}
+.note p:last-child,.warn p:last-child,.tip p:last-child,.stop p:last-child,
+.note ul:last-child,.warn ul:last-child,.tip ul:last-child,.stop ul:last-child{margin-bottom:0}
+.note b.lb,.warn b.lb,.tip b.lb,.stop b.lb{display:block;font-family:var(--mono);font-size:.65rem;letter-spacing:.14em;text-transform:uppercase;margin-bottom:5px}
+.note b.lb{color:var(--info)} .tip b.lb{color:var(--ok)}
+.warn b.lb{color:var(--warn)} .stop b.lb{color:var(--crit)}
+
+.cf{border:1px solid var(--accent);border-left-width:3px;border-radius:9px;padding:13px 17px;margin:0 0 1.4em;background:var(--accent-soft);font-size:.92rem}
+.cf b.lb{display:block;font-family:var(--mono);font-size:.65rem;letter-spacing:.14em;text-transform:uppercase;margin-bottom:8px;color:var(--accent)}
+.cf p{margin:0 0 .6em;max-width:none}
+.cf p:last-child{margin-bottom:0}
+.cf .q,.cf .a{display:inline-block;font-family:var(--mono);font-size:.64rem;letter-spacing:.06em;padding:1px 7px;border-radius:5px;margin-right:9px;border:1px solid;position:relative;top:-1px;white-space:nowrap}
+.cf .q{color:var(--muted);border-color:var(--line-2);background:var(--surface)}
+.cf .a{color:var(--accent);border-color:var(--accent);background:var(--surface);font-weight:600}
+
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(215px,1fr));gap:14px;margin:0 0 1.5em}
+.card{border:1px solid var(--line);border-radius:11px;padding:15px 17px;background:var(--surface);box-shadow:var(--shadow)}
+.card h5{margin:0 0 7px;color:var(--accent)}
+.card p{font-size:.87rem;margin:0;color:var(--ink-2);max-width:none}
+.card ul,.card ol{font-size:.87rem;margin:0;color:var(--ink-2);padding-left:1.15em}
+
+figure{margin:0 0 1.6em}
+figure .scroll{margin-bottom:0}
+figcaption{font-size:.78rem;color:var(--muted);margin-top:8px;font-family:var(--mono)}
+svg.dia{display:block;min-width:620px;width:100%;height:auto;background:var(--surface);padding:8px 4px}
+svg.dia text{font-family:var(--sans);fill:var(--ink)}
+svg.dia .mono{font-family:var(--mono)}
+svg.dia .sm{font-size:11px;fill:var(--muted)}
+svg.dia .box{fill:var(--surface-2);stroke:var(--line-2);stroke-width:1.2}
+svg.dia .box-a{fill:var(--accent-soft);stroke:var(--accent);stroke-width:1.4}
+svg.dia .box-ok{fill:var(--ok-soft);stroke:var(--ok);stroke-width:1.2}
+svg.dia .ln{stroke:var(--line-2);stroke-width:1.3;fill:none}
+svg.dia .ln-a{stroke:var(--accent);stroke-width:1.5;fill:none}
+svg.dia .dash{stroke-dasharray:5 4}
+
+dl.gloss{margin:0 0 1.5em;border-top:1px solid var(--line)}
+dl.gloss div{padding:11px 0;border-bottom:1px solid var(--line);display:grid;grid-template-columns:230px minmax(0,1fr);gap:18px}
+dl.gloss dt{font-weight:700;font-size:.92rem}
+dl.gloss dd{margin:0;font-size:.92rem;color:var(--ink-2)}
+
+.codehead{display:flex;align-items:center;gap:8px;font-family:var(--mono);font-size:.68rem;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);border:1px solid var(--line);border-bottom:0;border-radius:9px 9px 0 0;padding:6px 14px;background:var(--surface-2);margin-top:.2em}
+.codehead + pre{border-radius:0 0 10px 10px;border-left-width:1px;border-left-color:var(--line)}
+
+.pill{display:inline-block;font-family:var(--mono);font-size:.68rem;padding:1px 7px;border-radius:5px;border:1px solid var(--line-2);background:var(--chip);color:var(--ink-2);white-space:nowrap}
+.pill.ok{color:var(--ok);border-color:var(--ok);background:var(--ok-soft)}
+.pill.cr{color:var(--crit);border-color:var(--crit);background:var(--crit-soft)}
+.pill.ac{color:var(--accent);border-color:var(--accent);background:var(--accent-soft)}
+
+footer{border-top:1px solid var(--line);margin-top:60px;padding:26px 0 10px;color:var(--muted);font-size:.82rem}
+footer p{max-width:none}
+
+@media (max-width:1000px){
+  .shell{grid-template-columns:1fr;gap:0}
+  .side{position:static;max-height:none;border-bottom:1px solid var(--line);margin-bottom:10px;columns:2;column-gap:26px;padding-bottom:20px}
+  .side h4{break-after:avoid}
+  dl.gloss div{grid-template-columns:1fr;gap:2px}
+}
+@media (max-width:640px){ body{font-size:15px} .side{columns:1} .meta div{min-width:50%} }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="topbar-in">
+    <span class="brand">Flower / Manual / <b>flower&#8209;eventloop</b></span>
+    <span class="spacer"></span>
+    <a class="tbtn" href="../ko/flower-eventloop.html">한국어</a>
+    <button class="tbtn" id="themeBtn" type="button">Theme</button>
+  </div>
+</div>
+
+<div class="shell">
+
+<nav class="side" id="toc">
+  <h4>Part 1 · Getting Started</h4>
+  <a href="#intro"><span class="n">01</span>Why a Second Runtime</a>
+  <a href="#vs-core"><span class="n">02</span>How It Differs From Core</a>
+  <a href="#quickstart"><span class="n">03</span>Quickstart</a>
+
+  <h4>Part 2 · Writing Flows</h4>
+  <a href="#step"><span class="n">04</span>EventStep Lifecycle</a>
+  <a href="#result"><span class="n">05</span>EventStepResult</a>
+  <a href="#await"><span class="n">06</span>AwaitCondition</a>
+  <a href="#effect"><span class="n">07</span>Effects and Ordering</a>
+  <a href="#signal"><span class="n">08</span>EventSignal</a>
+
+  <h4>Part 3 · Operating</h4>
+  <a href="#durable"><span class="n">09</span>Durable Flows</a>
+  <a href="#observe"><span class="n">10</span>Observability</a>
+  <a href="#testing"><span class="n">11</span>Testing</a>
+
+  <h4>Part 4 · Using It Well</h4>
+  <a href="#rules"><span class="n">12</span>Rules and Anti-Patterns</a>
+  <a href="#faq"><span class="n">13</span>Mistakes · Cheat Sheet</a>
+</nav>
+
+<main>
+
+<header class="hero">
+  <div class="eyebrow">Flower Manual</div>
+  <h1>Flower EventLoop</h1>
+  <p class="lede">
+    Instead of waking a Flow periodically to ask whether it is ready, a Step
+    <strong>declares what should wake it</strong> and sleeps. Built for flows that wait on things
+    with unpredictable timing: LLM responses, tool calls, human approvals.
+  </p>
+  <dl class="meta">
+    <div><dt>Module</dt><dd>flower-eventloop</dd></div>
+    <div><dt>Version</dt><dd>0.1.3</dd></div>
+    <div><dt>Maturity</dt><dd>MVP</dd></div>
+    <div><dt>Depends on</dt><dd>flower-core</dd></div>
+    <div><dt>Java</dt><dd>8+</dd></div>
+  </dl>
+</header>
+
+<div class="stop" style="margin-top:26px">
+  <b class="lb">Read the MVP label literally</b>
+  <p>
+    This module is usable but its API may move more than <code>flower-core</code>.
+    It is also <strong>a separate execution line, not a replacement</strong> for the tick-driven Worker.
+    You choose one or the other; it is not a superset.
+  </p>
+</div>
+
+<div class="cards">
+  <div class="card">
+    <h5>If you know Flower Core</h5>
+    <p>Read <a href="#vs-core">02 (comparison)</a> → 03 → 06. Most concepts carry over; only the differences need attention.</p>
+  </div>
+  <div class="card">
+    <h5>If you are new</h5>
+    <p>Read the <a href="flower-core.html">Flower Core manual</a> first. This document assumes those concepts.</p>
+  </div>
+  <div class="card">
+    <h5>The pink boxes</h5>
+    <p><strong>“Easy to misread”</strong> boxes mark genuine traps. This runtime has more of them than Core.</p>
+  </div>
+</div>
+
+<!-- ================= PART 1 ================= -->
+<div class="part">
+  <span class="pn">Part 1</span>
+  <h2>Getting Started</h2>
+  <p>Why a second runtime exists, and one small example.</p>
+</div>
+
+<section id="intro">
+  <h3><span class="sn">01</span>Why a Second Runtime</h3>
+  <p class="sub">In one line: it replaces polling with subscription.</p>
+
+  <h4>Where ticking runs out</h4>
+  <p>
+    A Core Worker wakes every live Flow every 100&nbsp;ms and calls <code>onTick()</code>. The Step answers
+    “not yet” (<code>stay()</code>) and goes back to sleep. Simple and easy to test.
+  </p>
+  <p>Now consider:</p>
+  <ul>
+    <li><strong>1,000</strong> Flows waiting up to <strong>30 seconds</strong> for an LLM response</li>
+    <li><strong>200</strong> Flows waiting <strong>three days</strong> for a human approval</li>
+  </ul>
+  <p>
+    That is 1,200 <code>onTick()</code> calls every 100&nbsp;ms, nearly all of them answering “not yet”.
+    And when a response finally arrives, it waits up to another 100&nbsp;ms to be noticed.
+  </p>
+
+  <h4>Declare what should wake you</h4>
+  <p>An event step never says “ask me later”. It says <strong>“wake me when one of these happens”</strong> and sleeps completely.</p>
+
+  <div class="codehead">The core idea in one statement</div>
+<pre><code>return EventStepResult.await(
+        AwaitCondition.event(LlmResponded.class),   <span class="cm">// wake me on this event</span>
+        AwaitCondition.deadlineIn(30_000))          <span class="cm">// or after 30 seconds</span>
+        .thenPublish(new LlmRequested("hello"));    <span class="cm">// then send this request</span></code></pre>
+
+  <p>
+    A waiting Flow consumes <strong>no CPU at all</strong> and wakes the instant its event arrives, with no polling
+    latency. Whether there are 1,000 or 100,000 waiting Flows barely changes the cost.
+  </p>
+
+  <div class="scroll">
+    <table>
+      <thead><tr><th style="width:30%">Situation</th><th>Why the event loop fits</th></tr></thead>
+      <tbody>
+        <tr><td class="k">LLM / agent turns</td><td>Response timing is unpredictable; you want zero added latency plus a timeout.</td></tr>
+        <tr><td class="k">Tool-call waits</td><td>Responses must be matched by a correlation key such as <code>callId</code>.</td></tr>
+        <tr><td class="k">Human approvals</td><td>May take days. Polling for days is pure waste.</td></tr>
+        <tr><td class="k">Webhooks and callbacks</td><td>One-shot responses at an unknown time.</td></tr>
+        <tr><td class="k">Many idle Flows</td><td>Waiting cost does not scale with the number of Flows.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="warn">
+    <b class="lb">When Core is the better choice</b>
+    <ul>
+      <li><strong>Work that must be checked periodically</strong> &mdash; “did the database change?” has no event to wait for. Expressing that here means awkwardly re-arming deadlines.</li>
+      <li><strong>Flows without real waiting</strong> &mdash; no waiting, no benefit.</li>
+      <li><strong>Stability-critical code</strong> &mdash; Core's API is settled; this one is MVP.</li>
+    </ul>
+  </div>
+</section>
+
+<section id="vs-core">
+  <h3><span class="sn">02</span>How It Differs From Core</h3>
+
+  <figure>
+    <div class="scroll">
+      <svg class="dia" viewBox="0 0 880 200" role="img" aria-label="Tick model versus event loop">
+        <defs><marker id="cmp1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--line-2)"/></marker></defs>
+        <text class="mono" x="10" y="20" font-size="12" font-weight="700">Core · tick model</text>
+        <g class="ln dash"><path d="M10 100 H430"/></g>
+        <g class="mono sm"><text x="10" y="118">0ms</text><text x="90" y="118">100</text><text x="170" y="118">200</text><text x="250" y="118">300</text><text x="330" y="118">400</text></g>
+        <g class="mono" font-size="10">
+          <rect class="box" x="10" y="62" width="66" height="30" rx="6"/><text x="43" y="78" text-anchor="middle" dominant-baseline="middle">stay</text>
+          <rect class="box" x="90" y="62" width="66" height="30" rx="6"/><text x="123" y="78" text-anchor="middle" dominant-baseline="middle">stay</text>
+          <rect class="box" x="170" y="62" width="66" height="30" rx="6"/><text x="203" y="78" text-anchor="middle" dominant-baseline="middle">stay</text>
+          <rect class="box" x="250" y="62" width="66" height="30" rx="6"/><text x="283" y="78" text-anchor="middle" dominant-baseline="middle">stay</text>
+          <rect class="box-ok" x="330" y="62" width="66" height="30" rx="6"/><text x="363" y="78" text-anchor="middle" dominant-baseline="middle" fill="var(--ink)">done</text>
+        </g>
+        <path class="ln-a" d="M300 40 V58" marker-end="url(#cmp1)"/>
+        <text class="sm" x="256" y="36">event arrives</text>
+        <text class="sm" x="220" y="146">4 wasted calls + up to 100 ms latency</text>
+
+        <text class="mono" x="470" y="20" font-size="12" font-weight="700">EventLoop · reactor</text>
+        <g class="ln dash"><path d="M470 100 H870"/></g>
+        <g class="mono sm"><text x="470" y="118">0ms</text><text x="740" y="118">300</text></g>
+        <g class="mono" font-size="10">
+          <rect class="box-a" x="470" y="62" width="90" height="30" rx="6"/><text x="515" y="78" text-anchor="middle" dominant-baseline="middle">await(...)</text>
+          <rect class="box-ok" x="750" y="62" width="90" height="30" rx="6"/><text x="795" y="78" text-anchor="middle" dominant-baseline="middle" fill="var(--ink)">onEvent</text>
+        </g>
+        <g class="ln dash"><path d="M566 77 H744"/></g>
+        <text class="sm" x="602" y="72">fully asleep (no CPU)</text>
+        <path class="ln-a" d="M760 40 V58" marker-end="url(#cmp1)"/>
+        <text class="sm" x="716" y="36">event arrives</text>
+        <text class="sm" x="640" y="146">1 call + no latency</text>
+      </svg>
+    </div>
+    <figcaption>Without waiting the two models are nearly identical. The difference is entirely in how they wait.</figcaption>
+  </figure>
+
+  <div class="scroll">
+    <table>
+      <thead><tr><th style="width:24%">Flower Core</th><th style="width:24%">Flower EventLoop</th><th>Relationship</th></tr></thead>
+      <tbody>
+        <tr><td class="k">Engine</td><td class="k"><span class="pill cr">none</span></td><td><strong>EventWorker is the top level.</strong> You give it a Clock and EventBus directly and start/stop it yourself.</td></tr>
+        <tr><td class="k">Worker</td><td class="k">EventWorker</td><td>Tick loop → queue reactor.</td></tr>
+        <tr><td class="k">Flow</td><td class="k">EventFlow</td><td>Both hold Step order and position. <code>FlowState</code> is shared.</td></tr>
+        <tr><td class="k">Step</td><td class="k">EventStep</td><td>No <code>onTick</code>; instead <code>onEvent</code>, <code>onTimeout</code>, <code>onRecover</code>.</td></tr>
+        <tr><td class="k">StepResult</td><td class="k">EventStepResult</td><td>No <code>stay()</code>; <code>await(...)</code> replaces it. <code>done()</code> is renamed <code>next()</code>.</td></tr>
+        <tr><td class="k">Guard</td><td class="k"><span class="pill cr">none</span></td><td>Decide entry conditions inside <code>onEnter</code> and <code>goTo</code> instead.</td></tr>
+        <tr><td class="k">RecoveryPolicy</td><td class="k">onRecover hook</td><td>A hook instead of an enum. <strong>Its default is to fail.</strong></td></tr>
+        <tr><td class="k">worker.tickOnce()</td><td class="k">worker.drain()</td><td>Test driver. Still pairs with <code>ManualClock</code>.</td></tr>
+        <tr><td class="k">FlowerListener</td><td class="k">FlowerListener</td><td><strong>Reused as-is</strong>, including the trace schema.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="cf">
+    <b class="lb">Easy to misread · an EventWorker cannot go into an Engine</b>
+    <p><span class="q">Looks like</span> both are Flower, so <code>Engine.builder().worker(eventWorker)</code> should manage them together.</p>
+    <p><span class="a">Actually</span> <code>Engine.worker(...)</code> accepts <strong>only Core's <code>Worker</code></strong>. Give the Clock, EventBus, listeners, and store <strong>directly to the EventWorker builder</strong>, and call <code>start()</code>/<code>stop()</code> yourself.</p>
+    <p>You can absolutely run both runtimes in one application &mdash; <strong>share the same <code>EventBus</code> instance</strong> and they can exchange events.</p>
+  </div>
+</section>
+
+<section id="quickstart">
+  <h3><span class="sn">03</span>Quickstart</h3>
+
+  <div class="codehead">Maven</div>
+<pre><code>&lt;dependency&gt;
+    &lt;groupId&gt;io.github.flowerjvm&lt;/groupId&gt;
+    &lt;artifactId&gt;flower-eventloop&lt;/artifactId&gt;
+    &lt;version&gt;0.1.3&lt;/version&gt;
+&lt;/dependency&gt;</code></pre>
+
+  <div class="codehead">LlmQuickStart.java</div>
+<pre><code>import io.github.flowerjvm.flower.core.event.InMemoryEventBus;
+import io.github.flowerjvm.flower.core.time.SystemClock;
+import io.github.flowerjvm.flower.eventloop.flow.EventFlow;
+import io.github.flowerjvm.flower.eventloop.step.*;
+import io.github.flowerjvm.flower.eventloop.worker.EventWorker;
+
+public class LlmQuickStart {
+
+    <span class="cm">// Events — immutable classes (matching is by exact type)</span>
+    static final class LlmRequested { final String prompt;
+        LlmRequested(String p) { this.prompt = p; } }
+    static final class LlmResponded { final String text;
+        LlmResponded(String t) { this.text = t; } }
+
+    static final class AskStep extends EventStep {
+        @Override protected EventStepResult onEnter(EventStepContext ctx) {
+            return EventStepResult
+                    .await(AwaitCondition.event(LlmResponded.class),   <span class="cm">// response, or</span>
+                           AwaitCondition.deadlineIn(30_000))          <span class="cm">// 30 seconds</span>
+                    .thenPublish(new LlmRequested("hi"));              <span class="cm">// published AFTER subscribing</span>
+        }
+
+        @Override protected EventStepResult onEvent(EventStepContext ctx, Object event) {
+            LlmResponded res = (LlmResponded) event;
+            System.out.println("response: " + res.text);
+            return EventStepResult.next();
+        }
+
+        @Override protected EventStepResult onTimeout(EventStepContext ctx) {
+            return EventStepResult.goTo("fallback");
+        }
+    }
+
+    static final class DoneStep extends EventStep {
+        private final String label;
+        DoneStep(String label) { this.label = label; }
+        @Override protected EventStepResult onEnter(EventStepContext ctx) {
+            System.out.println("done: " + label);
+            return EventStepResult.finish();
+        }
+    }
+
+    public static void main(String[] args) throws Exception {
+        InMemoryEventBus bus = InMemoryEventBus.create();
+
+        <span class="cm">// No Engine. Clock and EventBus are given directly; both required.</span>
+        EventWorker worker = EventWorker.builder("llm")
+                .clock(SystemClock.INSTANCE)
+                .eventBus(bus)
+                .build();
+
+        <span class="cm">// The outside world that answers the request (stubbed here)</span>
+        bus.subscribe(LlmRequested.class, req -&gt; bus.publish(new LlmResponded("hello back")));
+
+        EventFlow flow = EventFlow.builder("llm-call", "req-1")
+                .step("ask",      new AskStep())
+                .step("complete", new DoneStep("completed"))
+                .step("fallback", new DoneStep("timed out"))
+                .build();
+
+        worker.start();            <span class="cm">// one daemon thread</span>
+        worker.submit(flow);
+
+        Thread.sleep(500);
+        worker.stop();
+    }
+}</code></pre>
+
+  <div class="scroll">
+    <table>
+      <thead><tr><th style="width:32%">Here</th><th>In Core</th></tr></thead>
+      <tbody>
+        <tr><td class="k">EventWorker.builder(...)<br>.clock(...).eventBus(...)</td><td>The <code>Engine</code> owned these and injected them. <strong>Now the worker takes them directly</strong> (both required).</td></tr>
+        <tr><td class="k">onEnter returns a result</td><td>Core's <code>onEnter</code> was <code>void</code>. Here it <strong>must return an <code>EventStepResult</code></strong>.</td></tr>
+        <tr><td class="k">await(...)</td><td><code>stay()</code>. “Ask me later” versus “wake me when this happens”.</td></tr>
+        <tr><td class="k">.thenPublish(...)</td><td>Core published inside <code>onEnter</code>. <strong>Doing that here can lose the response.</strong> → <a href="#effect">Section 07</a></td></tr>
+        <tr><td class="k">onEvent / onTimeout</td><td><code>subscribe</code> + signal + <code>onTick</code> check &mdash; three steps collapsed into one.</td></tr>
+        <tr><td class="k">next()</td><td><code>done()</code>. Same meaning, different name.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="cf">
+    <b class="lb">Easy to misread · a waiting Flow is not “running”</b>
+    <p><span class="q">Looks like</span> while waiting for a response, the worker is somehow tending that Flow.</p>
+    <p><span class="a">Actually</span> the worker has <strong>completely forgotten it</strong>. All that remains is one event subscription and one deadline entry. Until one of them fires, <strong>not a single line of code runs</strong> for that Flow.</p>
+    <p>That is why 100,000 waiting Flows cost almost nothing &mdash; and also why <strong>nothing will ever wake a Flow that nobody wakes</strong>. An <code>await</code> without a deadline can hang forever.</p>
+  </div>
+</section>
+
+<!-- ================= PART 2 ================= -->
+<div class="part">
+  <span class="pn">Part 2</span>
+  <h2>Writing Flows</h2>
+</div>
+
+<section id="step">
+  <h3><span class="sn">04</span>EventStep Lifecycle</h3>
+  <p class="sub">Five hooks. Two of them <strong>fail by default</strong>, which you must know.</p>
+
+  <div class="scroll">
+    <table>
+      <thead><tr><th style="width:20%">Hook</th><th style="width:12%">Required</th><th style="width:20%">Returns</th><th>When</th></tr></thead>
+      <tbody>
+        <tr><td class="k">onEnter(ctx)</td><td><strong>yes</strong></td><td><code>EventStepResult</code></td><td>Once, when the Step becomes current. Usually returns <code>await(...)</code>.</td></tr>
+        <tr><td class="k">onEvent(ctx, event)</td><td>optional</td><td>result or <strong><code>null</code></strong></td><td>An awaited event arrived. <strong>Default returns <code>null</code></strong> (ignore, keep waiting).</td></tr>
+        <tr><td class="k">onTimeout(ctx)</td><td>optional</td><td>result or <strong><code>null</code></strong></td><td>A deadline elapsed. <span class="pill cr">default fails the Flow</span></td></tr>
+        <tr><td class="k">onRecover(ctx, recovery)</td><td>durable: yes</td><td><code>EventStepResult</code></td><td>Restored from a checkpoint, <strong>instead of</strong> <code>onEnter</code>. <span class="pill cr">default fails</span></td></tr>
+        <tr><td class="k">onExit(ctx)</td><td>optional</td><td>void</td><td>Leaving the Step.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <figure>
+    <div class="scroll">
+      <svg class="dia" viewBox="0 0 880 250" role="img" aria-label="EventStep lifecycle">
+        <defs><marker id="lc1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--line-2)"/></marker></defs>
+        <g class="mono" font-size="11.5">
+          <rect class="box-a" x="20" y="24" width="180" height="38" rx="8"/><text x="110" y="43" text-anchor="middle" dominant-baseline="middle">onEnter(ctx)</text>
+          <rect class="box" x="300" y="24" width="190" height="38" rx="8"/><text x="395" y="43" text-anchor="middle" dominant-baseline="middle">await(...) registered</text>
+          <rect class="box-a" x="300" y="104" width="190" height="44" rx="8"/>
+          <text x="395" y="120" text-anchor="middle" dominant-baseline="middle">asleep</text>
+          <text class="sm" x="395" y="138" text-anchor="middle">no code runs</text>
+          <rect class="box" x="60" y="182" width="170" height="38" rx="8"/><text x="145" y="201" text-anchor="middle" dominant-baseline="middle">onEvent(ctx, e)</text>
+          <rect class="box" x="270" y="182" width="170" height="38" rx="8"/><text x="355" y="201" text-anchor="middle" dominant-baseline="middle">onTimeout(ctx)</text>
+          <rect class="box-ok" x="600" y="104" width="230" height="44" rx="8"/>
+          <text x="715" y="120" text-anchor="middle" dominant-baseline="middle" fill="var(--ink)">next / goTo / finish / fail</text>
+          <text class="sm" x="715" y="138" text-anchor="middle">transition chosen</text>
+          <rect class="box" x="600" y="182" width="230" height="38" rx="8"/><text x="715" y="201" text-anchor="middle" dominant-baseline="middle">onExit(ctx)</text>
+        </g>
+        <g class="ln" marker-end="url(#lc1)">
+          <path d="M200 43 H296"/><path d="M395 62 V100"/>
+          <path d="M340 148 C300 165, 200 170, 160 178"/><path d="M395 148 V178"/>
+          <path d="M230 201 C300 232, 520 226, 600 212"/><path d="M440 201 C520 214, 560 168, 596 152"/>
+          <path d="M715 148 V178"/>
+        </g>
+        <path class="ln dash" d="M145 178 C120 140, 200 112, 296 122" marker-end="url(#lc1)"/>
+        <text class="sm" x="112" y="116">null → keep waiting</text>
+        <text class="sm" x="468" y="182">await → re-arm the wait</text>
+      </svg>
+    </div>
+    <figcaption>Returning <code>await</code> from <code>onEvent</code> or <code>onTimeout</code> puts the Step back to sleep.</figcaption>
+  </figure>
+
+  <div class="cf">
+    <b class="lb">Easy to misread · the same <code>null</code> means three different things</b>
+    <p><span class="q">Looks like</span> returning nothing is handled the same way everywhere.</p>
+    <p><span class="a">Actually</span> it splits three ways:</p>
+    <p>· <code>onEnter</code> returns <code>null</code> → <strong>the Flow fails</strong><br>
+       · <code>onEvent</code> returns <code>null</code> → <strong>ignore this event, keep the current waits</strong> (a normal, supported pattern)<br>
+       · <code>onTimeout</code> returns <code>null</code> → <strong>drop the deadline only</strong>, keep waiting on events</p>
+    <p>Returning <code>null</code> from <code>onEvent</code> is the idiomatic way to say “not the event I wanted” when you await several types at once.</p>
+  </div>
+
+  <div class="stop">
+    <b class="lb">Two hooks fail by default</b>
+    <p><code>onTimeout</code> and <code>onRecover</code> <strong>fail the Flow</strong> unless you override them. This is deliberate: it refuses to let a mistake pass silently. If you set a <code>deadlineIn(...)</code>, implement <code>onTimeout</code>. If you call <code>durable()</code>, implement <code>onRecover</code>.</p>
+  </div>
+</section>
+
+<section id="result">
+  <h3><span class="sn">05</span>EventStepResult</h3>
+
+  <div class="scroll">
+    <table>
+      <thead><tr><th style="width:22%">Result</th><th style="width:30%">Meaning</th><th>Side effects</th></tr></thead>
+      <tbody>
+        <tr><td class="k">await(c1, c2, ...)</td><td>Stay on this Step until <strong>one condition fires</strong></td><td>Clears all existing waits, registers the new ones, then runs effects. Zero conditions throws.</td></tr>
+        <tr><td class="k">next()</td><td>Step complete → next Step</td><td><code>onExit</code>, waits cleared. Last Step finishes the Flow. (Core's <code>done()</code>)</td></tr>
+        <tr><td class="k">goTo("id")</td><td>Jump to any stepId</td><td><code>onExit</code>, waits cleared. Unknown id <strong>fails</strong>.</td></tr>
+        <tr><td class="k">finish()</td><td>Skip the rest, succeed</td><td><code>onExit</code> → <code>FINISHED</code></td></tr>
+        <tr><td class="k">fail(cause)</td><td>Fail the Flow</td><td><code>onExit</code> → <code>FAILED</code></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="cf">
+    <b class="lb">Easy to misread · await replaces, it does not add</b>
+    <p><span class="q">Looks like</span> returning <code>await(event(B.class))</code> from <code>onEvent</code> <strong>adds</strong> B to the existing wait on A.</p>
+    <p><span class="a">Actually</span> <strong>every existing wait is cleared and only B remains</strong> &mdash; including the deadline.</p>
+    <p>To wait on both, <strong>declare everything again</strong>:</p>
+<pre style="margin:.6em 0 0"><code><span class="cm">// ✕ A and the deadline are gone</span>
+return EventStepResult.await(AwaitCondition.event(B.class));
+
+<span class="cm">// ✓ re-declare everything you still want</span>
+return EventStepResult.await(
+        AwaitCondition.event(A.class),
+        AwaitCondition.event(B.class),
+        AwaitCondition.deadlineIn(remainingMillis));   <span class="cm">// compute the remainder yourself</span></code></pre>
+    <p><strong>Deadlines restart from the moment of registration.</strong> Passing <code>deadlineIn(30_000)</code> every time extends the deadline by 30 seconds on each event. For an overall deadline, compute the remaining time from <code>ctx.now()</code>.</p>
+  </div>
+</section>
+
+<section id="await">
+  <h3><span class="sn">06</span>AwaitCondition</h3>
+
+  <div class="scroll">
+    <table>
+      <thead><tr><th style="width:32%">Constructor</th><th style="width:20%">Wakes on</th><th>Notes</th></tr></thead>
+      <tbody>
+        <tr><td class="k">event(Foo.class)</td><td>A published <code>Foo</code></td><td><strong>Exact runtime type only.</strong> Subclasses do not match.</td></tr>
+        <tr><td class="k">event(Foo.class, predicate)</td><td>Type match + predicate</td><td>Filters like “only my order”. <span class="pill cr">not allowed in durable Flows</span></td></tr>
+        <tr><td class="k">signal("tool-call", callId)</td><td>A matching named signal</td><td>Name and key both required. Safe for durable Flows.</td></tr>
+        <tr><td class="k">deadlineIn(30_000)</td><td>30 seconds after registration</td><td>Negative throws; <code>0</code> expires immediately.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="cf">
+    <b class="lb">Easy to misread · multiple deadlines collapse into one</b>
+    <p><span class="q">Looks like</span> <code>await(event(A), deadlineIn(5000), event(B), deadlineIn(30000))</code> gives each condition its own timeout.</p>
+    <p><span class="a">Actually</span> <strong>only the earliest deadline survives</strong>. Here that is 5 seconds, after which <code>onTimeout</code> fires once &mdash; and <strong>you cannot tell which condition timed out</strong>.</p>
+    <p>For per-phase deadlines, split the Step, or wake on the short deadline and re-declare the remaining time from <code>onTimeout</code>.</p>
+  </div>
+
+  <div class="cf">
+    <b class="lb">Easy to misread · a timeout does not cancel the event waits</b>
+    <p><span class="q">Looks like</span> when the deadline fires, all waits for that Step are over.</p>
+    <p><span class="a">Actually</span> if <code>onTimeout</code> returns <strong><code>null</code></strong>, <strong>only the deadline is removed</strong>; event and signal waits stay armed. That is the supported way to say “late, but still waiting”.</p>
+<pre style="margin:.6em 0 0"><code>@Override protected EventStepResult onTimeout(EventStepContext ctx) {
+    alertService.warn("slow response: " + ctx.flowId());
+    return null;      <span class="cm">// deadline gone, still waiting for the response</span>
+}</code></pre>
+    <p>Remember the flip side: <strong>the default implementation fails the Flow</strong>, so an unimplemented <code>onTimeout</code> kills it.</p>
+  </div>
+
+  <div class="stop">
+    <b class="lb">When a wake-up is silently ignored</b>
+    <p>If you published an event and nothing happened, check:</p>
+    <ul>
+      <li>the runtime type does not match exactly (supertype waits never fire)</li>
+      <li>the signal <strong>name or key</strong> differs</li>
+      <li>the Step already <strong>replaced its waits</strong> or moved on</li>
+      <li>it is not the same <code>EventBus</code> instance</li>
+    </ul>
+    <p>These are dropped <strong>silently</strong> &mdash; nothing is logged.</p>
+  </div>
+</section>
+
+<section id="effect">
+  <h3><span class="sn">07</span>Effects and Ordering</h3>
+  <p class="sub">Why <code>thenPublish</code> exists, and what it does <em>not</em> guarantee.</p>
+
+  <h4>Why publishing inside onEnter is unsafe</h4>
+  <p><code>InMemoryEventBus</code> is <strong>synchronous</strong>: publishing runs the handlers right there.</p>
+  <div class="codehead">✕ can lose the response</div>
+<pre><code>@Override protected EventStepResult onEnter(EventStepContext ctx) {
+    ctx.eventBus().publish(new LlmRequested("hi"));    <span class="cm">// ① what if the response fires here?</span>
+    return EventStepResult.await(                       <span class="cm">// ② subscription registered after this returns</span>
+            AwaitCondition.event(LlmResponded.class));  <span class="cm">// → response missed forever</span>
+}</code></pre>
+  <p>
+    If the responder answers immediately (a cache hit, a synchronous stub), no subscription exists yet.
+    The response vanishes and the Flow waits until its deadline. This is hard to reproduce and tends to
+    surface only in production.
+  </p>
+
+  <div class="codehead">✓ effects invert the order</div>
+<pre><code>return EventStepResult
+        .await(AwaitCondition.event(LlmResponded.class))   <span class="cm">// ① subscribe first</span>
+        .thenPublish(new LlmRequested("hi"));              <span class="cm">// ② then publish — safe</span></code></pre>
+
+  <div class="scroll">
+    <table class="dense">
+      <thead><tr><th style="width:26%">Method</th><th style="width:22%">Runs on</th><th>Use for</th></tr></thead>
+      <tbody>
+        <tr><td class="k">thenPublish(event)</td><td>loop thread</td><td>Publishing an event. The common case.</td></tr>
+        <tr><td class="k">thenRun(effect)</td><td>loop thread</td><td>Immediate work: counters, logs.</td></tr>
+        <tr><td class="k">thenRunAsync(effect)</td><td>async executor</td><td>Potentially blocking work: HTTP, DB, LLM calls.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h4>Handling blocking work</h4>
+  <div class="codehead">Async executor</div>
+<pre><code>ExecutorService pool = Executors.newFixedThreadPool(8);
+
+EventWorker worker = EventWorker.builder("agent")
+        .clock(SystemClock.INSTANCE)
+        .eventBus(bus)
+        .asyncExecutor(pool)          <span class="cm">// without this, runAsync throws</span>
+        .build();
+
+<span class="cm">// inside a Step</span>
+@Override protected EventStepResult onEnter(EventStepContext ctx) {
+    final String callId = ctx.flowId().flowKey();     <span class="cm">// ① capture immutable values first</span>
+    return EventStepResult
+            .await(AwaitCondition.signal("llm", callId),
+                   AwaitCondition.signal("llm-error", callId),
+                   AwaitCondition.deadlineIn(60_000))
+            .thenRunAsync(c -&gt; {                       <span class="cm">// ② another thread from here</span>
+                try {
+                    c.signal("llm", callId, llmClient.complete(prompt));
+                } catch (Exception e) {
+                    c.signal("llm-error", callId, e.getMessage());   <span class="cm">// ③ report failures too</span>
+                }
+            });
+}</code></pre>
+
+  <div class="stop">
+    <b class="lb">Exceptions in async work do not fail the Flow</b>
+    <p>If a <code>runAsync</code> task throws, <strong>the Flow never learns about it</strong> and keeps waiting until its deadline. Always catch and <strong>report failures as signals</strong>, and declare those signals in the <code>await</code>.</p>
+  </div>
+
+  <div class="warn">
+    <b class="lb">Do not read flow state from async work</b>
+    <p>Async tasks run <strong>outside</strong> the loop thread, and by then the Flow may have moved on. Never read mutable state such as <code>ctx.currentStepId()</code>; <strong>capture what you need in local variables</strong> before returning the result.</p>
+  </div>
+
+  <div class="stop">
+    <b class="lb">Effects are not exactly-once</b>
+    <p>
+      In a durable Flow, a crash at the wrong moment can leave <strong>a saved wait whose request was never sent</strong>,
+      or cause <strong>the same effect to run twice</strong>.
+    </p>
+    <p>
+      For important external work (payments, emails, tool execution), pair this with a <strong>durable outbox</strong> or a
+      <strong>stable idempotency key</strong>. The framework cannot do it for you.
+    </p>
+  </div>
+</section>
+
+<section id="signal">
+  <h3><span class="sn">08</span>EventSignal</h3>
+  <p class="sub">One class, but central to durable flows.</p>
+
+  <p>
+    An <code>EventSignal</code> carries a <strong>(name, key, optional payload)</strong>. Publish with
+    <code>ctx.signal("tool-call", callId, result)</code>; wait with <code>AwaitCondition.signal("tool-call", callId)</code>.
+  </p>
+
+  <div class="note">
+    <b class="lb">Why it exists</b>
+    <p>
+      There are two ways to express “only the response for <em>my</em> request”: a <strong>predicate</strong> (a lambda) or a
+      <strong>data-shaped key</strong>. Lambdas cannot be checkpointed, so Flower provides a
+      <strong>storable correlation mechanism</strong> instead. In durable flows, use signals.
+    </p>
+  </div>
+
+  <div class="scroll">
+    <table class="dense">
+      <thead><tr><th style="width:36%">API</th><th>Notes</th></tr></thead>
+      <tbody>
+        <tr><td class="k">EventSignal.of(name, key)</td><td>No payload</td></tr>
+        <tr><td class="k">EventSignal.of(name, key, payload)</td><td><strong>A null payload throws</strong></td></tr>
+        <tr><td class="k">ctx.signal(name, key[, payload])</td><td>Shortcut from inside a Step</td></tr>
+        <tr><td class="k">worker.signal(name, key[, payload])</td><td>From outside (a webhook controller, for example)</td></tr>
+        <tr><td class="k">sig.payload(Type.class)</td><td>Typed accessor; <code>null</code> when absent</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="cf">
+    <b class="lb">Easy to misread · only the name is shared with Core's “signal”</b>
+    <p><span class="q">Looks like</span> since Core had <code>ctx.signal("paid")</code>, this is the same Step-local note.</p>
+    <p><span class="a">Actually</span> they are entirely different things.</p>
+    <p>· <strong>Core signal</strong>: a note inside one Step. Never leaves it; disappears when the Step ends.<br>
+       · <strong>EventLoop signal</strong>: an <strong>event published on the <code>EventBus</code></strong>. Everyone sharing that bus can see it, and it reaches a Step only if that Step is explicitly awaiting it.</p>
+    <p>So here <code>ctx.signal(...)</code> does not mean “leave a note” &mdash; it means <strong>“broadcast”</strong>. With no matching <code>await</code>, it simply disappears.</p>
+  </div>
+</section>
+
+<!-- ================= PART 3 ================= -->
+<div class="part">
+  <span class="pn">Part 3</span>
+  <h2>Operating</h2>
+</div>
+
+<section id="durable">
+  <h3><span class="sn">09</span>Durable Flows</h3>
+  <p class="sub">Core's durable model plus “what it was waiting for”.</p>
+
+  <div class="cards">
+    <div class="card">
+      <h5>Stored</h5>
+      <ul>
+        <li>Current Step and entry state</li>
+        <li><strong>The list of pending waits</strong> (event type names, signal name/key, deadline)</li>
+        <li>Execution identity (runId, traceId, …)</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h5>Not stored</h5>
+      <ul>
+        <li>Step instance fields</li>
+        <li>Predicate lambdas</li>
+        <li>In-flight event objects</li>
+        <li>Whether an effect ran</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h5>Deadlines are absolute</h5>
+      <p>Stored as a <strong>point in time</strong>, not “30 seconds from now”, so restarts never push the deadline back.</p>
+    </div>
+  </div>
+
+  <div class="scroll">
+    <table>
+      <thead><tr><th style="width:30%">Constraint</th><th style="width:24%">Fails at</th><th>What to do</th></tr></thead>
+      <tbody>
+        <tr><td class="k">No predicate-based event waits</td><td><strong>when the wait is armed</strong> (runtime)</td><td>Use <code>signal(name, key)</code>, or await the plain type and filter in <code>onEvent</code> returning <code>null</code></td></tr>
+        <tr><td class="k">onRecover must be implemented</td><td><strong>during recovery</strong> (runtime)</td><td>The default fails. Override it in every durable Step.</td></tr>
+        <tr><td class="k">A durable store is required</td><td><code>submit()</code></td><td>Build succeeds; only submission catches this.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="cf">
+    <b class="lb">Easy to misread · the predicate restriction fires when that Step runs</b>
+    <p><span class="q">Looks like</span> using a predicate in a durable Flow would be rejected at build time.</p>
+    <p><span class="a">Actually</span> <code>AwaitCondition.event(Foo.class, predicate)</code> constructs fine. It fails when the worker tries to <strong>write that wait to a checkpoint</strong> &mdash; that is, <strong>when the Step actually executes</strong>.</p>
+    <p>If only the fifth Step uses a predicate, the first four work and the Flow fails <strong>in production, at that point</strong>. When converting to durable, <strong>audit every <code>await</code> in the Flow.</strong></p>
+<pre style="margin:.6em 0 0"><code><span class="cm">// ✕ fails in a durable Flow</span>
+AwaitCondition.event(ToolDone.class, e -&gt; e.callId().equals(myCallId))
+
+<span class="cm">// ✓ correlation as data — storable</span>
+AwaitCondition.signal("tool-done", myCallId)
+
+<span class="cm">// ✓ or await the type and filter in onEvent</span>
+AwaitCondition.event(ToolDone.class)
+<span class="cm">// onEvent: if (!e.callId().equals(myCallId)) return null;</span></code></pre>
+  </div>
+
+  <div class="codehead">Writing onRecover</div>
+<pre><code>@Override
+protected EventStepResult onRecover(EventStepContext ctx, EventRecoveryContext recovery) {
+    List&lt;AwaitCondition&gt; conditions = new ArrayList&lt;&gt;();
+
+    for (EventAwaitCheckpoint saved : recovery.awaits()) {
+        switch (saved.type()) {
+            case SIGNAL:
+                conditions.add(AwaitCondition.signal(saved.signalName(), saved.signalKey()));
+                break;
+            case DEADLINE:
+                <span class="cm">// absolute time → time remaining (0 if already past)</span>
+                conditions.add(AwaitCondition.deadlineIn(recovery.millisUntil(saved, ctx.now())));
+                break;
+            case EVENT:
+                conditions.add(AwaitCondition.event(ToolDone.class));
+                break;
+        }
+    }
+    <span class="cm">// Do NOT re-send the request here — it already went out.</span>
+    return EventStepResult.await(conditions.toArray(new AwaitCondition[0]));
+}</code></pre>
+
+  <div class="codehead">Recovering at startup</div>
+<pre><code>EventFlowFactoryRegistry registry = EventFlowFactoryRegistry.builder()
+        .register("llm-call", id -&gt; buildFlow(id.flowKey()))
+        .build();
+
+EventFlowRecoveryService recovery =
+        EventFlowRecoveryService.create(store, registry);
+
+worker.start();
+int restored = recovery.recoverActiveForWorker(worker);</code></pre>
+
+  <div class="cf">
+    <b class="lb">Easy to misread · recovery re-arms waits; it does not resume execution</b>
+    <p><span class="q">Looks like</span> after recovery the Flow simply carries on where it left off.</p>
+    <p><span class="a">Actually</span> recovery restores only the <em>fact</em> that <strong>“this Step was waiting for these things”</strong>. The waits are re-armed by <strong>the <code>await(...)</code> your <code>onRecover</code> returns</strong>. <strong>Without the Step's cooperation, recovery is incomplete.</strong></p>
+    <p>· No <code>onRecover</code> → <strong>fails immediately on recovery</strong><br>
+       · Declaring fewer waits → some stored conditions <strong>never come back</strong><br>
+       · Calling <code>onEnter</code> from <code>onRecover</code> → <strong>the request goes out twice</strong></p>
+    <p>The inconvenience is deliberate: only the domain knows what should and should not be repeated.</p>
+  </div>
+
+  <div class="stop">
+    <b class="lb">Recovering from multiple processes</b>
+    <p>Preventing duplicate execution is <strong>entirely the application's responsibility</strong>. Use leader election, row locking, or leases. Naming workers per instance and using <code>findActiveByWorker(name)</code> is the most practical mitigation.</p>
+  </div>
+</section>
+
+<section id="observe">
+  <h3><span class="sn">10</span>Observability</h3>
+  <p class="sub">The listener interface is <strong>identical to Core's</strong>, plus two extra trace events.</p>
+
+  <div class="codehead">Registering a listener</div>
+<pre><code>EventWorker worker = EventWorker.builder("agent")
+        .clock(SystemClock.INSTANCE)
+        .eventBus(bus)
+        .listener(myListener)        <span class="cm">// on the worker, not an Engine</span>
+        .build();</code></pre>
+  <p><code>onFlowSubmitted</code>, <code>onStepEntered</code>, <code>onStepExited</code>, <code>onFlowFinished</code>, <code>onFlowFailed</code>, <code>onFlowCancelled</code> &mdash; the same callbacks. <strong>You can register one listener object with both a Core Worker and an EventWorker.</strong></p>
+
+  <div class="scroll">
+    <table class="dense">
+      <thead><tr><th style="width:26%">Trace event</th><th>Contents</th></tr></thead>
+      <tbody>
+        <tr><td class="k">FLOW_WAITING</td><td>Emitted right after waits are armed. Carries <strong>what it is waiting for</strong>.</td></tr>
+        <tr><td class="k">FLOW_RESUMED</td><td>Emitted on wake-up. Carries <strong>why</strong>: <code>EVENT</code>, <code>SIGNAL</code>, <code>TIMEOUT</code>, or <code>RECOVERY</code>.</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="tip">
+    <b class="lb">Measure real wait time directly</b>
+    <p>The gap between a matching <code>FLOW_WAITING</code> and <code>FLOW_RESUMED</code> <strong>is</strong> the wait duration, and the resume reason tells you how it ended. You get LLM latency distributions and approval turnaround times for free.</p>
+  </div>
+
+  <div class="cf">
+    <b class="lb">Easy to misread · <code>stateOf()</code> returning null is not a failure</b>
+    <p><span class="q">Looks like</span> a <code>null</code> from <code>worker.stateOf(id)</code> means something went wrong.</p>
+    <p><span class="a">Actually</span> it means <strong>“not in the active list”</strong> &mdash; most often because it completed normally and was removed. A Flow never submitted is also <code>null</code>.</p>
+    <p>For the final outcome, read <strong><code>flow.state()</code></strong> on the Flow object or use a termination listener.</p>
+  </div>
+</section>
+
+<section id="testing">
+  <h3><span class="sn">11</span>Testing</h3>
+  <p class="sub">As deterministic as Core. <code>drain()</code> takes the place of <code>tickOnce()</code>.</p>
+
+  <div class="codehead">Basic pattern</div>
+<pre><code>@Test
+void completesWhenTheResponseArrives() {
+    ManualClock clock = new ManualClock();
+    InMemoryEventBus bus = InMemoryEventBus.create();
+    EventWorker worker = EventWorker.builder("llm")
+            .clock(clock).eventBus(bus).build();     <span class="cm">// never call start()</span>
+
+    EventFlow flow = buildFlow();
+    worker.submit(flow);
+    worker.drain();                                   <span class="cm">// entry + wait registration</span>
+
+    assertThat(flow.state()).isEqualTo(FlowState.RUNNING);   <span class="cm">// waiting</span>
+
+    bus.publish(new LlmResponded("hi"));
+    worker.drain();
+
+    assertThat(flow.state()).isEqualTo(FlowState.FINISHED);
+}
+
+@Test
+void routesToFallbackWhenTheDeadlineElapses() {
+    <span class="cm">// … same setup …</span>
+    worker.submit(flow);
+    worker.drain();
+
+    clock.advance(30_000);                            <span class="cm">// jump forward</span>
+    worker.drain();                                   <span class="cm">// process expired deadlines</span>
+
+    assertThat(log).containsExactly("fallback");
+}</code></pre>
+
+  <div class="cf">
+    <b class="lb">Easy to misread · drain() and start() cannot be mixed</b>
+    <p><span class="q">Looks like</span> you could <code>start()</code> the worker and still call <code>drain()</code> to push it along in a test.</p>
+    <p><span class="a">Actually</span> <code>drain()</code> <strong>throws immediately</strong> in background mode. In tests, <strong>never call <code>start()</code></strong> &mdash; use <code>ManualClock</code> plus <code>drain()</code>.</p>
+  </div>
+
+  <div class="tip">
+    <b class="lb">Checklist</b>
+    <ul>
+      <li><code>drain()</code> runs <strong>until nothing more can progress</strong>, so ten consecutive non-waiting Steps pass in one call.</li>
+      <li>Drive all time with <code>ManualClock.advance()</code>.</li>
+      <li>Publish events from the test thread; dispatch is synchronous.</li>
+      <li>For Steps using <code>runAsync</code>, pass a same-thread executor (<code>Runnable::run</code>) to keep tests deterministic.</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ================= PART 4 ================= -->
+<div class="part">
+  <span class="pn">Part 4</span>
+  <h2>Using It Well</h2>
+</div>
+
+<section id="rules">
+  <h3><span class="sn">12</span>Rules and Anti-Patterns</h3>
+
+  <div class="scroll">
+    <table>
+      <thead><tr><th style="width:44%"><span style="color:var(--crit)">✕ Don't</span></th><th><span style="color:var(--ok)">✓ Do</span></th></tr></thead>
+      <tbody>
+        <tr><td>Publish directly inside <code>onEnter</code></td><td>Use <code>.thenPublish(...)</code> so subscription happens first</td></tr>
+        <tr><td><code>await</code> without a deadline</td><td>Attach <code>deadlineIn(...)</code> to every <code>await</code> &mdash; the only thing that surfaces a stuck Flow</td></tr>
+        <tr><td>Setting <code>deadlineIn</code> without implementing <code>onTimeout</code></td><td>Remember the default <strong>fails</strong>; always override it</td></tr>
+        <tr><td>HTTP, DB, or LLM calls on the loop thread</td><td><code>thenRunAsync</code> with an executor; report completion as a signal</td></tr>
+        <tr><td>Letting async work throw</td><td>Catch it and <strong>signal the failure</strong>, and await that signal too</td></tr>
+        <tr><td>Reading <code>ctx.currentStepId()</code> from async work</td><td>Capture the values you need in locals first</td></tr>
+        <tr><td>Re-declaring only some conditions in <code>onEvent</code></td><td>Re-declare <strong>everything</strong> you still want (await replaces)</td></tr>
+        <tr><td>Predicate waits in durable Flows</td><td><code>signal(name, key)</code>, or filter in <code>onEvent</code> and return <code>null</code></td></tr>
+        <tr><td><code>durable()</code> without <code>onRecover</code></td><td>Spell out what to re-arm and what not to repeat</td></tr>
+        <tr><td>Calling <code>onEnter</code> from <code>onRecover</code></td><td>Re-arm waits only; never resend one-shot requests</td></tr>
+        <tr><td>Event hierarchies with supertype waits</td><td>Exact types &mdash; matching is <strong>exact</strong></td></tr>
+        <tr><td>Relying on effects for critical external work</td><td>Add an outbox or idempotency key &mdash; effects are not exactly-once</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="stop">
+    <b class="lb">The typical failure here is not an error — it is silence</b>
+    <p>
+      A deadline-less <code>await</code>, an async task that died, a wake-up that was silently dropped: each produces a
+      <strong>Flow that stops with nothing in the logs</strong>.
+    </p>
+    <p><strong>There is one defense: put a deadline on every <code>await</code>.</strong> Then at least <code>onTimeout</code> fires and the problem becomes visible.</p>
+  </div>
+
+  <div class="note">
+    <b class="lb">One-line principle</b>
+    <p><strong>“A Step declares what should wake it, then decides when it wakes.”</strong> Anything you did not declare will never arrive.</p>
+  </div>
+</section>
+
+<section id="faq">
+  <h3><span class="sn">13</span>Mistakes · Cheat Sheet</h3>
+
+  <dl class="gloss">
+    <div>
+      <dt>I submitted a Flow and nothing happens</dt>
+      <dd>Check that <code>start()</code> was called. In tests, call <code>drain()</code>.</dd>
+    </div>
+    <div>
+      <dt>I published an event but nothing woke up</dt>
+      <dd>① exact runtime type? ② same <code>EventBus</code>? ③ is that Step still awaiting <em>that</em> condition? ④ for signals, do <strong>both</strong> name and key match?</dd>
+    </div>
+    <div>
+      <dt>The Flow is stuck and there are no logs</dt>
+      <dd>A deadline-less <code>await</code>, an async task that threw, or a silently dropped wake-up.</dd>
+    </div>
+    <div>
+      <dt>drain() throws</dt>
+      <dd>The worker is already in background mode from <code>start()</code>.</dd>
+    </div>
+    <div>
+      <dt>Going durable broke one specific step</dt>
+      <dd>That step's <code>await</code> most likely uses a predicate.</dd>
+    </div>
+    <div>
+      <dt>Recovery fails immediately</dt>
+      <dd><code>onRecover</code> is not implemented; the default fails.</dd>
+    </div>
+    <div>
+      <dt>ClassCastException in onEvent</dt>
+      <dd>When awaiting several types you cannot know which arrives. Check with <code>instanceof</code> and return <code>null</code> if it is not yours.</dd>
+    </div>
+    <div>
+      <dt>Can I run it alongside a Core Worker?</dt>
+      <dd>Yes. It cannot join an <code>Engine</code>, but <strong>sharing one <code>EventBus</code></strong> lets both runtimes talk.</dd>
+    </div>
+    <div>
+      <dt>Can a worker be restarted?</dt>
+      <dd>No. After <code>stop()</code>, build a new one.</dd>
+    </div>
+  </dl>
+
+  <h4>Cheat sheet</h4>
+  <div class="cards">
+    <div class="card">
+      <h5>Wiring</h5>
+<pre style="margin:0;font-size:.78rem"><code>EventWorker w = EventWorker.builder("agent")
+    .clock(SystemClock.INSTANCE)   <span class="cm">// required</span>
+    .eventBus(bus)                 <span class="cm">// required</span>
+    .checkpointStore(store)        <span class="cm">// optional</span>
+    .asyncExecutor(pool)           <span class="cm">// optional</span>
+    .listener(myListener)
+    .build();
+w.start();   <span class="cm">// omit in tests</span></code></pre>
+    </div>
+    <div class="card">
+      <h5>EventStepResult</h5>
+<pre style="margin:0;font-size:.78rem"><code>.await(c1, c2, ...)  <span class="cm">// wait (replaces)</span>
+.next()              <span class="cm">// next Step</span>
+.goTo("id")          <span class="cm">// jump</span>
+.finish()            <span class="cm">// end, success</span>
+.fail(cause)         <span class="cm">// end, failure</span>
+   .thenPublish(evt)
+   .thenRun(effect)
+   .thenRunAsync(effect)</code></pre>
+    </div>
+    <div class="card">
+      <h5>AwaitCondition</h5>
+<pre style="margin:0;font-size:.78rem"><code>event(Foo.class)
+event(Foo.class, pred)  <span class="cm">// durable ✕</span>
+signal("name", "key")
+deadlineIn(30_000)      <span class="cm">// earliest one</span>
+                        <span class="cm">// wins</span></code></pre>
+    </div>
+    <div class="card">
+      <h5>Hooks and defaults</h5>
+<pre style="margin:0;font-size:.78rem"><code>onEnter    required
+onEvent    default null  (ignore, wait)
+onTimeout  default fail  ← careful
+onRecover  default fail  ← careful
+onExit     default no-op</code></pre>
+    </div>
+    <div class="card">
+      <h5>What null means</h5>
+<pre style="margin:0;font-size:.78rem"><code>onEnter   → fail the Flow
+onEvent   → ignore event,
+            keep waits
+onTimeout → drop deadline,
+            keep event waits</code></pre>
+    </div>
+    <div class="card">
+      <h5>Testing</h5>
+<pre style="margin:0;font-size:.78rem"><code>ManualClock c = new ManualClock();
+<span class="cm">// do not call start()</span>
+w.submit(flow);
+w.drain();
+bus.publish(new Res());
+w.drain();
+c.advance(30_000);
+w.drain();</code></pre>
+    </div>
+  </div>
+
+  <h4>Eight things to remember</h4>
+  <ol>
+    <li>A waiting Flow runs <strong>no code at all</strong>. Nothing wakes it unless something declared wakes it.</li>
+    <li><code>await</code> <strong>replaces</strong> the current waits; it does not add to them.</li>
+    <li>Multiple deadlines collapse into the <strong>earliest one</strong>.</li>
+    <li><code>onTimeout</code> and <code>onRecover</code> <strong>fail by default</strong>.</li>
+    <li><code>null</code> means something different in each hook.</li>
+    <li>Send requests via <code>thenPublish</code> &mdash; <strong>subscribe first, publish second</strong>.</li>
+    <li>Async exceptions <strong>never reach the Flow</strong>. Signal failures explicitly.</li>
+    <li>Durable means <strong>no predicates and a required <code>onRecover</code></strong>.</li>
+  </ol>
+</section>
+
+<footer>
+  <p><strong>Flower EventLoop Manual</strong> · targets version <code>0.1.3</code> · maturity MVP</p>
+  <p>
+    See also &mdash;
+    <a href="flower-core.html">Flower Core manual</a> ·
+    <a href="https://github.com/flowerjvm/flower">GitHub repository</a>
+  </p>
+  <p>Apache License 2.0</p>
+</footer>
+
+</main>
+</div>
+
+<script>
+(function(){
+  var root = document.documentElement, btn = document.getElementById('themeBtn'), saved = null;
+  try { saved = localStorage.getItem('flower-manual-theme'); } catch (e) {}
+  if (saved === 'dark' || saved === 'light') root.setAttribute('data-theme', saved);
+  btn.addEventListener('click', function(){
+    var cur = root.getAttribute('data-theme'), isDark;
+    if (cur) { isDark = cur === 'dark'; }
+    else { isDark = window.matchMedia('(prefers-color-scheme: dark)').matches; }
+    var next = isDark ? 'light' : 'dark';
+    root.setAttribute('data-theme', next);
+    try { localStorage.setItem('flower-manual-theme', next); } catch (e) {}
+  });
+
+  var links = Array.prototype.slice.call(document.querySelectorAll('#toc a[href^="#"]'));
+  var map = {};
+  links.forEach(function(a){ map[a.getAttribute('href').slice(1)] = a; });
+  var io = new IntersectionObserver(function(entries){
+    entries.forEach(function(en){
+      if (!en.isIntersecting) return;
+      var a = map[en.target.id];
+      if (!a) return;
+      links.forEach(function(l){ l.classList.remove('on'); });
+      a.classList.add('on');
+    });
+  }, { rootMargin: '-10% 0px -75% 0px', threshold: 0 });
+  document.querySelectorAll('main section').forEach(function(s){ io.observe(s); });
+
+  document.querySelectorAll('pre').forEach(function(pre){
+    var head = pre.previousElementSibling;
+    if (!head || !head.classList.contains('codehead')) return;
+    var b = document.createElement('button');
+    b.className = 'tbtn'; b.type = 'button'; b.textContent = 'copy';
+    b.style.marginLeft = 'auto'; b.style.padding = '2px 9px';
+    b.addEventListener('click', function(){
+      navigator.clipboard.writeText(pre.innerText).then(function(){
+        b.textContent = 'copied';
+        setTimeout(function(){ b.textContent = 'copy'; }, 1400);
+      });
+    });
+    head.appendChild(b);
+  });
+})();
+</script>
+</body>
+</html>

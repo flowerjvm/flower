@@ -1,0 +1,1531 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Flower Core Manual</title>
+<style>
+:root{
+  --sans:system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  --mono:"JetBrains Mono","Cascadia Mono",Consolas,"SFMono-Regular",Menlo,monospace;
+  --bg:#F5F3F7; --surface:#FFFFFF; --surface-2:#EEEAF2; --chip:#E7E2EC;
+  --line:#DBD4E2; --line-2:#C2B8CD;
+  --ink:#1A1520; --ink-2:#453C51; --muted:#6D6379;
+  --accent:#A4174C; --accent-soft:#F7E4EB;
+  --ok:#1D6B4B; --ok-soft:#E0F0E8;
+  --warn:#8A5900; --warn-soft:#F8EEDA;
+  --crit:#A6231A; --crit-soft:#FAE5E2;
+  --info:#2A5C86; --info-soft:#E2EDF5;
+  --code-bg:#F1EDF4;
+  --shadow:0 1px 2px rgba(26,21,32,.05),0 8px 24px -16px rgba(26,21,32,.28);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#131018; --surface:#1A1622; --surface-2:#221D2C; --chip:#2A2436;
+    --line:#332B40; --line-2:#4B4159;
+    --ink:#EFEAF4; --ink-2:#CCC3D8; --muted:#978CA6;
+    --accent:#F0819F; --accent-soft:#3A1E2B;
+    --ok:#6FCFA1; --ok-soft:#16301F;
+    --warn:#E0AC55; --warn-soft:#332612;
+    --crit:#F08B7F; --crit-soft:#3A1D19;
+    --info:#82B4DC; --info-soft:#152A3A;
+    --code-bg:#201B2A;
+    --shadow:0 1px 2px rgba(0,0,0,.4),0 10px 30px -18px rgba(0,0,0,.8);
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#131018; --surface:#1A1622; --surface-2:#221D2C; --chip:#2A2436;
+  --line:#332B40; --line-2:#4B4159;
+  --ink:#EFEAF4; --ink-2:#CCC3D8; --muted:#978CA6;
+  --accent:#F0819F; --accent-soft:#3A1E2B;
+  --ok:#6FCFA1; --ok-soft:#16301F;
+  --warn:#E0AC55; --warn-soft:#332612;
+  --crit:#F08B7F; --crit-soft:#3A1D19;
+  --info:#82B4DC; --info-soft:#152A3A;
+  --code-bg:#201B2A;
+  --shadow:0 1px 2px rgba(0,0,0,.4),0 10px 30px -18px rgba(0,0,0,.8);
+}
+
+*,*::before,*::after{box-sizing:border-box}
+html{scroll-behavior:smooth;scroll-padding-top:24px}
+@media (prefers-reduced-motion: reduce){html{scroll-behavior:auto}*{animation:none!important;transition:none!important}}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:16px;line-height:1.7;-webkit-font-smoothing:antialiased}
+a{color:var(--accent);text-underline-offset:3px;text-decoration-thickness:1px}
+a:focus-visible,button:focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius:4px}
+p{margin:0 0 1em;max-width:72ch}
+ul,ol{margin:0 0 1em;padding-left:1.35em;max-width:72ch}
+li{margin:.3em 0}
+li>ul,li>ol{margin:.3em 0}
+strong{font-weight:700;color:var(--ink)}
+
+code{font-family:var(--mono);font-size:.87em;background:var(--chip);padding:.12em .38em;border-radius:5px;color:var(--ink)}
+pre{background:var(--code-bg);border:1px solid var(--line);border-left:3px solid var(--line-2);border-radius:10px;padding:15px 18px;margin:0 0 1.2em;overflow-x:auto;font-family:var(--mono);font-size:.83rem;line-height:1.7;color:var(--ink-2)}
+pre code{background:none;padding:0;font-size:1em;color:inherit}
+pre .cm{color:var(--muted)}
+
+.topbar{position:sticky;top:0;z-index:40;background:var(--bg);background:color-mix(in srgb,var(--bg) 88%,transparent);backdrop-filter:blur(10px);border-bottom:1px solid var(--line)}
+.topbar-in{max-width:1320px;margin:0 auto;padding:9px 22px;display:flex;align-items:center;gap:14px}
+.brand{font-family:var(--mono);font-size:.72rem;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
+.brand b{color:var(--accent);font-weight:700}
+.topbar .spacer{flex:1}
+.tbtn{font-family:var(--mono);font-size:.7rem;letter-spacing:.08em;text-transform:uppercase;background:var(--surface);border:1px solid var(--line);color:var(--ink-2);padding:5px 11px;border-radius:999px;cursor:pointer;text-decoration:none}
+.tbtn:hover{border-color:var(--line-2);color:var(--ink)}
+
+.shell{max-width:1320px;margin:0 auto;display:grid;grid-template-columns:268px minmax(0,1fr);gap:44px;padding:0 22px 90px}
+.side{position:sticky;top:52px;align-self:start;max-height:calc(100vh - 64px);overflow-y:auto;padding:26px 0 40px;font-size:.83rem}
+.side h4{font-family:var(--mono);font-size:.66rem;letter-spacing:.16em;text-transform:uppercase;color:var(--muted);margin:22px 0 8px;font-weight:600}
+.side h4:first-child{margin-top:0}
+.side a{display:block;padding:3px 10px 3px 11px;color:var(--ink-2);text-decoration:none;border-left:2px solid var(--line);line-height:1.5}
+.side a:hover{color:var(--ink);border-left-color:var(--line-2);background:var(--surface-2)}
+.side a.on{color:var(--accent);border-left-color:var(--accent);background:var(--accent-soft);font-weight:600}
+.side a .n{font-family:var(--mono);font-size:.72em;color:var(--muted);margin-right:7px}
+.side a.on .n{color:var(--accent)}
+main{min-width:0;padding-top:26px}
+
+.hero{padding:34px 0 30px;border-bottom:1px solid var(--line);margin-bottom:12px}
+.eyebrow{font-family:var(--mono);font-size:.68rem;letter-spacing:.2em;text-transform:uppercase;color:var(--accent);margin-bottom:14px}
+.hero h1{font-size:clamp(2rem,4.4vw,3rem);line-height:1.12;letter-spacing:-.03em;margin:0 0 14px;text-wrap:balance;font-weight:800}
+.hero .lede{font-size:1.06rem;color:var(--ink-2);max-width:64ch;margin-bottom:22px}
+.meta{display:flex;flex-wrap:wrap;border:1px solid var(--line);border-radius:10px;background:var(--surface);overflow:hidden;font-variant-numeric:tabular-nums}
+.meta div{padding:9px 16px;border-right:1px solid var(--line);min-width:120px}
+.meta div:last-child{border-right:0}
+.meta dt{font-family:var(--mono);font-size:.62rem;letter-spacing:.13em;text-transform:uppercase;color:var(--muted)}
+.meta dd{margin:1px 0 0;font-size:.86rem;font-weight:600}
+
+section{padding:44px 0 8px;scroll-margin-top:60px}
+.part{margin:52px 0 6px;padding:14px 0 12px;border-top:2px solid var(--ink);display:flex;align-items:baseline;gap:14px;flex-wrap:wrap}
+.part .pn{font-family:var(--mono);font-size:.72rem;letter-spacing:.16em;text-transform:uppercase;color:var(--accent)}
+.part h2{margin:0;font-size:1.5rem;letter-spacing:-.02em;font-weight:800}
+.part p{margin:0;color:var(--muted);font-size:.88rem;flex-basis:100%}
+h3{font-size:1.42rem;line-height:1.3;letter-spacing:-.02em;margin:0 0 6px;font-weight:750;text-wrap:balance;display:flex;align-items:baseline;gap:11px;flex-wrap:wrap}
+h3 .sn{font-family:var(--mono);font-size:.82rem;color:var(--accent);font-weight:600}
+h4{font-size:1.02rem;margin:1.9em 0 .55em;letter-spacing:-.01em;font-weight:700}
+h5{font-size:.86rem;margin:1.5em 0 .5em;font-family:var(--mono);letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:600}
+.sub{color:var(--muted);font-size:.9rem;margin:-2px 0 20px;max-width:70ch}
+
+.scroll{overflow-x:auto;margin:0 0 1.4em;border-radius:10px;border:1px solid var(--line);background:var(--surface)}
+table{border-collapse:collapse;width:100%;font-size:.855rem;line-height:1.6}
+th,td{padding:9px 13px;text-align:left;border-bottom:1px solid var(--line);vertical-align:top}
+thead th{background:var(--surface-2);font-family:var(--mono);font-size:.68rem;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:600;white-space:nowrap}
+tbody tr:last-child td{border-bottom:0}
+td.k,td code{white-space:nowrap}
+td.k{font-family:var(--mono);font-size:.82rem;color:var(--ink);font-weight:600}
+td.num{font-variant-numeric:tabular-nums;white-space:nowrap}
+table.dense td,table.dense th{padding:6px 12px}
+
+.note,.warn,.tip,.stop{border:1px solid var(--line);border-left-width:3px;border-radius:9px;padding:13px 17px;margin:0 0 1.4em;font-size:.92rem;background:var(--surface)}
+.note{border-left-color:var(--info);background:var(--info-soft)}
+.tip{border-left-color:var(--ok);background:var(--ok-soft)}
+.warn{border-left-color:var(--warn);background:var(--warn-soft)}
+.stop{border-left-color:var(--crit);background:var(--crit-soft)}
+.note p:last-child,.warn p:last-child,.tip p:last-child,.stop p:last-child,
+.note ul:last-child,.warn ul:last-child,.tip ul:last-child,.stop ul:last-child{margin-bottom:0}
+.note b.lb,.warn b.lb,.tip b.lb,.stop b.lb{display:block;font-family:var(--mono);font-size:.65rem;letter-spacing:.14em;text-transform:uppercase;margin-bottom:5px}
+.note b.lb{color:var(--info)} .tip b.lb{color:var(--ok)}
+.warn b.lb{color:var(--warn)} .stop b.lb{color:var(--crit)}
+
+.cf{border:1px solid var(--accent);border-left-width:3px;border-radius:9px;padding:13px 17px;margin:0 0 1.4em;background:var(--accent-soft);font-size:.92rem}
+.cf b.lb{display:block;font-family:var(--mono);font-size:.65rem;letter-spacing:.14em;text-transform:uppercase;margin-bottom:8px;color:var(--accent)}
+.cf p{margin:0 0 .6em;max-width:none}
+.cf p:last-child{margin-bottom:0}
+.cf .q,.cf .a{display:inline-block;font-family:var(--mono);font-size:.64rem;letter-spacing:.06em;padding:1px 7px;border-radius:5px;margin-right:9px;border:1px solid;position:relative;top:-1px;white-space:nowrap}
+.cf .q{color:var(--muted);border-color:var(--line-2);background:var(--surface)}
+.cf .a{color:var(--accent);border-color:var(--accent);background:var(--surface);font-weight:600}
+
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(215px,1fr));gap:14px;margin:0 0 1.5em}
+.card{border:1px solid var(--line);border-radius:11px;padding:15px 17px;background:var(--surface);box-shadow:var(--shadow)}
+.card h5{margin:0 0 7px;color:var(--accent)}
+.card p{font-size:.87rem;margin:0;color:var(--ink-2);max-width:none}
+.card ul,.card ol{font-size:.87rem;margin:0;color:var(--ink-2);padding-left:1.15em}
+
+figure{margin:0 0 1.6em}
+figure .scroll{margin-bottom:0}
+figcaption{font-size:.78rem;color:var(--muted);margin-top:8px;font-family:var(--mono)}
+svg.dia{display:block;min-width:620px;width:100%;height:auto;background:var(--surface);padding:8px 4px}
+svg.dia text{font-family:var(--sans);fill:var(--ink)}
+svg.dia .mono{font-family:var(--mono)}
+svg.dia .sm{font-size:11px;fill:var(--muted)}
+svg.dia .box{fill:var(--surface-2);stroke:var(--line-2);stroke-width:1.2}
+svg.dia .box-a{fill:var(--accent-soft);stroke:var(--accent);stroke-width:1.4}
+svg.dia .box-ok{fill:var(--ok-soft);stroke:var(--ok);stroke-width:1.2}
+svg.dia .box-wa{fill:var(--warn-soft);stroke:var(--warn);stroke-width:1.2}
+svg.dia .ln{stroke:var(--line-2);stroke-width:1.3;fill:none}
+svg.dia .dash{stroke-dasharray:5 4}
+
+.nest{border:1.5px solid var(--line-2);border-radius:12px;padding:13px 15px;background:var(--surface);margin-bottom:1.4em}
+.nest .nest{margin:9px 0 0;background:var(--surface-2)}
+.nest .nest .nest{background:var(--surface)}
+.nest .nest .nest .nest{background:var(--surface-2)}
+.nest-h{font-family:var(--mono);font-size:.76rem;font-weight:700;color:var(--accent)}
+.nest-d{font-size:.82rem;color:var(--muted);margin-top:1px}
+
+dl.gloss{margin:0 0 1.5em;border-top:1px solid var(--line)}
+dl.gloss div{padding:11px 0;border-bottom:1px solid var(--line);display:grid;grid-template-columns:200px minmax(0,1fr);gap:18px}
+dl.gloss dt{font-weight:700;font-size:.92rem}
+dl.gloss dd{margin:0;font-size:.92rem;color:var(--ink-2)}
+
+.codehead{display:flex;align-items:center;gap:8px;font-family:var(--mono);font-size:.68rem;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);border:1px solid var(--line);border-bottom:0;border-radius:9px 9px 0 0;padding:6px 14px;background:var(--surface-2);margin-top:.2em}
+.codehead + pre{border-radius:0 0 10px 10px;border-left-width:1px;border-left-color:var(--line)}
+
+.pill{display:inline-block;font-family:var(--mono);font-size:.68rem;padding:1px 7px;border-radius:5px;border:1px solid var(--line-2);background:var(--chip);color:var(--ink-2);white-space:nowrap}
+.pill.ok{color:var(--ok);border-color:var(--ok);background:var(--ok-soft)}
+.pill.cr{color:var(--crit);border-color:var(--crit);background:var(--crit-soft)}
+.pill.ac{color:var(--accent);border-color:var(--accent);background:var(--accent-soft)}
+
+footer{border-top:1px solid var(--line);margin-top:60px;padding:26px 0 10px;color:var(--muted);font-size:.82rem}
+footer p{max-width:none}
+
+@media (max-width:1000px){
+  .shell{grid-template-columns:1fr;gap:0}
+  .side{position:static;max-height:none;border-bottom:1px solid var(--line);margin-bottom:10px;columns:2;column-gap:26px;padding-bottom:20px}
+  .side h4{break-after:avoid}
+  dl.gloss div{grid-template-columns:1fr;gap:2px}
+}
+@media (max-width:640px){ body{font-size:15px} .side{columns:1} .meta div{min-width:50%} }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="topbar-in">
+    <span class="brand">Flower / Manual / <b>flower&#8209;core</b></span>
+    <span class="spacer"></span>
+    <a class="tbtn" href="../ko/flower-core.html">한국어</a>
+    <button class="tbtn" id="themeBtn" type="button">Theme</button>
+  </div>
+</div>
+
+<div class="shell">
+
+<nav class="side" id="toc">
+  <h4>Part 1 · Getting Started</h4>
+  <a href="#intro"><span class="n">01</span>What Flower Is</a>
+  <a href="#model"><span class="n">02</span>The Core Model</a>
+  <a href="#glossary"><span class="n">03</span>Terms</a>
+  <a href="#quickstart"><span class="n">04</span>Five-Minute Quickstart</a>
+  <a href="#firstrun"><span class="n">05</span>How a Flow Progresses</a>
+
+  <h4>Part 2 · Writing Flows</h4>
+  <a href="#flow"><span class="n">06</span>Building a Flow</a>
+  <a href="#step"><span class="n">07</span>Step Lifecycle</a>
+  <a href="#result"><span class="n">08</span>StepResult</a>
+  <a href="#guard"><span class="n">09</span>Guards</a>
+  <a href="#waiting"><span class="n">10</span>Waiting: Events, Signals, Timeouts</a>
+  <a href="#sharing"><span class="n">11</span>Sharing Values Between Steps</a>
+
+  <h4>Part 3 · Operating</h4>
+  <a href="#durable"><span class="n">12</span>Durable Flows</a>
+  <a href="#observe"><span class="n">13</span>Observability</a>
+  <a href="#testing"><span class="n">14</span>Testing</a>
+
+  <h4>Part 4 · Using It Well</h4>
+  <a href="#rules"><span class="n">15</span>Rules and Anti-Patterns</a>
+  <a href="#faq"><span class="n">16</span>Common Mistakes</a>
+  <a href="#cheat"><span class="n">17</span>Cheat Sheet</a>
+</nav>
+
+<main>
+
+<header class="hero">
+  <div class="eyebrow">Flower Manual</div>
+  <h1>Flower Core</h1>
+  <p class="lede">
+    An in-JVM runtime that executes long-running work as a <strong>visible flow</strong>.
+    Read top to bottom and you will be able to build a Flow, wait for events, resume after a
+    restart, and test all of it deterministically.
+  </p>
+  <dl class="meta">
+    <div><dt>Module</dt><dd>flower-core</dd></div>
+    <div><dt>Version</dt><dd>0.1.3</dd></div>
+    <div><dt>Runtime deps</dt><dd>none</dd></div>
+    <div><dt>Java</dt><dd>8+</dd></div>
+    <div><dt>Threads</dt><dd>one per Worker</dd></div>
+  </dl>
+</header>
+
+<div class="cards" style="margin-top:26px">
+  <div class="card">
+    <h5>New here</h5>
+    <p>Read 01 through 05 in order. That is enough to build and run a Flow.</p>
+  </div>
+  <div class="card">
+    <h5>Want code first</h5>
+    <p>Copy <a href="#quickstart">04 Quickstart</a>, run it, then use Part 2 as reference.</p>
+  </div>
+  <div class="card">
+    <h5>Already using Flower</h5>
+    <p>15 (anti-patterns), 16 (common mistakes), and 17 (cheat sheet) are the useful ones.</p>
+  </div>
+  <div class="card">
+    <h5>The pink boxes</h5>
+    <p><strong>“Easy to misread”</strong> boxes appear only where the API genuinely invites a wrong assumption. Skimming just those prevents most bugs.</p>
+  </div>
+</div>
+
+<!-- ================= PART 1 ================= -->
+<div class="part">
+  <span class="pn">Part 1</span>
+  <h2>Getting Started</h2>
+  <p>What problem Flower solves, and one small working example.</p>
+</div>
+
+<section id="intro">
+  <h3><span class="sn">01</span>What Flower Is</h3>
+  <p class="sub">A tool is best explained by the pain it removes.</p>
+
+  <h4>The flow already exists — it just isn't written down</h4>
+  <p>
+    Order processing, payment waits, device control, dispatch, multi-turn AI agents: none of these
+    finish in a single method call. They start, wait for something, move on when a signal arrives,
+    and roll back or retry on failure.
+  </p>
+  <p>That flow usually ends up scattered:</p>
+  <ul>
+    <li>a <strong>scheduler</strong> polling the database</li>
+    <li>an <strong>event listener</strong> mutating status</li>
+    <li>an <strong>enum column</strong> plus a large <code>switch</code> that interprets it</li>
+    <li>a <strong>background thread</strong> and a shared flag</li>
+  </ul>
+  <p>
+    New engineers do not get stuck on the class diagram. They get stuck on one question no diagram
+    answers: when a request arrives, what actually happens, and in what order? That answer lives in
+    no single file.
+  </p>
+
+  <h4>Write the flow down as one object</h4>
+  <p>Flower's answer is simple. Write the flow as a <strong>Flow</strong>, list <strong>Step</strong>s in order, and have each Step return an explicit <strong>StepResult</strong>.</p>
+
+  <div class="codehead">The whole shape</div>
+<pre><code>Flow flow = Flow.builder("order", "ORD-1024")
+        .step("accept",  new AcceptOrderStep(orderService))
+        .step("payment", new WaitForPaymentStep())
+        .step("fulfill", new FulfillOrderStep(warehouse))
+        .build();
+
+worker.submit(flow);</code></pre>
+
+  <p>
+    “Which step is this on?” becomes a value you can query instead of a guess. “Where does it go next?”
+    becomes a return value instead of a hidden side effect. Waiting is expressed with
+    <strong>event subscriptions, signals, and timeouts</strong> instead of sleeps and ad-hoc polling.
+  </p>
+
+  <h4>Good fits</h4>
+  <ul>
+    <li><strong>Order processing</strong> waiting on payment, inventory, or fulfillment signals</li>
+    <li><strong>Game turns</strong> waiting for player input and animation completion</li>
+    <li><strong>Logistics and device workflows</strong> where work moves through zones</li>
+    <li><strong>AI agent applications</strong>: model call → tool wait → validation → approval → action</li>
+    <li><strong>Retryable background coordination</strong> that must stay testable</li>
+  </ul>
+
+  <div class="warn">
+    <b class="lb">When not to use it</b>
+    <p>If you have two or three steps and no waiting, an <code>enum</code> and a <code>switch</code> are genuinely enough. If formal state/event/transition modeling is the goal, Spring StateMachine fits better. Flower does not <strong>model state</strong>; it <strong>runs flows</strong>.</p>
+  </div>
+
+  <div class="note">
+    <b class="lb">What Flower is not</b>
+    <p>Not BPMN, not a Temporal/Camunda replacement, not a YAML workflow engine, not a distributed saga engine, not a human-task platform. It stays inside <strong>one JVM</strong> on purpose. For distributed transactions or execution replay, use those tools instead.</p>
+  </div>
+</section>
+
+<section id="model">
+  <h3><span class="sn">02</span>The Core Model</h3>
+  <p class="sub">Five names. Learn these and the rest follows.</p>
+
+  <div class="nest">
+    <div class="nest-h">Engine</div>
+    <div class="nest-d">Top-level container. Owns the Clock, EventBus, listeners, and checkpoint store, and hands them to Workers.</div>
+    <div class="nest">
+      <div class="nest-h">Worker &nbsp;<span class="pill">one thread</span></div>
+      <div class="nest-d">Owns the tick loop. Advances each of its Flows once per tick. Default 100&nbsp;ms.</div>
+      <div class="nest">
+        <div class="nest-h">Flow &nbsp;<span class="pill">FlowId = flowType + flowKey</span></div>
+        <div class="nest-d">An ordered list of Steps for one domain instance (one order, one device).</div>
+        <div class="nest">
+          <div class="nest-h">Step &nbsp;<span class="pill">stepId (string)</span></div>
+          <div class="nest-d">A small orchestration unit with an <code>onEnter → onTick* → onExit</code> lifecycle.</div>
+          <div class="nest">
+            <div class="nest-h">StepResult</div>
+            <div class="nest-d"><code>stay · done · repeat · goTo · finish · fail</code> &mdash; the only way to move a Flow.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="scroll">
+    <table>
+      <thead><tr><th style="width:14%">Layer</th><th style="width:40%">Responsibility</th><th>How you create it</th></tr></thead>
+      <tbody>
+        <tr><td class="k">Engine</td><td>Bundles shared services, injects them into Workers, starts and stops everything</td><td><code>Engine.builder()...build()</code></td></tr>
+        <tr><td class="k">Worker</td><td>Single-threaded tick loop that advances active Flows in submission order</td><td><code>Worker.builder("name")...build()</code></td></tr>
+        <tr><td class="k">Flow</td><td>Tracks “where am I” in its Step list</td><td><code>Flow.builder(type, key)...build()</code></td></tr>
+        <tr><td class="k">Step</td><td>Starts work, checks whether it is done, returns a result</td><td><code>class X extends Step</code></td></tr>
+        <tr><td class="k">StepResult</td><td>Expresses the transition as a value</td><td><code>StepResult.done()</code> etc.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="cf">
+    <b class="lb">Easy to misread · A Flow is an instance, not a definition</b>
+    <p><span class="q">Looks like</span> a Flow is a reusable workflow definition, the way a BPMN diagram is defined once and shared by many requests.</p>
+    <p><span class="a">Actually</span> <strong>one order = one Flow object</strong>. Step instances are created fresh each time too. There is no definition registry and no definition ID. The “definition” is <strong>the factory method you wrote</strong>.</p>
+  </div>
+
+  <div class="note">
+    <b class="lb">Two more names and you have everything</b>
+    <p>
+      <strong>stepId</strong> is the string label of a Step inside its Flow (used by logs, dumps, checkpoints, and <code>goTo</code>).
+      <strong>stepNo</strong> is a tiny integer cursor <em>inside</em> one Step. Keeping these two apart is most of what makes Flower code clean. → <a href="#sharing">Section 11</a>
+    </p>
+  </div>
+</section>
+
+<section id="glossary">
+  <h3><span class="sn">03</span>Terms</h3>
+
+  <dl class="gloss">
+    <div><dt>Orchestration</dt><dd>Directing several pieces of work in the right order under the right conditions. The real work (charging a card, writing to a database, calling an API) belongs to domain services; a Step only decides when to trigger it and when to move on.</dd></div>
+    <div><dt>Tick</dt><dd>One pass of a Worker's loop. Each active Flow gets <strong>exactly one</strong> chance to advance per tick. Default interval 100&nbsp;ms.</dd></div>
+    <div><dt>FlowId</dt><dd><code>flowType</code> + <code>flowKey</code>, e.g. <code>"order"</code> + <code>"ORD-1024"</code>. This pair is what prevents duplicate execution.</dd></div>
+    <div><dt>Terminal state</dt><dd>A state that never advances again: <code>FINISHED</code>, <code>FAILED</code>, <code>CANCELLED</code>, <code>CHECKPOINT_FAILED</code>.</dd></div>
+    <div><dt>Signal</dt><dd>A named note scoped to one Step. An event handler (on another thread) leaves it; the tick thread reads it. This is the <strong>safe way to cross a thread boundary</strong>.</dd></div>
+    <div><dt>Guard</dt><dd>A short function that answers “may this Step run right now?” &mdash; pass, hold, redirect, or fail.</dd></div>
+    <div><dt>Snapshot</dt><dd>An <strong>immutable read-only view</strong> of a Flow at one moment. Listeners and dumps receive snapshots, never the live Flow.</dd></div>
+    <div><dt>Checkpoint</dt><dd>The stored position of a durable Flow: which stepId, which stepNo, and whether it had entered.</dd></div>
+    <div><dt>Idempotent</dt><dd>Doing it twice has the same effect as doing it once. Important during recovery.</dd></div>
+    <div><dt>SPI</dt><dd>An interface Flower defines but does not implement, so you can plug in your own: <code>EventBus</code>, <code>Clock</code>, <code>FlowCheckpointStore</code>.</dd></div>
+  </dl>
+</section>
+
+<section id="quickstart">
+  <h3><span class="sn">04</span>Five-Minute Quickstart</h3>
+
+  <div class="codehead">Maven</div>
+<pre><code>&lt;dependency&gt;
+    &lt;groupId&gt;io.github.flowerjvm&lt;/groupId&gt;
+    &lt;artifactId&gt;flower-core&lt;/artifactId&gt;
+    &lt;version&gt;0.1.3&lt;/version&gt;
+&lt;/dependency&gt;</code></pre>
+
+  <div class="codehead">OrderQuickStart.java</div>
+<pre><code>import io.github.flowerjvm.flower.core.engine.Engine;
+import io.github.flowerjvm.flower.core.event.InMemoryEventBus;
+import io.github.flowerjvm.flower.core.flow.Flow;
+import io.github.flowerjvm.flower.core.step.Step;
+import io.github.flowerjvm.flower.core.step.StepContext;
+import io.github.flowerjvm.flower.core.step.StepResult;
+import io.github.flowerjvm.flower.core.worker.Worker;
+
+public class OrderQuickStart {
+
+    <span class="cm">// 1) A Step: one phase. onTick returns what happens next.</span>
+    static final class AcceptStep extends Step {
+        @Override protected void onEnter(StepContext ctx) {
+            System.out.println("accepting " + ctx.flowId().flowKey());
+        }
+        @Override protected StepResult onTick(StepContext ctx) {
+            return StepResult.done();          <span class="cm">// this Step is done; go to the next one</span>
+        }
+    }
+
+    static final class WaitPaymentStep extends Step {
+        @Override protected void onEnter(StepContext ctx) {
+            ctx.startTimeout(3_000);
+        }
+        @Override protected StepResult onTick(StepContext ctx) {
+            if (ctx.hasSignal("paid")) return StepResult.done();
+            if (ctx.timedOut()) {
+                return StepResult.fail(new IllegalStateException("payment step: timed out"));
+            }
+            return StepResult.stay();          <span class="cm">// still waiting; ask me again next tick</span>
+        }
+    }
+
+    public static void main(String[] args) throws Exception {
+        <span class="cm">// 2) Worker owns the tick loop</span>
+        Worker worker = Worker.builder("orders").intervalMillis(30).build();
+
+        <span class="cm">// 3) Engine bundles shared services and injects them</span>
+        Engine engine = Engine.builder()
+                .eventBus(InMemoryEventBus.create())
+                .worker(worker)
+                .build();
+
+        <span class="cm">// 4) Flow: the plan for THIS order. Build fresh Steps every time.</span>
+        Flow flow = Flow.builder("order", "ORD-1024")
+                .step("accept",  new AcceptStep())
+                .step("payment", new WaitPaymentStep())
+                .build();
+
+        engine.start();                        <span class="cm">// ticking starts here</span>
+        worker.submit(flow);                   <span class="cm">// picked up on the next tick</span>
+
+        Thread.sleep(4_000);
+        System.out.println("final state = " + flow.state());   <span class="cm">// FAILED (no payment signal)</span>
+        engine.stop();
+    }
+}</code></pre>
+
+  <div class="scroll">
+    <table>
+      <thead><tr><th style="width:30%">Line</th><th>What it means</th></tr></thead>
+      <tbody>
+        <tr><td class="k">extends Step</td><td>Only <code>onTick</code> is required. Override <code>onEnter</code>, <code>onExit</code>, <code>onReset</code> as needed.</td></tr>
+        <tr><td class="k">onEnter(ctx)</td><td>Called <strong>once</strong> when the Step becomes current. Start external work, subscribe, start a timeout here.</td></tr>
+        <tr><td class="k">onTick(ctx)</td><td>Called <strong>every tick</strong> while the Step is current. Must be short and non-blocking. A <code>sleep</code> here stalls every other Flow on that Worker.</td></tr>
+        <tr><td class="k">StepResult.stay()</td><td>“Not yet, ask me again next tick.” The standard way to express waiting.</td></tr>
+        <tr><td class="k">StepResult.done()</td><td>“This Step is finished, move to the next.” On the last Step the Flow becomes <code>FINISHED</code>.</td></tr>
+        <tr><td class="k">Engine.builder()</td><td>Defaults: <code>SystemClock</code>, <code>InMemoryEventBus</code>. At least one Worker required.</td></tr>
+        <tr><td class="k">worker.submit(flow)</td><td>Queues the Flow. It <strong>activates on the next tick</strong>.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="tip">
+    <b class="lb">In tests</b>
+    <p>Call <code>engine.attach()</code> instead of <code>start()</code>, and drive ticks yourself with <code>worker.tickOnce()</code>. Combined with <code>ManualClock</code> this makes time fully deterministic. → <a href="#testing">Section 14</a></p>
+  </div>
+</section>
+
+<section id="firstrun">
+  <h3><span class="sn">05</span>How a Flow Progresses</h3>
+  <p class="sub">Tick by tick, for the example above. This one table is the whole execution model.</p>
+
+  <div class="scroll">
+    <table class="dense">
+      <thead><tr><th style="width:9%">When</th><th style="width:16%">Flow state</th><th style="width:12%">Current Step</th><th>What happens</th></tr></thead>
+      <tbody>
+        <tr><td class="num">submit</td><td><span class="pill">READY</span></td><td>&mdash;</td><td>The Worker accepts the Flow and queues it. No Step has run yet.</td></tr>
+        <tr><td class="num">tick 1</td><td><span class="pill ac">RUNNING</span></td><td><code>accept</code></td><td>
+          ① registered as active, <code>onFlowSubmitted</code> fires<br>
+          ② <code>onEnter(accept)</code><br>
+          ③ <strong>in the same tick</strong> <code>onTick(accept)</code> → <code>done()</code><br>
+          ④ <code>onExit(accept)</code>, move to the next Step
+        </td></tr>
+        <tr><td class="num">tick 2</td><td><span class="pill ac">RUNNING</span></td><td><code>payment</code></td><td><code>onEnter(payment)</code> (timeout starts) → <code>onTick(payment)</code> → no signal → <code>stay()</code></td></tr>
+        <tr><td class="num">tick 3…n</td><td><span class="pill ac">RUNNING</span></td><td><code>payment</code></td><td>Only <code>onTick</code> repeats. <strong><code>onEnter</code> is not called again.</strong></td></tr>
+        <tr><td class="num">(external)</td><td><span class="pill ac">RUNNING</span></td><td><code>payment</code></td><td>A payment event arrives <em>on another thread</em>. The handler calls <code>ctx.signal("paid")</code> and returns immediately.</td></tr>
+        <tr><td class="num">tick n+1</td><td><span class="pill ok">FINISHED</span></td><td>&mdash;</td><td><code>onTick</code> sees the signal → <code>done()</code> → <code>onExit</code> (subscriptions released) → no next Step → <code>onFlowFinished</code> fires</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="cards">
+    <div class="card">
+      <h5>1. Enter and first tick share a tick</h5>
+      <p><code>onTick</code> runs immediately after <code>onEnter</code>. A Step that finishes on entry passes in one tick.</p>
+    </div>
+    <div class="card">
+      <h5>2. Each transition costs one tick</h5>
+      <p>After <code>done()</code>, the <em>next</em> Step's <code>onEnter</code> runs on the following tick. Ten Steps means at least ten ticks.</p>
+    </div>
+    <div class="card">
+      <h5>3. External threads only leave signals</h5>
+      <p>Handlers set a signal and return. Transitions are always decided by <code>onTick</code> on the tick thread. That is why Step code needs no synchronization.</p>
+    </div>
+  </div>
+
+  <div class="cf">
+    <b class="lb">Easy to misread · “every 100 ms” is really “100 ms after finishing”</b>
+    <p><span class="q">Looks like</span> <code>intervalMillis(100)</code> means a tick fires exactly every 100&nbsp;ms.</p>
+    <p><span class="a">Actually</span> it is a <strong>fixed delay</strong>. If a tick takes 40&nbsp;ms, the next one starts 100&nbsp;ms after that &mdash; a 140&nbsp;ms effective period. The upside: <strong>ticks never pile up and burst</strong>. Heavy ticks slow everything down evenly instead of stampeding.</p>
+  </div>
+
+  <div class="note">
+    <b class="lb">Choosing an interval</b>
+    <p>The interval trades latency against CPU. For user-facing flows 20–50&nbsp;ms; for batch-like flows 200–1000&nbsp;ms. Far more important than the interval: <strong>one slow Step delays every Flow on that Worker.</strong></p>
+  </div>
+</section>
+
+<!-- ================= PART 2 ================= -->
+<div class="part">
+  <span class="pn">Part 2</span>
+  <h2>Writing Flows</h2>
+  <p>What you need when actually writing code.</p>
+</div>
+
+<section id="flow">
+  <h3><span class="sn">06</span>Building a Flow</h3>
+
+  <div class="codehead">Builder</div>
+<pre><code>Flow flow = Flow.builder("order", orderId)      <span class="cm">// flowType, flowKey</span>
+        .definitionVersion("v3")                 <span class="cm">// optional</span>
+        .executionContext(ctx)                   <span class="cm">// optional identity</span>
+        .step("accept",  new AcceptOrderStep(orderService))
+        .step("payment", new WaitPaymentStep(paymentService))
+        .step("fulfill", new FulfillOrderStep(warehouse), businessHoursGuard)
+        .build();
+
+worker.submit(flow);</code></pre>
+
+  <div class="scroll">
+    <table class="dense">
+      <thead><tr><th style="width:32%">Method</th><th>Notes</th></tr></thead>
+      <tbody>
+        <tr><td class="k">step(id, step)</td><td>Adds a Step. <strong>Duplicate ids throw at build time.</strong></td></tr>
+        <tr><td class="k">step(id, step, guard)</td><td>Adds a guarded Step. → <a href="#guard">Section 09</a></td></tr>
+        <tr><td class="k">durable() / durableStep(...)</td><td>Makes the Flow resumable after restart. → <a href="#durable">Section 12</a></td></tr>
+        <tr><td class="k">definitionVersion(v)</td><td>Catches definition drift during durable recovery.</td></tr>
+        <tr><td class="k">executionContext(ctx)</td><td>tenant / user / session / run / trace identity carried through logs and checkpoints.</td></tr>
+        <tr><td class="k">build()</td><td>Throws if there are no Steps.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h4>FlowId and duplicate submissions</h4>
+  <p><code>flowType</code> is the kind of flow; <code>flowKey</code> identifies the domain instance. Submitting the same <code>FlowId</code> again is handled by policy:</p>
+  <div class="scroll">
+    <table class="dense">
+      <thead><tr><th style="width:16%">Policy</th><th>Behavior</th><th style="width:34%">Use when</th></tr></thead>
+      <tbody>
+        <tr><td class="k">REJECT<br><span class="pill">default</span></td><td>Throws</td><td>Duplicate submission is a bug. Keep this default.</td></tr>
+        <tr><td class="k">IGNORE</td><td>Silently keeps the existing Flow</td><td>Retries or restarts where “already running is fine”.</td></tr>
+        <tr><td class="k">REPLACE</td><td>Cancels the existing Flow, installs the new one</td><td>A newer request supersedes the previous one.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="warn">
+    <b class="lb">Multi-tenant: make flowKey globally unique</b>
+    <p><code>tenantId</code> is <strong>not</strong> part of <code>FlowId</code>. If tenants reuse document numbers, encode the tenant in the key itself (<code>"office-a:DOC-1"</code>). Otherwise two tenants' flows collide as duplicates.</p>
+  </div>
+
+  <div class="cf">
+    <b class="lb">Easy to misread · a Flow object cannot be reused</b>
+    <p><span class="q">Looks like</span> <code>submit()</code> just queues the object, so you could submit it twice or hand it to another Worker.</p>
+    <p><span class="a">Actually</span> submission <strong>binds</strong> the Flow to that runtime. Two consequences:</p>
+    <p>① Right after <code>submit()</code>, <code>flow.state()</code> is already <code>READY</code>.<br>
+       ② <strong>Submitting the same object twice throws.</strong> To run it again, <strong>build a new Flow</strong>.</p>
+    <p>This is why Flows are conventionally created by a factory method &mdash; you can always build a fresh one.</p>
+  </div>
+
+  <div class="codehead">Recommended: a factory</div>
+<pre><code>@Component
+public class OrderFlowFactory {
+
+    private final OrderService orderService;
+    private final WarehouseService warehouse;
+
+    <span class="cm">// constructor injection …</span>
+
+    public Flow create(String orderId) {
+        return Flow.builder("order", orderId)
+                .step("accept",  new AcceptOrderStep(orderService))
+                .step("payment", new WaitPaymentStep(orderService))
+                .step("fulfill", new FulfillOrderStep(warehouse))
+                .build();
+    }
+}</code></pre>
+  <p>Flower has no DI container and never instantiates Steps reflectively. <strong>Pass dependencies through constructors.</strong> If a Step needs many services, group them into your own <code>Deps</code> object.</p>
+</section>
+
+<section id="step">
+  <h3><span class="sn">07</span>Step Lifecycle</h3>
+
+  <div class="scroll">
+    <table>
+      <thead><tr><th style="width:16%">Hook</th><th style="width:10%">Required</th><th>When it runs</th></tr></thead>
+      <tbody>
+        <tr><td class="k">onEnter(ctx)</td><td>optional</td><td><strong>Once</strong>, when the Step becomes current. Start external work, subscribe, start a timeout.</td></tr>
+        <tr><td class="k">onTick(ctx)</td><td><strong>required</strong></td><td>Every tick while current. Must return a <code>StepResult</code>.</td></tr>
+        <tr><td class="k">onExit(ctx)</td><td>optional</td><td>When leaving (done · goTo · finish · fail · cancel). <strong>Not called on repeat.</strong></td></tr>
+        <tr><td class="k">onReset(ctx)</td><td>optional</td><td>On <code>repeat()</code>, after the framework has already cleared subscriptions, signals, timeout, and stepNo.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <figure>
+    <div class="scroll">
+      <svg class="dia" viewBox="0 0 880 210" role="img" aria-label="Step lifecycle timeline">
+        <g class="sm mono">
+          <text x="8" y="24">tick 1</text><text x="188" y="24">tick 2</text><text x="368" y="24">tick 3</text><text x="548" y="24">tick 4</text><text x="728" y="24">tick 5</text>
+        </g>
+        <g class="ln dash"><path d="M0 32 H880"/></g>
+        <g class="mono" font-size="11">
+          <rect class="box-a" x="8" y="44" width="150" height="26" rx="6"/><text x="83" y="58" text-anchor="middle" dominant-baseline="middle">onEnter(A)</text>
+          <rect class="box" x="8" y="76" width="150" height="26" rx="6"/><text x="83" y="90" text-anchor="middle" dominant-baseline="middle">onTick(A) → done</text>
+          <rect class="box-ok" x="8" y="108" width="150" height="26" rx="6"/><text x="83" y="122" text-anchor="middle" dominant-baseline="middle" fill="var(--ink)">onExit(A)</text>
+          <rect class="box-a" x="188" y="44" width="150" height="26" rx="6"/><text x="263" y="58" text-anchor="middle" dominant-baseline="middle">onEnter(B)</text>
+          <rect class="box" x="188" y="76" width="150" height="26" rx="6"/><text x="263" y="90" text-anchor="middle" dominant-baseline="middle">onTick(B) → stay</text>
+          <rect class="box" x="368" y="76" width="150" height="26" rx="6"/><text x="443" y="90" text-anchor="middle" dominant-baseline="middle">onTick(B) → stay</text>
+          <rect class="box" x="548" y="76" width="150" height="26" rx="6"/><text x="623" y="90" text-anchor="middle" dominant-baseline="middle">onTick(B) → repeat</text>
+          <rect class="box-wa" x="548" y="108" width="150" height="26" rx="6"/><text x="623" y="122" text-anchor="middle" dominant-baseline="middle" fill="var(--ink)">onReset(B)</text>
+          <rect class="box-a" x="728" y="44" width="150" height="26" rx="6"/><text x="803" y="58" text-anchor="middle" dominant-baseline="middle">onEnter(B)</text>
+          <rect class="box" x="728" y="76" width="150" height="26" rx="6"/><text x="803" y="90" text-anchor="middle" dominant-baseline="middle">onTick(B) → …</text>
+        </g>
+        <g class="sm">
+          <text x="8" y="160">· onEnter and onTick share a tick (ticks 1, 2, 5).</text>
+          <text x="8" y="180">· A waiting Step only repeats onTick (tick 3).</text>
+          <text x="8" y="200">· repeat calls onReset, not onExit; re-entry is the next tick (4 → 5).</text>
+        </g>
+      </svg>
+    </div>
+    <figcaption>A finishes on entry; B waits, then repeats.</figcaption>
+  </figure>
+
+  <div class="scroll">
+    <table>
+      <thead><tr><th style="width:14%">Hook</th><th style="width:43%">Do</th><th>Don't</th></tr></thead>
+      <tbody>
+        <tr>
+          <td class="k">onEnter</td>
+          <td>Kick off external work, <code>ctx.subscribe(...)</code>, <code>ctx.startTimeout(...)</code></td>
+          <td>Block waiting for a result. Throwing here fails the Flow <strong>without</strong> calling <code>onExit</code>.</td>
+        </tr>
+        <tr>
+          <td class="k">onTick</td>
+          <td>Check signals, domain state, timeouts; return a result</td>
+          <td><code>sleep</code>, synchronous HTTP/DB waits, polling loops. One second here delays every Flow on the Worker by one second.</td>
+        </tr>
+        <tr>
+          <td class="k">onExit</td>
+          <td>Release resources this Step created, publish a completion event</td>
+          <td>Leave a failure-prone call unguarded &mdash; an exception here <strong>turns success into failure</strong>.</td>
+        </tr>
+        <tr>
+          <td class="k">onReset</td>
+          <td>Reset instance fields (retry counters, etc.)</td>
+          <td>Clear subscriptions, signals, timeout, or stepNo &mdash; <strong>already done for you</strong>.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="cf">
+    <b class="lb">Easy to misread · the first onTick sees nothing yet</b>
+    <p><span class="q">Looks like</span> since <code>onEnter</code> started the external call, the first <code>onTick</code> can process its result.</p>
+    <p><span class="a">Actually</span> <code>onTick</code> runs <strong>in the same tick</strong>, microseconds later. The response is almost certainly not back. <strong>“Nothing yet → <code>stay()</code>” is the normal first-tick path</strong>; assuming otherwise gives you a NullPointerException.</p>
+  </div>
+
+  <div class="warn">
+    <b class="lb">Never share Step instances</b>
+    <p>A Step is <strong>stateful and owned by one Flow</strong>. Create new ones for every Flow. Registering production Steps as Spring singletons mixes state across flows.</p>
+  </div>
+</section>
+
+<section id="result">
+  <h3><span class="sn">08</span>StepResult</h3>
+
+  <div class="scroll">
+    <table>
+      <thead><tr><th style="width:20%">Result</th><th style="width:32%">Meaning</th><th>Side effects</th></tr></thead>
+      <tbody>
+        <tr><td class="k">stay()</td><td>Keep this Step; call again next tick</td><td>Nothing happens. The standard way to wait.</td></tr>
+        <tr><td class="k">done()</td><td>This Step is complete → <strong>next declared</strong> Step</td><td><code>onExit</code> runs, subscriptions released. On the last Step the Flow finishes.</td></tr>
+        <tr><td class="k">repeat()</td><td>Restart this Step from the beginning</td><td><code>onReset</code> instead of <code>onExit</code>; subscriptions, signals, timeout cleared, stepNo reset. <strong>Re-entry is the next tick.</strong></td></tr>
+        <tr><td class="k">goTo("id")</td><td>Jump to any stepId, forward or back</td><td><code>onExit</code> runs, then the jump. <strong>An unknown id fails the Flow.</strong></td></tr>
+        <tr><td class="k">finish()</td><td>Skip remaining Steps, succeed now</td><td><code>onExit</code> → <code>FINISHED</code></td></tr>
+        <tr><td class="k">fail(cause)</td><td>Fail the whole Flow</td><td><code>onExit</code> → <code>FAILED</code>. <code>cause</code> must not be null.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="cf">
+    <b class="lb">Easy to misread · when done() and finish() differ</b>
+    <p><span class="q">Looks like</span> on the last Step both produce <code>FINISHED</code>, so they are interchangeable.</p>
+    <p><span class="a">Actually</span> they only coincide on the last Step, and they differ in meaning and in how they age.</p>
+    <p>· <code>done()</code> = “<strong>this Step</strong> is complete” → continues to the next Step. Adding a Step later just works.<br>
+       · <code>finish()</code> = “<strong>the whole Flow</strong> is complete” → skips everything after it. Adding a Step later changes nothing; it still stops there.</p>
+    <p>Use <code>done()</code> for normal completion. Reserve <code>finish()</code> for “the remaining steps are no longer <em>needed</em>”.</p>
+  </div>
+
+  <div class="cf">
+    <b class="lb">Easy to misread · repeat() vs goTo(self)</b>
+    <p><span class="q">Looks like</span> both re-run the current Step, so either will do.</p>
+    <p><span class="a">Actually</span> <strong>they take different hooks.</strong></p>
+    <p>· <code>repeat()</code> → <code>onReset</code> → (next tick) <code>onEnter</code>. <code>onExit</code> <strong>does not run</strong>.<br>
+       · <code>goTo("own id")</code> → <code>onExit</code> → (next tick) <code>onEnter</code>. <code>onReset</code> does not run.</p>
+    <p>If <code>onExit</code> publishes a completion event, <code>goTo(self)</code> fires it on <strong>every loop</strong>. Use <code>repeat()</code> for retries.</p>
+  </div>
+
+  <div class="cf">
+    <b class="lb">Easy to misread · goTo does not reset Step fields</b>
+    <p><span class="q">Looks like</span> jumping back to an earlier Step re-enters it, so it behaves like a fresh Step.</p>
+    <p><span class="a">Actually</span> <strong>the Step instance is the same object</strong>, and the <code>goTo</code> path <strong>does not call <code>onReset</code></strong> (that is <code>repeat()</code> only).</p>
+    <p>· <strong>Reset for you</strong> &mdash; <code>stepNo</code>, signals, subscriptions, timeout<br>
+       · <strong>Not reset</strong> &mdash; <strong>every instance field you declared</strong></p>
+<pre style="margin:.6em 0 0"><code>final class ChargeStep extends Step {
+    private int attempts;          <span class="cm">// NOT reset when goTo returns here</span>
+
+    @Override protected void onEnter(StepContext ctx) {
+        attempts = 0;              <span class="cm">// reset explicitly on entry</span>
+    }
+}</code></pre>
+    <p>This bites hardest in <code>goTo</code> loops such as <code>verify → retry-wait → verify</code>.</p>
+  </div>
+
+  <div class="stop">
+    <b class="lb">An exception in onExit turns success into failure</b>
+    <p>Even after <code>done()</code>, if <code>onExit</code> throws, the Flow ends as <code>FAILED</code>. <strong>Put only failure-tolerant cleanup in <code>onExit</code></strong>; anything that must succeed belongs in <code>onTick</code> before the result is returned.</p>
+  </div>
+
+  <h4>Keep step ids in constants</h4>
+  <p>A typo in <code>goTo("payment")</code> is only caught <strong>at runtime</strong>. An enum moves that to compile time.</p>
+  <div class="codehead">Wrapping ids</div>
+<pre><code>enum OrderStep {
+    ACCEPT("accept"), PAYMENT("payment"), FULFILL("fulfill");
+    private final String id;
+    OrderStep(String id) { this.id = id; }
+    String id() { return id; }
+}
+
+Flow.builder("order", orderId)
+        .step(OrderStep.ACCEPT.id(),  new AcceptOrderStep(orderService))
+        .step(OrderStep.PAYMENT.id(), new WaitPaymentStep())
+        .build();
+
+return StepResult.goTo(OrderStep.PAYMENT.id());</code></pre>
+  <p class="sub" style="margin-top:-8px">Flower keeps ids as strings because the same id must be readable in logs, dumps, checkpoints, and admin views.</p>
+</section>
+
+<section id="guard">
+  <h3><span class="sn">09</span>Guards</h3>
+  <p class="sub">An optional short function that answers “may this Step run right now?”</p>
+
+  <div class="codehead">Attaching a guard</div>
+<pre><code>Guard duringBusinessHours = ctx -&gt; {
+    LocalTime now = LocalTime.now(ZoneId.of("UTC"));
+    if (now.isBefore(LocalTime.of(9, 0)))  return GuardResult.hold();   <span class="cm">// too early — wait</span>
+    if (now.isAfter(LocalTime.of(18, 0)))  return GuardResult.goTo("defer-to-tomorrow");
+    return GuardResult.pass();
+};
+
+Flow.builder("settlement", batchId)
+        .step("collect", new CollectStep(svc))
+        .step("settle",  new SettleStep(svc), duringBusinessHours)
+        .step("defer-to-tomorrow", new DeferStep(svc))
+        .build();</code></pre>
+
+  <div class="stop">
+    <b class="lb">Guards run on every tick, not just before entry</b>
+    <p><strong>A Step that has already entered and is waiting must still pass its guard on every tick.</strong> The name suggests a one-time entry check; it is not.</p>
+  </div>
+
+  <div class="scroll">
+    <table>
+      <thead><tr><th style="width:16%">Result</th><th style="width:38%">If the Step has not entered</th><th>If it already entered</th></tr></thead>
+      <tbody>
+        <tr><td class="k">pass()</td><td>Enters, then first <code>onTick</code></td><td><code>onTick</code> runs normally</td></tr>
+        <tr><td class="k">hold()</td><td>Entry is deferred; <code>onEnter</code> does not run</td><td><strong><code>onTick</code> is skipped.</strong> Subscriptions and timeout stay alive, <code>onExit</code> does not run &mdash; effectively paused</td></tr>
+        <tr><td class="k">goTo(id)</td><td>Skipped without entering</td><td><code>onExit</code> runs, then the jump</td></tr>
+        <tr><td class="k">fail(cause)</td><td>Flow fails; no <code>onExit</code></td><td><code>onExit</code> runs, then failure</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="tip">
+    <b class="lb">Guard vs stay()</b>
+    <p><strong>“Not allowed to start yet”</strong> is a guard (<code>hold</code>). <strong>“Started and waiting”</strong> is <code>stay()</code>.</p>
+  </div>
+
+  <div class="warn">
+    <b class="lb">Keep guards read-only</b>
+    <p>No persistence writes, publishing, subscribing, signaling, cancelling, scheduling, or external calls. A guard's own small in-memory counter is fine; business-visible state changes are not. If the check needs phases, waiting, retries, or progress, it is a <strong>Step</strong>, not a guard.</p>
+  </div>
+
+  <div class="note">
+    <b class="lb">Interaction with timeouts</b>
+    <p>While a guard returns <code>hold()</code>, <code>onTick</code> does not run &mdash; so <strong>timeouts are not observed either</strong>. A guarded Step notices its timeout only once the guard passes.</p>
+  </div>
+</section>
+
+<section id="waiting">
+  <h3><span class="sn">10</span>Waiting: Events, Signals, Timeouts</h3>
+  <p class="sub">How to wait without holding a thread.</p>
+
+  <div class="codehead">Subscribe in onEnter, check in onTick</div>
+<pre><code>final class WaitForPaymentStep extends Step {
+
+    @Override protected void onEnter(StepContext ctx) {
+        ctx.startTimeout(30_000);
+        ctx.subscribe(PaymentApproved.class, event -&gt; {  <span class="cm">// released automatically</span>
+            if (event.orderId().equals(ctx.flowId().flowKey())) {
+                ctx.signal("paid", event);               <span class="cm">// leave a signal, return immediately</span>
+            }
+        });
+    }
+
+    @Override protected StepResult onTick(StepContext ctx) {
+        PaymentApproved approved = ctx.consumeSignal("paid", PaymentApproved.class);
+        if (approved != null) {
+            orderService.markPaid(approved);             <span class="cm">// real work on the tick thread</span>
+            return StepResult.done();
+        }
+        if (ctx.timedOut()) {
+            return StepResult.fail(new IllegalStateException("payment step: approval timed out"));
+        }
+        return StepResult.stay();
+    }
+}</code></pre>
+
+  <p>Subscriptions made through <code>ctx.subscribe(...)</code> are <strong>released automatically</strong> when the Step exits or resets. You never unsubscribe by hand, and they never leak.</p>
+
+  <figure>
+    <div class="scroll">
+      <svg class="dia" viewBox="0 0 880 240" role="img" aria-label="Thread boundary">
+        <defs><marker id="th1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--accent)"/></marker></defs>
+        <rect x="8" y="14" width="864" height="82" rx="10" fill="var(--surface-2)" stroke="var(--line-2)" stroke-dasharray="4 4"/>
+        <text class="mono sm" x="20" y="32">Publisher thread (Kafka consumer, HTTP thread, …)</text>
+        <g class="mono" font-size="11">
+          <rect class="box" x="24" y="42" width="200" height="40" rx="8"/><text x="124" y="62" text-anchor="middle" dominant-baseline="middle">event arrives</text>
+          <rect class="box" x="300" y="42" width="270" height="40" rx="8"/>
+          <text x="435" y="58" text-anchor="middle">handler runs</text>
+          <text class="sm" x="435" y="75" text-anchor="middle">ctx.signal("paid", event)</text>
+        </g>
+        <g class="ln" stroke="var(--accent)" marker-end="url(#th1)"><path d="M224 62 H296"/></g>
+        <rect class="box-a" x="300" y="108" width="280" height="36" rx="9"/>
+        <text class="mono" x="440" y="121" text-anchor="middle" font-size="12">signal (thread-safe)</text>
+        <text class="sm" x="440" y="136" text-anchor="middle">the one channel across threads</text>
+        <g class="ln" stroke="var(--accent)" marker-end="url(#th1)"><path d="M435 86 V104"/><path d="M400 148 V172"/></g>
+        <rect x="8" y="160" width="864" height="72" rx="10" fill="var(--accent-soft)" stroke="var(--accent)" stroke-dasharray="4 4"/>
+        <text class="mono sm" x="20" y="180" fill="var(--accent)">Worker tick thread (single, serial)</text>
+        <g class="mono" font-size="11">
+          <rect class="box" x="24" y="190" width="300" height="34" rx="8"/>
+          <text x="174" y="207" text-anchor="middle" dominant-baseline="middle">onTick checks → returns StepResult</text>
+          <rect class="box-ok" x="360" y="190" width="300" height="34" rx="8"/>
+          <text x="510" y="207" text-anchor="middle" dominant-baseline="middle" fill="var(--ink)">state changes only here</text>
+        </g>
+      </svg>
+    </div>
+    <figcaption>Handlers set a signal and return. Step code therefore needs no synchronization.</figcaption>
+  </figure>
+
+  <div class="scroll">
+    <table class="dense">
+      <thead><tr><th style="width:36%">Call</th><th>Behavior</th></tr></thead>
+      <tbody>
+        <tr><td class="k">signal("paid")</td><td>Marks the signal present, no payload</td></tr>
+        <tr><td class="k">signal("paid", event)</td><td>Stores the latest payload. A null payload throws.</td></tr>
+        <tr><td class="k">hasSignal("paid")</td><td>Presence check; does not clear</td></tr>
+        <tr><td class="k">signalPayload("paid", T.class)</td><td>Reads the payload; <strong>the signal remains</strong></td></tr>
+        <tr><td class="k">consumeSignal("paid", T.class)</td><td>Reads and clears</td></tr>
+        <tr><td class="k">clearSignal("paid")</td><td>Clears only</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="warn">
+    <b class="lb">A signal is not a queue</b>
+    <p>Three signals with the same name between two ticks leave <strong>only the last one</strong>. If every event must be processed, put them in your own queue or in domain state and use the signal purely as a “go look” wake-up.</p>
+  </div>
+
+  <div class="cf">
+    <b class="lb">Easy to misread · signals belong to the Step, not the Flow</b>
+    <p><span class="q">Looks like</span> a signal left by one Step can be read by the next one.</p>
+    <p><span class="a">Actually</span> signals are <strong>scoped to a single Step</strong>. They disappear when the Step leaves, and the next Step never sees them.</p>
+    <p>To pass values between Steps use <strong>domain state</strong> or a <strong>run-context object</strong>. → <a href="#sharing">Section 11</a></p>
+  </div>
+
+  <div class="stop">
+    <b class="lb">Subscriptions match the exact runtime type</b>
+    <p><code>subscribe(PaymentEvent.class, ...)</code> does <strong>not</strong> receive <code>PaymentApproved extends PaymentEvent</code>. Prefer concrete, immutable, final event classes.</p>
+  </div>
+
+  <h4>Timeouts</h4>
+  <div class="scroll">
+    <table class="dense">
+      <thead><tr><th style="width:28%">API</th><th>Behavior</th></tr></thead>
+      <tbody>
+        <tr><td class="k">startTimeout(ms)</td><td>Starts a window; calling it again <strong>replaces</strong> the previous one. Negative values throw. <span class="pill cr">not allowed in durable Flows</span></td></tr>
+        <tr><td class="k">timedOut()</td><td>Whether the window elapsed. Always <code>false</code> if never started.</td></tr>
+        <tr><td class="k">elapsedMillis()</td><td>Time since <code>startTimeout</code>; 0 if never started.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="cf">
+    <b class="lb">Easy to misread · startTimeout does not schedule anything</b>
+    <p><span class="q">Looks like</span> after <code>startTimeout(30_000)</code> the framework will do something when 30 seconds pass.</p>
+    <p><span class="a">Actually</span> there is <strong>no thread, no callback, no scheduled task</strong>. <code>timedOut()</code> computes the answer at the moment you call it. <strong>If <code>onTick</code> never checks <code>timedOut()</code>, nothing ever happens</strong> and the Step stays forever.</p>
+  </div>
+
+  <div class="note">
+    <b class="lb">Why durable Flows reject startTimeout</b>
+    <p>Timeout state is not part of a checkpoint. If it were allowed, a restart would silently reset a deadline that had 30 seconds left. Flower chose a loud exception over a quiet bug. In durable flows, store the deadline in domain state and compare it with <code>ctx.clock().currentTimeMillis()</code>.</p>
+  </div>
+</section>
+
+<section id="sharing">
+  <h3><span class="sn">11</span>Sharing Values Between Steps</h3>
+
+  <div class="cards">
+    <div class="card">
+      <h5>stepId (string)</h5>
+      <ul>
+        <li>Position name within the Flow</li>
+        <li>The target of <code>goTo("payment")</code></li>
+        <li>Appears verbatim in logs, dumps, checkpoints</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h5>stepNo (int)</h5>
+      <ul>
+        <li>A tiny cursor <em>inside</em> one Step</li>
+        <li>“request sent → response checked”</li>
+        <li>Reset to 0 on <code>repeat</code></li>
+      </ul>
+    </div>
+    <div class="card">
+      <h5>Split the Step when…</h5>
+      <p><code>stepNo</code> starts representing <strong>business states</strong> like <code>WAITING_PAYMENT</code> or <code>RETRYING</code>.</p>
+    </div>
+    <div class="card">
+      <h5>Sharing values</h5>
+      <p>Use <strong>domain state</strong> or an explicit <strong>run-context object</strong> &mdash; never <code>stepNo</code> or signals.</p>
+    </div>
+  </div>
+
+  <div class="codehead">Run-context pattern</div>
+<pre><code>final class OrderFlowRun {          <span class="cm">// a plain object you own</span>
+    final String orderId;
+    PaymentResult paymentResult;    <span class="cm">// shared across accept → payment → fulfill</span>
+    OrderFlowRun(String orderId) { this.orderId = orderId; }
+}
+
+OrderFlowRun run = new OrderFlowRun(orderId);
+Flow flow = Flow.builder("order", orderId)
+        .step("accept",  new AcceptOrderStep(run, orderService))
+        .step("payment", new WaitPaymentStep(run, paymentService))
+        .step("fulfill", new FulfillOrderStep(run, warehouse))
+        .build();</code></pre>
+
+  <div class="warn">
+    <b class="lb">A run context is not enough for durable Flows</b>
+    <p>It lives in memory only and disappears on restart. <strong>Anything needed after recovery must be in domain storage.</strong> → <a href="#durable">Section 12</a></p>
+  </div>
+
+  <h4>ExecutionContext</h4>
+  <p>A small identity card for one logical execution &mdash; <strong>not</strong> a business context.</p>
+  <div class="codehead">Attaching identity</div>
+<pre><code>ExecutionContext ctx = ExecutionContext.builder()
+        .tenantId("acme")
+        .userId("u-42")
+        .runId(UUID.randomUUID().toString())
+        .traceId(currentTraceId)
+        .build();
+
+Flow flow = Flow.builder("order", orderId)
+        .executionContext(ctx)
+        .step("accept", new AcceptStep())
+        .build();</code></pre>
+  <p>Six optional fields: <code>tenantId · userId · sessionId · runId · traceId · correlationId</code>. They follow the Flow through logs, traces, and checkpoints, and <strong>survive durable recovery</strong> so the same <code>runId</code> continues.</p>
+  <div class="note">
+    <b class="lb">What not to put here</b>
+    <p>Roles, policy decisions, approval state, domain objects. Those belong in domain storage. <code>ExecutionContext</code> only stitches one execution together across systems.</p>
+  </div>
+</section>
+
+<!-- ================= PART 3 ================= -->
+<div class="part">
+  <span class="pn">Part 3</span>
+  <h2>Operating</h2>
+  <p>Surviving restarts, seeing what runs, and testing deterministically.</p>
+</div>
+
+<section id="durable">
+  <h3><span class="sn">12</span>Durable Flows</h3>
+  <p class="sub">Checkpoint and resume &mdash; not replay. Getting the expectations right matters most.</p>
+
+  <div class="cards">
+    <div class="card">
+      <h5>Stored</h5>
+      <ul>
+        <li>Which Step it was on</li>
+        <li>Whether it had entered</li>
+        <li><code>stepNo</code></li>
+        <li>Execution identity (runId, traceId, …)</li>
+        <li>Definition version</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h5>Not stored</h5>
+      <ul>
+        <li>Step instance fields</li>
+        <li>In-flight events and signals</li>
+        <li><code>startTimeout</code> state</li>
+        <li>Whether a side effect ran</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h5>One rule follows</h5>
+      <p>Everything needed after a restart must live in <strong>domain storage</strong>. A checkpoint is a <em>bookmark</em>, nothing more.</p>
+    </div>
+  </div>
+
+  <div class="codehead">Making a Flow durable</div>
+<pre><code>Flow flow = Flow.builder("order", orderId)
+        .durable()                                <span class="cm">// ① mark as durable</span>
+        .definitionVersion("v3")                  <span class="cm">// ② optional</span>
+        .durableStep("payment", new WaitPaymentStep(orderService),
+                RecoveryPolicy.REENTER_IDEMPOTENT)   <span class="cm">// ③ every Step needs a policy</span>
+        .durableStep("fulfill", new FulfillOrderStep(warehouse),
+                RecoveryPolicy.REENTER_IDEMPOTENT)
+        .build();</code></pre>
+
+  <div class="scroll">
+    <table>
+      <thead><tr><th style="width:26%">Recovery policy</th><th style="width:26%">Called on recovery</th><th>Choose when</th></tr></thead>
+      <tbody>
+        <tr><td class="k">REENTER_IDEMPOTENT</td><td><code>onEnter</code> runs <strong>again</strong></td><td>Entering is safe to repeat (queries, subscriptions, “already done?” checks).</td></tr>
+        <tr><td class="k">RESUME_ONLY</td><td><code>DurableStep.onResume</code></td><td>First entry has side effects (sending a payment request) that recovery must <strong>not</strong> repeat.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="codehead">Wiring a store</div>
+<pre><code>FlowCheckpointStore store = JdbcFlowCheckpointStore.create(
+        dataSource, JdbcCheckpointDialects.postgresql());
+
+Engine engine = Engine.builder()
+        .worker(Worker.builder("orders").build())
+        .checkpointStore(store)                   <span class="cm">// without this, durable submits are rejected</span>
+        .build();</code></pre>
+  <p class="sub" style="margin-top:-8px">
+    <code>flower-persistence-jdbc</code> ships schemas for PostgreSQL, MySQL, Oracle, H2, and SQLite.
+    <strong>Tables are never created automatically.</strong> Apply the packaged SQL yourself or via Flyway/Liquibase.
+  </p>
+
+  <div class="cf">
+    <b class="lb">Easy to misread · durable misconfiguration fails at two different times</b>
+    <p><span class="q">Looks like</span> <code>build()</code> would catch every durable configuration mistake.</p>
+    <p><span class="a">Actually</span> different components check different things.</p>
+    <p>· <strong>A Step without a recovery policy</strong> → throws at <code>build()</code><br>
+       · <strong>No durable store wired</strong> → <code>build()</code> passes; throws at <strong><code>submit()</code></strong></p>
+    <p>“It builds fine but blows up on submit” is expected. Integration tests must <strong>submit</strong>, not just build.</p>
+  </div>
+
+  <div class="stop">
+    <b class="lb">Idempotency is a precondition</b>
+    <p>A checkpoint records that a Step was entered, not how far into entry it got. Recovery may therefore run <code>onEnter</code> again and <strong>send a payment request twice</strong>. Use an idempotency key on external calls, or check domain state for “already done” before acting.</p>
+  </div>
+
+  <h4>Recovering after a restart</h4>
+  <p>Recovery is explicit; the application calls it.</p>
+  <div class="codehead">At startup</div>
+<pre><code>FlowFactoryRegistry registry = FlowFactoryRegistry.builder()
+        .register("order", id -&gt; orderFlowFactory.create(id.flowKey()))
+        .build();
+
+FlowRecoveryService recovery = FlowRecoveryService.create(store, registry);
+
+engine.start();
+int restored = recovery.recoverActiveForWorker(engine.worker("orders"));
+log.info("recovered {} flows", restored);</code></pre>
+  <p>Recovery <strong>reads the stored position, rebuilds a fresh Flow, and resumes from there</strong>. Flower never replays past execution.</p>
+
+  <div class="stop">
+    <b class="lb">Recovering from multiple processes</b>
+    <p>Flower's duplicate protection is scoped to <strong>one Engine in one JVM</strong>. Two instances sharing a store can both recover the <strong>same Flow simultaneously</strong>. Add leader election, row locking, or leases at the application level. Naming Workers per instance and using <code>findActiveByWorker(name)</code> is a practical mitigation.</p>
+  </div>
+
+  <div class="note">
+    <b class="lb">Two operational notes</b>
+    <ul>
+      <li>Checkpoint writes happen <strong>synchronously on the tick path</strong>. A slow store means slow Flows.</li>
+      <li>If a write fails, the Flow halts as <code>CHECKPOINT_FAILED</code> and <code>onFlowFailed</code> fires. Advancing without a saved position would duplicate side effects after a restart, so Flower <strong>stops loudly instead of continuing quietly</strong>.</li>
+    </ul>
+  </div>
+</section>
+
+<section id="observe">
+  <h3><span class="sn">13</span>Observability</h3>
+
+  <h4>Lifecycle listeners</h4>
+  <div class="codehead">FlowerListener</div>
+<pre><code>Map&lt;FlowId, String&gt; lastStep = new ConcurrentHashMap&lt;&gt;();
+
+FlowerListener audit = new FlowerListener() {
+    @Override public void onStepEntered(FlowSnapshot f, String stepId) {
+        log.info("[{}] → {}", f.flowId(), stepId);
+    }
+    @Override public void onStepExited(FlowSnapshot f, String stepId) {
+        lastStep.put(f.flowId(), stepId);        <span class="cm">// remember where we were</span>
+    }
+    @Override public void onFlowFailed(FlowSnapshot f, Throwable cause) {
+        log.error("[{}] failed at {}", f.flowId(), lastStep.remove(f.flowId()), cause);
+    }
+};
+
+Engine engine = Engine.builder().worker(worker).listener(audit).build();</code></pre>
+
+  <div class="scroll">
+    <table class="dense">
+      <thead><tr><th style="width:34%">Callback</th><th>Fires when</th></tr></thead>
+      <tbody>
+        <tr><td class="k">onFlowSubmitted</td><td>The Worker accepted the Flow</td></tr>
+        <tr><td class="k">onStepEntered(snap, stepId)</td><td>Right after <code>onEnter</code> succeeds</td></tr>
+        <tr><td class="k">onStepExited(snap, stepId)</td><td>Right after <code>onExit</code> completes</td></tr>
+        <tr><td class="k">onFlowFinished / onFlowFailed / onFlowCancelled</td><td>Termination</td></tr>
+        <tr><td class="k">onListenerError / onWorkerError</td><td>A listener threw / an unexpected runtime error</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="cf">
+    <b class="lb">Easy to misread · termination snapshots have no “current step”</b>
+    <p><span class="q">Looks like</span> <code>f.currentStepId()</code> inside <code>onFlowFailed</code> would tell you where it failed.</p>
+    <p><span class="a">Actually</span> <code>currentStepId()</code> means “the Step <strong>currently executing</strong>”. A terminated Flow has none, so it is <strong>always <code>null</code></strong> there.</p>
+    <p>Three ways to capture the failure location:<br>
+       · remember the <strong>stepId argument</strong> of <code>onStepExited</code> (as above)<br>
+       · read the <code>STEP_FAILED</code> trace event<br>
+       · <strong>put the Step name in the exception message</strong> &mdash; simplest and most reliable</p>
+<pre style="margin:.6em 0 0"><code>return StepResult.fail(new IllegalStateException("payment step: no approval received"));</code></pre>
+    <p>Note that if <code>onEnter</code> throws, <code>onStepExited</code> never fires either, so the first option will not help. Avoid throwing from <code>onEnter</code>; decide failure in <code>onTick</code> with <code>StepResult.fail(...)</code>.</p>
+  </div>
+
+  <div class="stop">
+    <b class="lb">Listeners run on the tick thread</b>
+    <p>A database query or HTTP call inside a listener <strong>slows every Flow on that Worker</strong>. Copy what you need, enqueue it, and return.</p>
+  </div>
+
+  <h4>Trace stream</h4>
+  <p>Registering a <code>FlowerTraceListener</code> turns on a structured execution stream. <strong>If none is registered, no trace objects are created at all</strong> &mdash; the cost is zero.</p>
+  <div class="codehead">Receiving traces</div>
+<pre><code>FlowerTraceListener trace = event -&gt; log.info("{} seq={} flow={} attrs={}",
+        event.type(), event.sequence(), event.flowId(), event.attributes());
+
+Engine engine = Engine.builder().worker(worker).listener(trace).build();</code></pre>
+  <p>
+    Standard types include <code>FLOW_STARTED</code>, <code>STEP_STARTED</code>, <code>STEP_COMPLETED</code>, <code>STEP_FAILED</code>,
+    <code>CHECKPOINT_SAVED</code>, and <code>FLOW_COMPLETED</code>, with <code>traceId</code>, <code>flowRunId</code>, <code>stepRunId</code>, and sequence numbers.
+    <code>flower-observability</code> provides logging, Micrometer, and OpenTelemetry listeners.
+  </p>
+  <div class="note">
+    <b class="lb">No business payloads</b>
+    <p>Trace events carry <strong>orchestration metadata only</strong>. Order contents, model prompts, and secrets are never included. Add and mask those yourself if you need them.</p>
+  </div>
+
+  <h4>Dump</h4>
+  <div class="codehead">What is running right now</div>
+<pre><code>System.out.println(engine.dump().toText());</code></pre>
+<pre><code>Engine: RUNNING
+  Worker 'orders' [RUNNING, drive=SCHEDULED, interval=100ms]
+    FlowSnapshot{order/ORD-1024 RUNNING @payment[1]/no=0}
+    FlowSnapshot{order/ORD-1025 RUNNING @accept[0]/no=0}</code></pre>
+  <p>Useful for ops endpoints and incident triage. <code>flower-spring-boot-starter</code> exposes a protected dump endpoint and console.</p>
+</section>
+
+<section id="testing">
+  <h3><span class="sn">14</span>Testing</h3>
+  <p class="sub">Flower's most practical advantage: no threads, no waiting, no flaky tests.</p>
+
+  <p>Two rules: call <strong><code>engine.attach()</code></strong> instead of <code>start()</code>, and advance time yourself with <strong><code>worker.tickOnce()</code></strong>.</p>
+
+  <div class="codehead">Basic pattern</div>
+<pre><code>@Test
+void completesWhenPaymentSignalArrives() {
+    ManualClock clock = new ManualClock();
+    InMemoryEventBus bus = InMemoryEventBus.create();
+    Worker worker = Worker.builder("test").build();
+
+    Engine engine = Engine.builder()
+            .clock(clock).eventBus(bus).worker(worker).build();
+    engine.attach();                    <span class="cm">// not start() — no scheduler</span>
+
+    Flow flow = Flow.builder("order", "ORD-1")
+            .step("accept",  new AcceptStep())
+            .step("payment", new WaitPaymentStep())
+            .build();
+
+    worker.submit(flow);
+    worker.tickOnce();                  <span class="cm">// activate + accept enters and completes</span>
+    worker.tickOnce();                  <span class="cm">// payment enters, first onTick</span>
+
+    assertThat(flow.currentStepId()).isEqualTo("payment");
+
+    bus.publish(new PaymentApproved("ORD-1"));   <span class="cm">// synchronous dispatch</span>
+    worker.tickOnce();
+
+    assertThat(flow.state()).isEqualTo(FlowState.FINISHED);
+}
+
+@Test
+void failsWhenTheTimeoutElapses() {
+    <span class="cm">// … same setup …</span>
+    worker.tickOnce();
+    worker.tickOnce();                  <span class="cm">// payment enters, startTimeout(30_000)</span>
+
+    clock.advance(30_000);              <span class="cm">// jump forward instantly</span>
+    worker.tickOnce();
+
+    assertThat(flow.state()).isEqualTo(FlowState.FAILED);
+}</code></pre>
+
+  <div class="scroll">
+    <table class="dense">
+      <thead><tr><th style="width:52%">Goal</th><th>Ticks needed</th></tr></thead>
+      <tbody>
+        <tr><td>Activate a submitted Flow and enter the first Step</td><td class="num">1</td></tr>
+        <tr><td>Pass N Steps that each return <code>done()</code> on their first tick</td><td class="num">N</td></tr>
+        <tr><td>Re-run <code>onEnter</code> after <code>repeat()</code></td><td class="num">+1</td></tr>
+        <tr><td>While a guard returns <code>hold()</code></td><td class="num">0 progress</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="tip">
+    <b class="lb">Checklist</b>
+    <ul>
+      <li>Never call <code>engine.start()</code> in a test &mdash; <code>tickOnce()</code> will throw if you do.</li>
+      <li>Drive all time with <code>ManualClock.advance()</code>. No <code>Thread.sleep</code>.</li>
+      <li>Publish events directly from the test thread; <code>InMemoryEventBus</code> dispatches synchronously.</li>
+      <li>Call <code>tickOnce()</code> <strong>only from the test or host control thread</strong> &mdash; never from a Step, Guard, or listener.</li>
+      <li>See <strong><code>flower-testkit</code></strong> for higher-level helpers.</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ================= PART 4 ================= -->
+<div class="part">
+  <span class="pn">Part 4</span>
+  <h2>Using It Well</h2>
+  <p>Usable directly as a code-review checklist.</p>
+</div>
+
+<section id="rules">
+  <h3><span class="sn">15</span>Rules and Anti-Patterns</h3>
+
+  <div class="scroll">
+    <table>
+      <thead><tr><th style="width:44%"><span style="color:var(--crit)">✕ Don't</span></th><th><span style="color:var(--ok)">✓ Do</span></th></tr></thead>
+      <tbody>
+        <tr><td>Synchronous HTTP, <code>sleep</code>, or DB polling in <code>onTick</code></td><td>Start asynchronously in <code>onEnter</code>; <code>onTick</code> only checks signals, domain state, and timeouts</td></tr>
+        <tr><td>Mutating Flow or Step state from an event handler</td><td>Handlers call <code>ctx.signal(...)</code> only; <code>onTick</code> decides transitions</td></tr>
+        <tr><td>Encoding business states like <code>WAITING</code> or <code>RETRYING</code> in <code>stepNo</code></td><td>Split into named Steps with their own <code>stepId</code></td></tr>
+        <tr><td>Sharing Step instances as singleton beans</td><td><code>new</code> per Flow; dependencies through the constructor</td></tr>
+        <tr><td>Hiding cross-Step values in signals or <code>stepNo</code></td><td>Domain state or an explicit run-context object</td></tr>
+        <tr><td>Step-id string literals scattered through the code</td><td>Wrap them in an enum or constants</td></tr>
+        <tr><td>Mutating state or calling out from a Guard</td><td>Guards decide only; side effects belong in Steps</td></tr>
+        <tr><td>Cleanup only in <code>onExit</code>, so <code>repeat</code> skips it</td><td>Subscriptions, signals, and timeouts are auto-cleaned; put the rest in <code>onReset</code> too</td></tr>
+        <tr><td>Deciding completion from signals alone in a durable Flow</td><td>Also check <strong>domain state</strong> that survives a restart</td></tr>
+        <tr><td>Database writes or HTTP calls inside listeners</td><td>Enqueue and return</td></tr>
+        <tr><td>Putting the whole business process inside one Step</td><td>Keep Steps thin; delegate to services</td></tr>
+        <tr><td>Event hierarchies with supertype subscriptions</td><td>Subscribe to the exact type &mdash; matching is <strong>exact</strong></td></tr>
+        <tr><td>One Worker per feature, screen, or endpoint</td><td>Workers are <strong>execution lanes</strong>. Split only for different blocking risk, priority, isolation, or backpressure</td></tr>
+        <tr><td>Letting <code>@Scheduled</code> or cron own workflow progression</td><td>Progression belongs to Flow/Step code. Model periodic checks as <strong>long-lived Flows</strong></td></tr>
+        <tr><td>Calling <code>submit()</code> <strong>before</strong> the transaction commits</td><td>Submit after commit &mdash; otherwise a tick reads <strong>uncommitted data</strong></td></tr>
+        <tr><td>Keeping a durable Flow's completion state only in a <code>Future</code> or Step field</td><td>It vanishes on restart. Persist the operation id, status, and result</td></tr>
+        <tr><td>Calling <code>tickOnce()</code> from a Step, Guard, or listener</td><td>Re-entry throws. Drive ticks from the test or host control thread</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="note">
+    <b class="lb">One-line principle</b>
+    <p><strong>“A Step starts work, checks state, and returns an explicit result.”</strong> Code that does not fit that sentence usually belongs in a service. To enforce this at build time, see <code>flower-check</code>.</p>
+  </div>
+</section>
+
+<section id="faq">
+  <h3><span class="sn">16</span>Common Mistakes</h3>
+
+  <dl class="gloss">
+    <div>
+      <dt>I submitted a Flow and nothing happens</dt>
+      <dd>Check that <code>engine.start()</code> was called. With only <code>attach()</code> no ticks run, so you must call <code>worker.tickOnce()</code> yourself.</dd>
+    </div>
+    <div>
+      <dt>tickOnce() throws</dt>
+      <dd>The Worker is already scheduler-driven via <code>start()</code>. In tests stop at <code>engine.attach()</code>. It also throws on re-entry from a Step or listener.</dd>
+    </div>
+    <div>
+      <dt>I published an event but the Step never saw it</dt>
+      <dd>① exact runtime type? (supertype subscriptions do not work) ② is that Step still the current Step? ③ same <code>EventBus</code> instance?</dd>
+    </div>
+    <div>
+      <dt>onExit never runs</dt>
+      <dd>You are on the <code>repeat()</code> path (<code>onReset</code> runs instead), <code>onEnter</code> threw, or a durable Flow was suspended at shutdown.</dd>
+    </div>
+    <div>
+      <dt>I returned done() but the Flow failed</dt>
+      <dd>Most likely <code>onExit</code> threw. That is the only path that turns success into failure.</dd>
+    </div>
+    <div>
+      <dt>Submitting a durable Flow throws</dt>
+      <dd>Either no checkpoint store is wired, or a Step lacks a recovery policy. The latter throws at <code>build()</code>, the former at <code>submit()</code>.</dd>
+    </div>
+    <div>
+      <dt>startTimeout throws in a durable Flow</dt>
+      <dd>Intentional &mdash; timeout state is not checkpointed. Store the deadline in domain state and compare against <code>ctx.clock().currentTimeMillis()</code>.</dd>
+    </div>
+    <div>
+      <dt>The same order runs twice</dt>
+      <dd>Within one Engine the same <code>FlowId</code> is blocked. If two processes each recovered it, you need application-level locking or leader election.</dd>
+    </div>
+    <div>
+      <dt>My Flow is slow</dt>
+      <dd>Minimum duration is step count × tick interval (10 Steps at 100&nbsp;ms = 1&nbsp;second). Shorten the interval or merge Steps &mdash; but first check whether a slow Step is sharing the Worker.</dd>
+    </div>
+    <div>
+      <dt>start() fails after stop()</dt>
+      <dd>Engines and Workers are <strong>not reusable</strong>. Create new ones. For a temporary halt use <code>pause()</code> / <code>resume()</code>.</dd>
+    </div>
+  </dl>
+</section>
+
+<section id="cheat">
+  <h3><span class="sn">17</span>Cheat Sheet</h3>
+
+  <div class="cards">
+    <div class="card">
+      <h5>Wiring</h5>
+<pre style="margin:0;font-size:.78rem"><code>Worker w = Worker.builder("main")
+        .intervalMillis(100).build();
+Engine e = Engine.builder()
+        .clock(SystemClock.INSTANCE)
+        .eventBus(InMemoryEventBus.create())
+        .worker(w)
+        .listener(myListener)
+        .checkpointStore(store)
+        .build();
+e.start();   <span class="cm">// tests: e.attach()</span></code></pre>
+    </div>
+    <div class="card">
+      <h5>Building a Flow</h5>
+<pre style="margin:0;font-size:.78rem"><code>Flow f = Flow.builder("order", id)
+        .durable()
+        .definitionVersion("v1")
+        .executionContext(ctx)
+        .step("a", new AStep())
+        .step("b", new BStep(), guard)
+        .durableStep("c", new CStep(),
+             RecoveryPolicy.REENTER_IDEMPOTENT)
+        .build();
+w.submit(f, DuplicatePolicy.REPLACE);</code></pre>
+    </div>
+    <div class="card">
+      <h5>StepResult</h5>
+<pre style="margin:0;font-size:.78rem"><code>StepResult.stay()        <span class="cm">// wait</span>
+StepResult.done()        <span class="cm">// next Step</span>
+StepResult.repeat()      <span class="cm">// restart Step</span>
+StepResult.goTo("id")    <span class="cm">// jump</span>
+StepResult.finish()      <span class="cm">// end, success</span>
+StepResult.fail(cause)   <span class="cm">// end, failure</span></code></pre>
+    </div>
+    <div class="card">
+      <h5>GuardResult</h5>
+<pre style="margin:0;font-size:.78rem"><code>GuardResult.pass()       <span class="cm">// proceed</span>
+GuardResult.hold()       <span class="cm">// skip this tick</span>
+GuardResult.goTo("id")   <span class="cm">// redirect</span>
+GuardResult.fail(cause)  <span class="cm">// fail</span></code></pre>
+    </div>
+    <div class="card">
+      <h5>StepContext</h5>
+<pre style="margin:0;font-size:.78rem"><code>ctx.flowId().flowKey()
+ctx.currentStepId()
+ctx.stepNo() / setStepNo(n)
+ctx.subscribe(E.class, h)
+ctx.eventBus().publish(e)
+ctx.signal("n"[, payload])
+ctx.hasSignal("n")
+ctx.consumeSignal("n", T.class)
+ctx.startTimeout(ms) / timedOut()
+ctx.clock().currentTimeMillis()</code></pre>
+    </div>
+    <div class="card">
+      <h5>States</h5>
+<pre style="margin:0;font-size:.78rem"><code>FlowState  CREATED READY RUNNING
+           FINISHED FAILED CANCELLED
+           CHECKPOINT_FAILED</code></pre>
+    </div>
+    <div class="card">
+      <h5>Testing</h5>
+<pre style="margin:0;font-size:.78rem"><code>ManualClock c = new ManualClock();
+engine.attach();          <span class="cm">// not start()</span>
+worker.submit(flow);
+worker.tickOnce();
+c.advance(30_000);
+worker.tickOnce();
+assertThat(flow.state())…</code></pre>
+    </div>
+    <div class="card">
+      <h5>Recovery</h5>
+<pre style="margin:0;font-size:.78rem"><code>FlowFactoryRegistry r =
+  FlowFactoryRegistry.builder()
+    .register("order", id -&gt; build(id))
+    .build();
+FlowRecoveryService s =
+  FlowRecoveryService.create(store, r);
+s.recoverActiveForWorker(worker);</code></pre>
+    </div>
+  </div>
+
+  <h4>Ten things to remember</h4>
+  <ol>
+    <li>Each Flow advances <strong>once</strong> per tick.</li>
+    <li><code>onEnter</code> and the first <code>onTick</code> share <strong>one tick</strong>.</li>
+    <li>Every Step transition costs <strong>one tick</strong>.</li>
+    <li><code>onTick</code> never blocks &mdash; every Flow on the Worker stops with it.</li>
+    <li>External threads leave <strong>signals only</strong>; the tick thread changes state.</li>
+    <li>Event subscriptions match the <strong>exact runtime type</strong>.</li>
+    <li><code>repeat()</code> calls <code>onReset</code>, not <code>onExit</code>.</li>
+    <li>An exception in <code>onExit</code> turns <strong>success into failure</strong>.</li>
+    <li>Durable stores the <strong>position only</strong>. Everything else goes in domain storage.</li>
+    <li>Guards run <strong>every tick</strong>, entered or not.</li>
+  </ol>
+</section>
+
+<footer>
+  <p><strong>Flower Core Manual</strong> · targets version <code>0.1.3</code></p>
+  <p>
+    See also &mdash;
+    <a href="flower-eventloop.html">Flower EventLoop manual</a> ·
+    <a href="https://github.com/flowerjvm/flower">GitHub repository</a> ·
+    the repository <code>README.md</code> for the full module list
+  </p>
+  <p>Apache License 2.0</p>
+</footer>
+
+
+</main>
+</div>
+
+<script>
+(function(){
+  var root = document.documentElement, btn = document.getElementById('themeBtn'), saved = null;
+  try { saved = localStorage.getItem('flower-manual-theme'); } catch (e) {}
+  if (saved === 'dark' || saved === 'light') root.setAttribute('data-theme', saved);
+  btn.addEventListener('click', function(){
+    var cur = root.getAttribute('data-theme'), isDark;
+    if (cur) { isDark = cur === 'dark'; }
+    else { isDark = window.matchMedia('(prefers-color-scheme: dark)').matches; }
+    var next = isDark ? 'light' : 'dark';
+    root.setAttribute('data-theme', next);
+    try { localStorage.setItem('flower-manual-theme', next); } catch (e) {}
+  });
+
+  var links = Array.prototype.slice.call(document.querySelectorAll('#toc a[href^="#"]'));
+  var map = {};
+  links.forEach(function(a){ map[a.getAttribute('href').slice(1)] = a; });
+  var io = new IntersectionObserver(function(entries){
+    entries.forEach(function(en){
+      if (!en.isIntersecting) return;
+      var a = map[en.target.id];
+      if (!a) return;
+      links.forEach(function(l){ l.classList.remove('on'); });
+      a.classList.add('on');
+    });
+  }, { rootMargin: '-10% 0px -75% 0px', threshold: 0 });
+  document.querySelectorAll('main section').forEach(function(s){ io.observe(s); });
+
+  document.querySelectorAll('pre').forEach(function(pre){
+    var head = pre.previousElementSibling;
+    if (!head || !head.classList.contains('codehead')) return;
+    var b = document.createElement('button');
+    b.className = 'tbtn'; b.type = 'button'; b.textContent = 'copy';
+    b.style.marginLeft = 'auto'; b.style.padding = '2px 9px';
+    b.addEventListener('click', function(){
+      navigator.clipboard.writeText(pre.innerText).then(function(){
+        b.textContent = 'copied';
+        setTimeout(function(){ b.textContent = 'copy'; }, 1400);
+      });
+    });
+    head.appendChild(b);
+  });
+})();
+</script>
+</body>
+</html>
