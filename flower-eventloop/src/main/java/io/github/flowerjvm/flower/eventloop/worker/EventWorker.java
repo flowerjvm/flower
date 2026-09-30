@@ -491,6 +491,16 @@ public final class EventWorker {
         applyResult(rt, result);
     }
 
+    private void failAwait(FlowRuntime rt, Throwable cause, long generation) {
+        if (!isActive(rt)
+                || generation != rt.awaitGeneration
+                || rt.flow.state().isTerminal()
+                || !rt.entered) {
+            return;
+        }
+        failFlow(rt, cause);
+    }
+
     private void fireTimeout(FlowRuntime rt, long generation) {
         if (!isActive(rt)
                 || generation != rt.awaitGeneration
@@ -803,7 +813,7 @@ public final class EventWorker {
                 try {
                     matches = condition.matches(event);
                 } catch (final Throwable t) {
-                    enqueue(() -> failFlow(rt, t));
+                    enqueue(() -> failAwait(rt, t, generation));
                     return;
                 }
                 if (matches) {
@@ -879,7 +889,7 @@ public final class EventWorker {
 
     private void remove(FlowRuntime rt) {
         synchronized (stateLock) {
-            active.remove(rt.flow.flowId());
+            active.remove(rt.flow.flowId(), rt);
         }
     }
 
@@ -938,11 +948,18 @@ public final class EventWorker {
             EventFlowCheckpoint recovery = rt.recoveryCheckpoint != null
                     ? rt.recoveryCheckpoint
                     : rt.flow.recoveryCheckpoint();
+            boolean checkpointEntered = rt.entered;
+            if (rt.flow.state() == FlowState.CREATED && recovery != null) {
+                // Preserve a recovery that was submitted but never entered. Restore
+                // only its saved position, without invoking recovery or exit callbacks.
+                enterRecovered(rt, recovery);
+                checkpointEntered = recovery.currentStepEntered();
+            }
             trace.startFlow(rt.flow, recovery);
             if (rt.flow.persistence() == FlowPersistence.DURABLE) {
                 if (!checkpointCoordinator.saveActive(
                         rt.flow,
-                        rt.entered,
+                        checkpointEntered,
                         rt.awaitGeneration,
                         rt.awaitCheckpoints,
                         trace.checkpointContext(rt.flow))) {
