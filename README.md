@@ -862,9 +862,9 @@ built Gradle checker should follow [CONTRIBUTING.md](CONTRIBUTING.md).
 
 Flower is licensed under the [Apache License 2.0](LICENSE).
 
-**Keywords:** Java workflow runtime, PLC-inspired, cyclic execution,
-state-driven execution, state machine, durable workflows, checkpoint/resume,
-event-driven workflows, AI agent orchestration, human-in-the-loop.
+**Keywords:** flowerjvm, Java workflow runtime, AI agents, agent orchestration,
+Jev, OpenAI Decisions API, decision API, A2A protocol, durable workflows,
+checkpoint/resume, event-driven workflows, Spring Boot, human-in-the-loop.
 
 **Different domains. The same execution model.**
 

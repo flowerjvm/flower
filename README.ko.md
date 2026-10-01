@@ -839,9 +839,9 @@ Maven Central의 릴리스 artifact를 사용합니다. 별도 빌드되는 Grad
 
 Flower는 [Apache License 2.0](LICENSE)으로 배포됩니다.
 
-**검색 키워드:** Java workflow runtime, PLC-inspired, cyclic execution,
-state-driven execution, state machine, durable workflows, checkpoint/resume,
-event-driven workflows, AI agent orchestration, human-in-the-loop.
+**검색 키워드:** flowerjvm, Java workflow runtime, AI agents, agent orchestration,
+Jev, OpenAI Decisions API, decision API, A2A protocol, durable workflows,
+checkpoint/resume, event-driven workflows, Spring Boot, human-in-the-loop.
 
 **도메인은 달라도, 실행 모델은 같습니다.**
 
