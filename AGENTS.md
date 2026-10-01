@@ -12,6 +12,12 @@ the change. Follow nested `AGENTS.md` files in the area you work on.
   `flower-evaluation/README.md`.
 - Any `flower-check*` work: `flower-check/README.md` and
   `flower-check/docs/00-INDEX.md`.
+- For design changes, consult relevant `../flower-dev-notes`; for Bloom
+  integration, also consult `../bloom-dev-notes`. Cross-check the notes
+  against current source and public contracts.
+- Before adding or tightening checker rules, review the relevant Flower notes.
+  If required notes are unavailable, report the missing files and unverified
+  design rationale, and leave the required review incomplete.
 - Apply available Flower skills within their documented scope and version;
   application guidance must stay consistent with the framework's contracts.
 
