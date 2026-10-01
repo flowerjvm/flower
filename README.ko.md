@@ -6,9 +6,15 @@
 
 **Flow → Step → StepResult**로 애플리케이션의 실행 흐름을 명시적으로 표현하세요.
 
-Flower는 Java 애플리케이션 안에서 동작하는 작은 런타임입니다. 여러 단계로
-진행되는 업무, 이벤트를 기다리는 작업, AI 애플리케이션의 흐름을 같은 실행
+Flower JVM(`flowerjvm`)는 업무 흐름과 AI 에이전트 작업을 조율하는
+Java 워크플로우 런타임입니다. Flow와 Step을 코드로 선언하고 하나의 JVM 안에서
+실행합니다. 여러 단계로 진행되는 업무와 이벤트를 기다리는 작업을 같은 실행
 구조로 표현합니다. 기존 도메인 모델과 애플리케이션 프레임워크는 그대로 유지합니다.
+
+Core의 실행 모델은 **PLC의 주기적 scan과 상태 기반 판단**에서 출발했습니다.
+현재 상태를 읽고, 짧게 판단하고, 명시적인 결과로 다음 단계를 결정합니다.
+선택적인 checkpoint/resume을 적용하면 재시작 후에도 저장된 실행 위치에서
+워크플로우를 이어갈 수 있습니다.
 
 같은 모델이 사람에게는 읽을 수 있는 흐름을, 코딩 에이전트에게는 생성 구조의
 제약을 제공합니다. Flower Skill, `flower-check`, 결정적 테스트가 이를 뒷받침합니다.
@@ -17,6 +23,7 @@ Flower는 Java 애플리케이션 안에서 동작하는 작은 런타임입니�
 [![Maven Central](https://img.shields.io/maven-central/v/io.github.flowerjvm/flower-core.svg?label=Maven%20Central)](https://central.sonatype.com/artifact/io.github.flowerjvm/flower-core/0.1.3)
 
 [빠른 시작](#quick-start) · [실행 모델](#the-execution-contract) ·
+[PLC에서 출발한 실행 철학](#plc-inspired-execution) ·
 [코딩 에이전트](#one-execution-model-for-humans-and-coding-agents) ·
 [런타임 상세 문서](docs/runtime-reference.md) · [모듈](#modules)
 
@@ -105,6 +112,36 @@ worker.submit(aiFlow);
 액션 권한은 애플리케이션 서비스나 선택적인 상위 런타임이 담당합니다.
 
 업무 내용이 달라져도 실행을 표현하는 방법까지 바꿀 필요는 없습니다.
+
+<a id="plc-inspired-execution"></a>
+
+## PLC의 scan 철학에서 상태 기반 워크플로우로
+
+산업용 제어기인 PLC는 입력을 읽고, 제어 로직을 판단하고, 출력을 갱신하는
+scan을 반복합니다. Flower는 이 주기적 실행 철학을 일반 소프트웨어의
+워크플로우에 적용합니다. Worker의 각 tick에서 현재 Step은 애플리케이션 상태,
+이벤트, 시간을 확인하고 명시적인 `StepResult`를 반환합니다.
+
+```text
+현재 상태 확인 → 판단 → StepResult 적용 → 다음 tick
+                  │
+                  └─ 대기, 진행, 반복, 이동, 종료, 실패
+```
+
+결제를 기다리는 주문이나 도구 응답을 기다리는 에이전트는 현재 대기 단계를
+유지합니다. Step은 짧게 판단하고 반환하며, 느린 외부 작업은 애플리케이션
+서비스가 Worker 밖에서 수행합니다. 이후 tick에서 결과를 확인하므로,
+오래 걸리는 작업도 현재 어느 단계인지 살펴보고 테스트할 수 있습니다.
+
+복구가 필요하면 이 모델에 영속성을 추가합니다. 선택적인 체크포인트는 실행
+위치와 신원을 저장하고, 애플리케이션은 재시작 후 Flow를 새로 구성해 재개합니다.
+업무 사실, 외부 작업 결과, 복구 가능한 deadline은 애플리케이션이 저장하며,
+각 durable Step은 복구 방법을 선언합니다.
+[실행 범위와 보장 경계](#execution-boundaries)를 참고하세요.
+
+Core는 일반 JVM 스케줄링을 사용합니다. 주로 외부 응답을 기다리는 작업에는
+선언한 이벤트·signal·deadline에 따라 깨어나는 별도 실행 모델인
+[flower-eventloop](flower-eventloop/README.md)를 선택할 수도 있습니다.
 
 <a id="one-execution-model-for-humans-and-coding-agents"></a>
 
@@ -640,6 +677,31 @@ AI 작업도 조율할 수 있습니다.
 방식으로 요청하세요. "승인"을 Step으로 표현하는 것만으로 권한 검사가 구현되지는
 않습니다. 실제 통제는 애플리케이션이나 Action Runtime이 수행해야 합니다.
 
+<a id="decisions-and-remote-agent-tasks"></a>
+
+### 의사결정 API와 원격 에이전트 작업
+
+[Jev](https://typesafe.ai/blog/introducing-system-one-models-and-jev) 같은 의사결정
+모델이나 OpenAI Decisions API를 사용할 때도, 판단과 그 전후의 실행을
+명시적인 단계로 표현할 수 있습니다. 예를 들어 결과를 `accept`, `review`,
+`reject` 중 하나로 제한한 요청은 다음 흐름으로 구성합니다.
+
+```text
+판단 요청 → 결과 대기 → 허용된 선택지 검증 → 해당 Step으로 진행
+```
+
+애플리케이션은 결과를 검증하고 선언된 전이로 연결합니다. 변경 액션에 필요한
+권한·정책·승인도 애플리케이션이나 Action Runtime에서 확인합니다.
+모델 호출은 Worker 밖에서 수행하고, 복구가 필요한 요청의 식별자·결과·deadline은
+애플리케이션 저장소에 기록합니다.
+
+[A2A 프로토콜](https://github.com/a2aproject/A2A/blob/main/docs/topics/life-of-a-task.md)의
+원격 에이전트 작업도 요청, 진행 상태 확인, 추가 입력 대기, 결과 수신 같은
+실행 단계로 조율할 수 있습니다. 애플리케이션 adapter가 A2A 작업 식별자와
+상태·결과·취소를 Flow에 연결하고, A2A SDK나 호스트가 통신과 인증을 담당합니다.
+Flower는 이 작업을 조율하는 실행 구조를 제공하며, 각 API와 프로토콜의 연동은
+애플리케이션에서 구성합니다.
+
 <a id="use-flower-with-chatgpt-and-codex"></a>
 
 ### 코딩 에이전트 지침과 빌드 검사 구성
@@ -727,8 +789,10 @@ Bloom event bus를 연결하며, Flower Core 자체에도 `InMemoryEventBus`가 
 
 ## 어디에서 시작되었나
 
-Flower의 `Worker → Flow → Step → StepResult` 실행 모델은 산업용 장비 제어
-시스템과 업무 애플리케이션을 개발하며 쌓은 실무 경험을 바탕으로 형성되었습니다.
+Flower의 `Worker → Flow → Step → StepResult` 실행 모델은 PLC의 주기적 실행과
+산업용 장비 제어 시스템·업무 애플리케이션을 개발하며 쌓은 실무 경험을 바탕으로
+형성되었습니다. [scan과 상태 기반 판단의 원칙](#plc-inspired-execution)을
+Java 워크플로우로 옮겼습니다.
 
 오랜 시간 여러 단계를 거쳐 진행되는 작업에서 반복적으로 관찰한 패턴을
 Java 애플리케이션용 재사용 가능한 워크플로우 런타임으로 일반화했습니다.
@@ -774,6 +838,10 @@ Maven Central의 릴리스 artifact를 사용합니다. 별도 빌드되는 Grad
 ## 라이선스
 
 Flower는 [Apache License 2.0](LICENSE)으로 배포됩니다.
+
+**검색 키워드:** Java workflow runtime, PLC-inspired, cyclic execution,
+state-driven execution, state machine, durable workflows, checkpoint/resume,
+event-driven workflows, AI agent orchestration, human-in-the-loop.
 
 **도메인은 달라도, 실행 모델은 같습니다.**
 

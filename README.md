@@ -6,10 +6,15 @@
 
 Make application flows explicit with **Flow → Step → StepResult**.
 
-Flower is a small in-JVM runtime for Java applications. It gives multi-phase
-business workflows, event-driven coordination, and AI application flows the
-same execution structure, while keeping your domain model and application
-framework in place.
+Flower JVM (`flowerjvm`) is a code-first Java workflow runtime for business
+workflows and AI agent orchestration inside one JVM. Multi-phase work and
+event-driven coordination share the same execution structure, while your domain
+model and application framework stay in place.
+
+Its Core execution model brings **PLC-inspired cyclic, state-driven execution**
+to application workflows: observe the current state, make a short decision, and
+advance explicitly. Opt-in checkpoint/resume lets selected workflows continue
+after a restart.
 
 The same model gives people readable flows and coding agents structural
 constraints, supported by Flower Skill, `flower-check`, and deterministic tests.
@@ -18,6 +23,7 @@ constraints, supported by Flower Skill, `flower-check`, and deterministic tests.
 [![Maven Central](https://img.shields.io/maven-central/v/io.github.flowerjvm/flower-core.svg?label=Maven%20Central)](https://central.sonatype.com/artifact/io.github.flowerjvm/flower-core/0.1.3)
 
 [Quick start](#quick-start) · [Execution model](#the-execution-contract) ·
+[PLC-inspired philosophy](#plc-inspired-execution) ·
 [Coding agents](#one-execution-model-for-humans-and-coding-agents) ·
 [Runtime reference](docs/runtime-reference.md) · [Modules](#modules)
 
@@ -104,6 +110,37 @@ tools, validation, and action authorization belong to application services or
 optional higher-level runtimes.
 
 You can change what the workflow does without changing how its execution is expressed.
+
+<a id="plc-inspired-execution"></a>
+
+## From PLC Scans To Stateful Workflows
+
+A programmable logic controller (PLC) repeatedly reads inputs, evaluates control
+logic, and updates outputs.
+Flower adapts that cyclic execution discipline to general software workflows:
+each Worker tick gives the current Step a chance to observe application state,
+events, and time, then return an explicit `StepResult`.
+
+```text
+Observe current state → decide → apply StepResult → next tick
+                          │
+                          └─ stay, advance, repeat, jump, finish, or fail
+```
+
+For an order awaiting payment or an agent awaiting a tool result, waiting is a
+visible execution state. The Step returns promptly; application services run
+slow or asynchronous work outside the Worker and make its outcome available
+for a later tick. The current execution stage is visible and testable.
+
+Durability extends this model when needed. Opt-in checkpoints save the execution
+position and identity so the application can rebuild a Flow and resume it after
+a restart. The application persists business facts, external-operation results,
+and recoverable deadlines; each durable Step declares how it should recover.
+See [Execution boundaries](#execution-boundaries).
+
+Core uses ordinary JVM scheduling. For workloads that mainly wait for external
+responses, [flower-eventloop](flower-eventloop/README.md) offers a separate
+execution contract that wakes on a declared event, signal, or deadline.
 
 <a id="structure-for-generated-code"></a>
 <a id="notes-for-ai-agents"></a>
@@ -652,6 +689,37 @@ A model call belongs in an application service or adapter, dispatched without
 blocking the Worker. Making "approval" a Step does not itself implement
 authorization; the application or Action Runtime must enforce it.
 
+<a id="decisions-and-remote-agent-tasks"></a>
+
+### Decisions And Remote-Agent Tasks
+
+Decision-oriented models and APIs, such as
+[Jev](https://typesafe.ai/blog/introducing-system-one-models-and-jev) and
+OpenAI's Decisions API, fit applications that select a next action from declared
+choices. Flower gives the surrounding work an explicit execution sequence:
+
+```text
+Request a decision → wait → validate allowed choice → advance to matching Step
+```
+
+The model supplies a business-level answer, such as `accept`, `review`, or
+`reject`. Application code validates that answer and maps it to an allowed Step
+transition. The application or Action Runtime enforces any policy, permission,
+and approval required for a mutating action. Model and API calls run outside the
+Worker; Steps observe the result and return `stay()`, `done()`, or a declared
+`goTo(...)`.
+For restartable work, the application persists the request identity, result,
+and deadline so recovery can continue observing the same operation.
+
+The [A2A task lifecycle](https://github.com/a2aproject/A2A/blob/main/docs/topics/life-of-a-task.md)
+also exposes meaningful states: work in progress, additional input needed,
+completion, cancellation, or failure. An application adapter can translate
+those states and results into domain state or events that Steps observe.
+Flower coordinates the surrounding request, wait, validation, and action stages;
+the adapter maps remote-task state, while an A2A SDK or the host handles
+transport and authentication.
+Connecting these services requires application adapters and workflow code.
+
 <a id="use-flower-with-chatgpt-and-codex"></a>
 
 ### Set Up Coding-Agent Guidance And Checks
@@ -742,8 +810,10 @@ and [Java compatibility](docs/runtime-reference.md#java-compatibility).
 ## Where It Comes From
 
 Flower's `Worker → Flow → Step → StepResult` execution model was shaped by
-practical experience gained while developing industrial equipment control
-systems and business applications.
+PLC cyclic execution and practical experience developing industrial equipment
+control systems and business applications. The
+[scan/state-driven philosophy](#plc-inspired-execution) carries that discipline
+into Java workflows.
 
 It generalizes recurring patterns observed in long-running, stage-based
 processes into a reusable workflow runtime for Java applications: explicit
@@ -791,6 +861,10 @@ built Gradle checker should follow [CONTRIBUTING.md](CONTRIBUTING.md).
 ## License
 
 Flower is licensed under the [Apache License 2.0](LICENSE).
+
+**Keywords:** Java workflow runtime, PLC-inspired, cyclic execution,
+state-driven execution, state machine, durable workflows, checkpoint/resume,
+event-driven workflows, AI agent orchestration, human-in-the-loop.
 
 **Different domains. The same execution model.**
 
